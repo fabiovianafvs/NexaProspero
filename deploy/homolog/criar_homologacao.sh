@@ -69,7 +69,8 @@ ok "Arquivos copiados"
 
 # -----------------------------------------------------------------------------
 info "3/6 Banco $HML_DB (cópia de $PROD_DB) - pode levar alguns minutos"
-HML_DB_PASS="$(openssl rand -hex 24)"
+# Senha forte: maiúsculas, minúsculas, números e símbolo (exigência do validate_password do MySQL).
+HML_DB_PASS="Nx_$(openssl rand -hex 20)_Hm9"
 mysql <<SQL
 DROP DATABASE IF EXISTS \`$HML_DB\`;
 CREATE DATABASE \`$HML_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
