@@ -21,6 +21,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
   function nexa_schema_updater_registry(): array {
     return [
       [
+        'id' => '20261102_senha_link_seguro_v1',
+        'module' => 'password_setup',
+        'version' => 20261102001,
+        'label' => 'Segurança - link seguro para criar senha',
+        'description' => 'Cria os links de uso único para o cliente definir a própria senha e apaga as cópias de senha em texto aberto.',
+        'file' => __DIR__ . '/../db/20261102_senha_link_seguro_v1.sql',
+        'sha256' => '14e24199f74871ae266f7344ee5ab0b17930c31618f8bc358779e81238edb745',
+        'order' => 20261102001,
+      ],
+      [
         'id' => '20261101_pessoas_anexos_privados_v1',
         'module' => 'person_attachments',
         'version' => 20261101001,

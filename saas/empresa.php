@@ -6,6 +6,7 @@ header('Content-Type: text/html; charset=UTF-8');
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/_layout.php';
 require_once __DIR__ . '/../config/saas_whatsapp_service.php';
+require_once __DIR__ . '/../config/password_setup.php';
 require_once __DIR__ . '/../config/saas_modules.php';
 try { saas_ensure_modules_schema($pdo); } catch (Throwable $e) {}
 try { saas_whatsapp_ensure_schema($pdo); } catch (Throwable $e) {}
@@ -115,53 +116,30 @@ $totalPedidos = (int)$stmt->fetchColumn();
 
 $msg = '';
 $erro = '';
-$newPassword = '';
+$passwordLink = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = (string)($_POST['action'] ?? '');
 
   try {
-    if ($action === 'reset_password' || $action === 'reset_password_send_whatsapp') {
+    // Senha do admin: em vez de gerar e enviar uma senha, gera um link de uso único
+    // (válido por 48h) para o próprio cliente criar a senha. A senha atual continua
+    // funcionando até o cliente usar o link.
+    if (in_array($action, ['reset_password', 'reset_password_send_whatsapp', 'resend_credentials_whatsapp'], true)) {
       if (!$adminUser) {
         throw new RuntimeException('Admin da empresa n&atilde;o encontrado.');
       }
+      $purpose = $action === 'resend_credentials_whatsapp' ? 'setup' : 'reset';
+      $passwordLink = password_setup_create_link($pdo, $company, (int)$adminUser['id'], $purpose, auth_user_id());
+      $msg = 'Link para criar a senha gerado (v&aacute;lido por ' . (int)NEXA_PASSWORD_LINK_HOURS . ' horas, uso &uacute;nico).';
 
-      $newPassword = random_pass(10);
-      $hash = password_hash($newPassword, PASSWORD_DEFAULT);
-
-      if (saas_whatsapp_db_has_column($pdo, 'users', 'last_plain_password')) {
-        $stmt = $pdo->prepare("UPDATE users SET password_hash = ?, last_plain_password = ? WHERE id = ?");
-        $stmt->execute([$hash, $newPassword, (int)$adminUser['id']]);
-      } else {
-        $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
-        $stmt->execute([$hash, (int)$adminUser['id']]);
-        saas_whatsapp_cache_admin_password($pdo, (int)$adminUser['id'], $newPassword);
-      }
-
-      $msg = 'Senha do admin redefinida com sucesso.';
-      if ($action === 'reset_password_send_whatsapp') {
-        $wa = saas_whatsapp_send_credentials($pdo, $id, $newPassword);
+      if ($action !== 'reset_password') {
+        $wa = saas_whatsapp_send_credentials($pdo, $id, $passwordLink);
         if (!empty($wa['ok'])) {
-          $msg .= ' A nova senha e os links foram enviados pelo WhatsApp.';
+          $msg .= ' Os acessos e o link foram enviados pelo WhatsApp.';
         } else {
-          $msg .= ' N&atilde;o foi poss&iacute;vel enviar pelo WhatsApp: ' . e((string)($wa['error'] ?? 'verifique as configura&ccedil;&otilde;es do WhatsApp SaaS')) . '.';
+          $msg .= ' N&atilde;o foi poss&iacute;vel enviar pelo WhatsApp: ' . e((string)($wa['error'] ?? 'verifique as configura&ccedil;&otilde;es do WhatsApp SaaS')) . '. Copie o link abaixo e envie manualmente.';
         }
-      }
-    }
-
-    if ($action === 'resend_credentials_whatsapp') {
-      if (!$adminUser) {
-        throw new RuntimeException('Admin da empresa n&atilde;o encontrado.');
-      }
-      $currentPassword = saas_whatsapp_get_admin_cached_password($pdo, $id);
-      if ($currentPassword === '') {
-        throw new RuntimeException('A senha atual ainda n&atilde;o est&aacute; registrada para reenvio. Gere uma nova senha uma vez; depois o sistema consegue reenviar os dados cadastrais sem trocar a senha.');
-      }
-      $wa = saas_whatsapp_send_credentials($pdo, $id, $currentPassword);
-      if (!empty($wa['ok'])) {
-        $msg = 'Dados cadastrais reenviados pelo WhatsApp com a senha atual registrada.';
-      } else {
-        $msg = 'N&atilde;o foi poss&iacute;vel reenviar pelo WhatsApp: ' . e((string)($wa['error'] ?? 'verifique as configura&ccedil;&otilde;es do WhatsApp SaaS')) . '.';
       }
     }
 
@@ -444,30 +422,28 @@ saas_layout_start(
   </div>
 
   <div class="panel">
-    <h3>Reset de senha do admin</h3>
+    <h3>Senha do admin</h3>
     <?php if ($adminUser): ?>
       <p><strong>Admin:</strong> <?= e((string)$adminUser['name']) ?></p>
       <p><strong>E-mail:</strong> <?= e((string)$adminUser['email']) ?></p>
+      <p class="muted">Por seguran&ccedil;a, o sistema n&atilde;o envia nem guarda senhas. O cliente recebe um link de uso &uacute;nico, v&aacute;lido por <?= (int)NEXA_PASSWORD_LINK_HOURS ?> horas, e cria a pr&oacute;pria senha. A senha atual continua valendo at&eacute; o link ser usado.</p>
 
       <div class="row-actions" style="margin-top:10px">
         <form method="post" style="margin:0">
           <input type="hidden" name="action" value="reset_password">
-          <button class="btn2 btn2-dark" type="submit">Gerar nova senha</button>
+          <button class="btn2 btn2-dark" type="submit">Gerar link de senha</button>
         </form>
-        <form method="post" style="margin:0" onsubmit="return confirm('Gerar uma nova senha e enviar os acessos no WhatsApp da empresa?');">
+        <form method="post" style="margin:0" onsubmit="return confirm('Gerar um link de senha e enviar os acessos no WhatsApp da empresa?');">
           <input type="hidden" name="action" value="reset_password_send_whatsapp">
           <button class="btn2 btn2-primary" type="submit">Gerar e enviar WhatsApp</button>
         </form>
-        <form method="post" style="margin:0" onsubmit="return confirm('Reenviar os dados cadastrais pelo WhatsApp usando a senha atual registrada?');">
-          <input type="hidden" name="action" value="resend_credentials_whatsapp">
-          <button class="btn2 btn2-ghost" type="submit">Reenviar cadastro WhatsApp</button>
-        </form>
       </div>
 
-      <?php if ($newPassword): ?>
+      <?php if ($passwordLink !== ''): ?>
         <div style="margin-top:14px">
-          <div class="muted" style="margin-bottom:8px">Nova senha gerada</div>
-          <code class="box"><?= e($newPassword) ?></code>
+          <div class="muted" style="margin-bottom:8px">Link para o cliente criar a senha (copie e envie, se necess&aacute;rio)</div>
+          <code class="box" id="password-link" style="word-break:break-all"><?= e($passwordLink) ?></code>
+          <button class="btn2 btn2-ghost" type="button" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('password-link').innerText).then(function(){alert('Link copiado.');});">Copiar link</button>
         </div>
       <?php endif; ?>
     <?php else: ?>

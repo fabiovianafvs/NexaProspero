@@ -208,7 +208,7 @@ saas_layout_start('WhatsApp • Central SaaS', 'WhatsApp', 'Configure envio auto
       <code>{{empresa}}</code><code>{{plano}}</code><code>{{valor}}</code>
       <code>{{vencimento}}</code><code>{{dias}}</code><code>{{dias_vencido}}</code>
       <code>{{link_pagamento}}</code><code>{{link_catalogo_delivery}}</code><code>{{link_catalogo}}</code>
-      <code>{{link_admin}}</code><code>{{usuario}}</code><code>{{senha}}</code>
+      <code>{{link_admin}}</code><code>{{usuario}}</code><code>{{link_criar_senha}}</code>
       <code>{{link_treinamento}}</code><code>{{bloco_treinamento}}</code><code>{{curso_treinamento}}</code>
     </div>
     <div class="wa-actions">

@@ -16,6 +16,7 @@ require_once __DIR__ . '/config/reseller_integrations.php';
 require_once __DIR__ . '/config/company_sequences.php';
 require_once __DIR__ . '/config/saas_subscription_bridge.php';
 require_once __DIR__ . '/config/company_signup_defaults.php';
+require_once __DIR__ . '/config/password_setup.php';
 
 function slugify(string $s): string {
   return company_subdomain_normalize($s);
@@ -617,13 +618,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       nexa_signup_seed_chart_of_accounts($pdo, $companyId);
       nexa_signup_seed_tax_profiles($pdo, $companyId);
       nexa_signup_seed_payment_methods($pdo, $companyId);
-      if (has_column($pdo, 'users', 'last_plain_password')) {
-        $pdo->prepare("INSERT INTO users (company_id, name, email, password_hash, last_plain_password, role, is_active, profile_id) VALUES (?,?,?,?,?, 'company_admin', 1, ?)")
-          ->execute([$companyId, $responsavel, $loginEmail, $hash, $pass, $generalProfileId]);
-      } else {
-        $pdo->prepare("INSERT INTO users (company_id, name, email, password_hash, role, is_active, profile_id) VALUES (?,?,?,?, 'company_admin', 1, ?)")
-          ->execute([$companyId, $responsavel, $loginEmail, $hash, $generalProfileId]);
-      }
+      // A senha aleatória não é mais guardada em texto aberto nem enviada ao cliente:
+      // ele recebe um link seguro para criar a própria senha (config/password_setup.php).
+      $pdo->prepare("INSERT INTO users (company_id, name, email, password_hash, role, is_active, profile_id) VALUES (?,?,?,?, 'company_admin', 1, ?)")
+        ->execute([$companyId, $responsavel, $loginEmail, $hash, $generalProfileId]);
+      $adminUserId = (int)$pdo->lastInsertId();
       $pdo->commit();
 
       // V11.52: após o cadastro SaaS estar definitivamente salvo, sincroniza o Trial
@@ -644,6 +643,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'cnpj' => $cnpj,
         'cpf' => $cpf,
       ];
+      // Credencial enviada ao cliente: link para criar a senha. Se a migração ainda não
+      // tiver sido aplicada, mantém o comportamento anterior (senha inicial) para não
+      // impedir o cadastro.
+      $passwordLink = '';
+      try {
+        $passwordLink = password_setup_create_link($pdo, $company, $adminUserId, 'setup');
+      } catch (Throwable $e) {
+        $passwordLink = '';
+      }
+      $credential = $passwordLink !== '' ? $passwordLink : $pass;
       $catalogUrlPath = company_catalog_url($company);
       $publicCatalogUrl = company_public_catalog_url($company);
       $eadSync = ead_integration_sync_company([
@@ -680,12 +689,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       if ($isTrial || $signupFromReseller) {
         if ($signupFromReseller && $reseller) {
-          $whatsappMessage = reseller_whatsapp_credentials_message($pdo, (int)$reseller['id'], $company, $loginEmail, $pass, $eadSync, $signupContext);
-          $whatsappCredentials = reseller_whatsapp_send_credentials($pdo, (int)$reseller['id'], $companyId, $pass, $eadSync, $signupContext);
+          $whatsappMessage = reseller_whatsapp_credentials_message($pdo, (int)$reseller['id'], $company, $loginEmail, $credential, $eadSync, $signupContext);
+          $whatsappCredentials = reseller_whatsapp_send_credentials($pdo, (int)$reseller['id'], $companyId, $credential, $eadSync, $signupContext);
           $waCfg = reseller_whatsapp_load_config($pdo, (int)$reseller['id']);
         } else {
-          $whatsappMessage = saas_whatsapp_build_credentials_message($pdo, $company, $loginEmail, $pass, '', $eadSync, $signupContext);
-          $whatsappCredentials = saas_whatsapp_send_credentials($pdo, $companyId, $pass, '', $eadSync, $signupContext);
+          $whatsappMessage = saas_whatsapp_build_credentials_message($pdo, $company, $loginEmail, $credential, '', $eadSync, $signupContext);
+          $whatsappCredentials = saas_whatsapp_send_credentials($pdo, $companyId, $credential, '', $eadSync, $signupContext);
           $waCfg = saas_whatsapp_load_config($pdo);
         }
         $manualWhatsappUrl = '';
@@ -706,7 +715,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           'slug' => $slug,
           'email' => $loginEmail,
           'email_was_generated' => $email === '',
-          'pass' => $pass,
+          'pass' => $passwordLink !== '' ? '' : $pass,
+          'password_link' => $passwordLink,
           'selected_plan' => $selectedPlanId,
           'catalog_url_path' => $catalogUrlPath,
           'public_catalog_url' => $publicCatalogUrl,
@@ -730,7 +740,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       } else {
         $charge = saas_create_pix_charge($pdo, $company, $plan, $subscriptionId, 'Assinatura do plano ' . (string)$plan['name']);
         $paymentUrl = (string)($charge['payment_url'] ?? '');
-        $whatsappCredentials = saas_whatsapp_send_credentials($pdo, $companyId, $pass, $paymentUrl, $eadSync, $signupContext);
+        $whatsappCredentials = saas_whatsapp_send_credentials($pdo, $companyId, $credential, $paymentUrl, $eadSync, $signupContext);
         $_SESSION['signup_success'] = [
           'company_id' => $companyId,
           'company_name' => $empresa,
@@ -740,7 +750,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           'seller_secondary_color' => '#2454d6',
           'slug' => $slug,
           'email' => $loginEmail,
-          'pass' => $pass,
+          'pass' => $passwordLink !== '' ? '' : $pass,
+          'password_link' => $passwordLink,
           'catalog_url_path' => $catalogUrlPath,
           'public_catalog_url' => $publicCatalogUrl,
           'admin_url' => $adminUrl,

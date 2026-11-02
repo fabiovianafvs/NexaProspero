@@ -202,7 +202,7 @@ revenda_layout_start('WhatsApp da revenda', 'whatsapp', $reseller);
     <section class="rvwa-card">
       <h2>Variáveis disponíveis</h2>
       <p class="rvwa-muted">O sistema substitui estas variáveis automaticamente pelos dados do cliente e da revenda.</p>
-      <div class="rvwa-vars"><code>{{empresa}}</code><code>{{descricao}}</code><code>{{valor}}</code><code>{{vencimento}}</code><code>{{dias}}</code><code>{{dias_vencido}}</code><code>{{link_pagamento}}</code><code>{{link_admin}}</code><code>{{link_catalogo_delivery}}</code><code>{{link_catalogo}}</code><code>{{usuario}}</code><code>{{senha}}</code><code>{{link_treinamento}}</code><code>{{bloco_treinamento}}</code><code>{{revenda}}</code><code>{{whatsapp_revenda}}</code></div>
+      <div class="rvwa-vars"><code>{{empresa}}</code><code>{{descricao}}</code><code>{{valor}}</code><code>{{vencimento}}</code><code>{{dias}}</code><code>{{dias_vencido}}</code><code>{{link_pagamento}}</code><code>{{link_admin}}</code><code>{{link_catalogo_delivery}}</code><code>{{link_catalogo}}</code><code>{{usuario}}</code><code>{{link_criar_senha}}</code><code>{{link_treinamento}}</code><code>{{bloco_treinamento}}</code><code>{{revenda}}</code><code>{{whatsapp_revenda}}</code></div>
       <form method="post" style="margin-top:16px" onsubmit="return confirm('Restaurar os modelos padrões desta revenda? Os modelos atuais serão substituídos.');"><input type="hidden" name="action" value="reset_templates"><button class="btn btn-ghost" type="submit">Restaurar modelos padrão</button></form>
     </section>
   </div>

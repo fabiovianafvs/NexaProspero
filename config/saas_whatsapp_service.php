@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/saas_billing.php';
+require_once __DIR__ . '/password_setup.php';
 
 if (!function_exists('saas_whatsapp_default_unofficial_instance_id')) {
   function saas_whatsapp_default_unofficial_instance_id(): int {
@@ -129,10 +130,7 @@ if (!function_exists('saas_whatsapp_ensure_schema')) {
 
     saas_whatsapp_ensure_column($pdo, 'saas_whatsapp_templates', 'dias_referencia', "dias_referencia INT NULL AFTER titulo");
 
-    // Guarda a senha administrativa gerada pelo SaaS para permitir reenvio cadastral sem trocar a senha.
-    // Sistemas com hashes de senha não conseguem recuperar a senha atual; por isso, a partir desta versão,
-    // o SaaS registra a última senha gerada/cadastrada neste campo para reenvios futuros.
-    saas_whatsapp_ensure_column($pdo, 'users', 'last_plain_password', "last_plain_password VARCHAR(255) NULL AFTER password_hash");
+    // Senhas não são mais guardadas em texto aberto: o cliente recebe um link para criar a senha.
 
     saas_whatsapp_seed_default_templates($pdo);
   }
@@ -265,30 +263,15 @@ if (!function_exists('saas_whatsapp_generate_token')) {
 }
 
 if (!function_exists('saas_whatsapp_cache_admin_password')) {
+  /** Obsoleta: senhas não são mais guardadas em texto aberto. Mantida só por compatibilidade. */
   function saas_whatsapp_cache_admin_password(PDO $pdo, int $userId, string $password): void {
-    if ($userId <= 0 || $password === '') return;
-    try {
-      saas_whatsapp_ensure_column($pdo, 'users', 'last_plain_password', "last_plain_password VARCHAR(255) NULL AFTER password_hash");
-      if (saas_whatsapp_db_has_column($pdo, 'users', 'last_plain_password')) {
-        $st = $pdo->prepare('UPDATE users SET last_plain_password = ? WHERE id = ?');
-        $st->execute([$password, $userId]);
-      }
-    } catch (Throwable $e) {}
   }
 }
 
 if (!function_exists('saas_whatsapp_get_admin_cached_password')) {
+  /** Obsoleta: senhas não são mais guardadas em texto aberto. Sempre retorna vazio. */
   function saas_whatsapp_get_admin_cached_password(PDO $pdo, int $companyId): string {
-    if ($companyId <= 0) return '';
-    try {
-      saas_whatsapp_ensure_column($pdo, 'users', 'last_plain_password', "last_plain_password VARCHAR(255) NULL AFTER password_hash");
-      if (!saas_whatsapp_db_has_column($pdo, 'users', 'last_plain_password')) return '';
-      $st = $pdo->prepare("SELECT last_plain_password FROM users WHERE company_id = ? AND role = 'company_admin' ORDER BY id ASC LIMIT 1");
-      $st->execute([$companyId]);
-      return trim((string)($st->fetchColumn() ?: ''));
-    } catch (Throwable $e) {
-      return '';
-    }
+    return '';
   }
 }
 
@@ -343,7 +326,7 @@ if (!function_exists('saas_whatsapp_default_templates')) {
         'tipo' => 'credentials',
         'titulo' => 'Credenciais da nova empresa',
         'dias_referencia' => null,
-        'body' => "Olá, {{empresa}}!\n\nSeu catálogo Nexa Próspero foi criado com sucesso.\n\nCatálogo Delivery:\n{{link_catalogo_delivery}}\n\nCatálogo somente produtos:\n{{link_catalogo}}\n\nPainel Administrativo:\n{{link_admin}}\n\nUsuário do admin:\n{{usuario}}\n\nSenha inicial:\n{{senha}}\n\n{{bloco_treinamento}}{{bloco_pagamento}}Recomendamos alterar a senha após o primeiro acesso.",
+        'body' => "Olá, {{empresa}}!\n\nSeu catálogo Nexa Próspero foi criado com sucesso.\n\nCatálogo Delivery:\n{{link_catalogo_delivery}}\n\nCatálogo somente produtos:\n{{link_catalogo}}\n\nPainel Administrativo:\n{{link_admin}}\n\nUsuário do admin:\n{{usuario}}\n\nCrie sua senha de acesso (link válido por 48 horas):\n{{link_criar_senha}}\n\n{{bloco_treinamento}}{{bloco_pagamento}}",
       ],
       [
         'tipo' => 'billing_notice',
@@ -808,6 +791,7 @@ Use o mesmo usuário e senha acima para acessar o treinamento.
       'email' => $adminEmail,
       'senha' => $password,
       'senha_inicial' => $password,
+      'link_criar_senha' => $password,
       'link_ead' => $eadLoginUrl,
       'link_treinamento' => $eadLoginUrl,
       'curso_treinamento' => $eadCourseLabel,
@@ -849,7 +833,7 @@ Use o mesmo usuário e senha acima para acessar o treinamento.
         if (!empty($signupContext['trial_start'])) $rendered .= "Início: " . $signupContext['trial_start'] . "\n";
         if (!empty($signupContext['trial_end'])) $rendered .= "Término: " . $signupContext['trial_end'] . "\n";
       }
-      return trim($rendered);
+      return password_setup_adjust_message(trim($rendered), $password);
     }
 
     $msg = "Olá, {$name}!\n\n";
@@ -881,7 +865,7 @@ Use o mesmo usuário e senha acima para acessar o treinamento.
       if (!empty($signupContext['trial_start'])) $msg .= "Início: " . $signupContext['trial_start'] . "\n";
       if (!empty($signupContext['trial_end'])) $msg .= "Término: " . $signupContext['trial_end'] . "\n";
     }
-    return trim($msg);
+    return password_setup_adjust_message(trim($msg), $password);
   }
 }
 

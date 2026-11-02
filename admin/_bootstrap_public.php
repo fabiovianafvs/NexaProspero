@@ -18,7 +18,7 @@ if (auth_role() !== 'platform_admin') {
   if (!empty($guard['blocked'])) {
     $currentPage = strtolower(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
     $renewalPage = 'assinatura_regularizar.php';
-    if (!in_array($currentPage, ['login.php', 'logout.php', $renewalPage], true)) {
+    if (!in_array($currentPage, ['login.php', 'logout.php', 'definir_senha.php', $renewalPage], true)) {
       $loggedInHere = auth_user_id() && in_array(auth_role(), ['company_admin','company_user'], true)
         && (int)auth_company_id() === (int)($company['id'] ?? 0);
       $target = $loggedInHere ? $renewalPage : 'login.php';

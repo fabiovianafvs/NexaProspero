@@ -283,7 +283,7 @@ if (!function_exists('reseller_whatsapp_save_config')) {
 if (!function_exists('reseller_whatsapp_default_templates')) {
   function reseller_whatsapp_default_templates(): array {
     return [
-      ['credentials','Credenciais do novo cliente',null,"Olá, {{empresa}}!\n\nSeu ambiente foi criado com sucesso pela {{revenda}}.\n\nPainel administrativo:\n{{link_admin}}\n\nCatálogo de pedidos:\n{{link_catalogo_delivery}}\n\nUsuário: {{usuario}}\nSenha inicial: {{senha}}\n\n{{bloco_treinamento}}Atendimento da revenda: {{whatsapp_revenda}}\n\nRecomendamos alterar a senha após o primeiro acesso."],
+      ['credentials','Credenciais do novo cliente',null,"Olá, {{empresa}}!\n\nSeu ambiente foi criado com sucesso pela {{revenda}}.\n\nPainel administrativo:\n{{link_admin}}\n\nCatálogo de pedidos:\n{{link_catalogo_delivery}}\n\nUsuário: {{usuario}}\nCrie sua senha de acesso (link válido por 48 horas):\n{{link_criar_senha}}\n\n{{bloco_treinamento}}Atendimento da revenda: {{whatsapp_revenda}}"],
       ['billing_notice','Cobrança disponível',null,"Olá, {{empresa}}!\n\nSua cobrança está disponível.\nDescrição: {{descricao}}\nValor: {{valor}}\nVencimento: {{vencimento}}\n\nLink para pagamento:\n{{link_pagamento}}"],
       ['billing_notice','Faltam 3 dias para vencer',3,"Olá, {{empresa}}!\n\nSua cobrança vence em {{dias}} dias.\nValor: {{valor}}\nVencimento: {{vencimento}}\n\nPagamento:\n{{link_pagamento}}"],
       ['billing_notice','Vence hoje',0,"Olá, {{empresa}}!\n\nSua cobrança vence hoje.\nValor: {{valor}}\n\nPagamento:\n{{link_pagamento}}"],
@@ -419,6 +419,7 @@ if (!function_exists('reseller_whatsapp_credentials_message')) {
       'link_catalogo'=>$links['catalog_public'],
       'usuario'=>$adminEmail,
       'senha'=>$password,
+      'link_criar_senha'=>$password,
       'link_treinamento'=>$eadUrl,
       'bloco_treinamento'=>$training,
       'revenda'=>$resellerBrand,
@@ -438,7 +439,7 @@ if (!function_exists('reseller_whatsapp_credentials_message')) {
       $message .= "\n\nMódulos liberados:\n";
       foreach ($labels as $label) $message .= '✅ ' . trim((string)$label) . "\n";
     }
-    return trim($message);
+    return password_setup_adjust_message(trim($message), $password);
   }
 }
 

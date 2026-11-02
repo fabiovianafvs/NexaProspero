@@ -6,7 +6,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
 $result = $_SESSION['signup_success'] ?? null;
-if (!is_array($result) || empty($result['company_id']) || empty($result['email']) || empty($result['pass'])) {
+if (!is_array($result) || empty($result['company_id']) || empty($result['email']) || (empty($result['pass']) && empty($result['password_link']))) {
   header('Location: /cadastro.php', true, 302);
   exit;
 }
@@ -24,7 +24,8 @@ function signup_success_e(string $value): string {
 
 $companyName = trim((string)($result['company_name'] ?? 'Empresa')) ?: 'Empresa';
 $email = (string)$result['email'];
-$password = (string)$result['pass'];
+$password = (string)($result['pass'] ?? '');
+$passwordLink = (string)($result['password_link'] ?? '');
 $catalogUrl = (string)($result['catalog_url_path'] ?? '');
 $publicCatalogUrl = (string)($result['public_catalog_url'] ?? '');
 $adminUrl = (string)($result['admin_url'] ?? '');
@@ -72,7 +73,7 @@ a{text-decoration:none;color:inherit}.page{width:min(1040px,calc(100% - 28px));m
       <div class="icon">✓</div>
       <div>
         <h1><?= signup_success_e($companyName) ?> foi cadastrada!</h1>
-        <p class="lead"><?= $isResellerSignup ? 'Seu ambiente foi criado pela ' . signup_success_e($sellerBrand) . '. Guarde o usuário e a senha abaixo para acessar o painel administrativo e os treinamentos.' : 'O ambiente de teste está pronto. Guarde o usuário e a senha abaixo para acessar o painel administrativo e os treinamentos.' ?></p>
+        <p class="lead"><?= $isResellerSignup ? 'Seu ambiente foi criado pela ' . signup_success_e($sellerBrand) . '. ' . ($passwordLink !== '' ? 'Agora crie a sua senha para acessar o painel administrativo e os treinamentos.' : 'Guarde o usuário e a senha abaixo para acessar o painel administrativo e os treinamentos.') : ($passwordLink !== '' ? 'O ambiente de teste está pronto. Agora crie a sua senha para acessar o painel administrativo e os treinamentos.' : 'O ambiente de teste está pronto. Guarde o usuário e a senha abaixo para acessar o painel administrativo e os treinamentos.') ?></p>
       </div>
     </div>
 
@@ -84,7 +85,11 @@ a{text-decoration:none;color:inherit}.page{width:min(1040px,calc(100% - 28px));m
 
     <section class="grid">
       <div class="box credentials"><span>Usuário</span><strong id="loginValue"><?= signup_success_e($email) ?></strong><button class="copy" type="button" data-copy="loginValue">Copiar</button></div>
+      <?php if ($passwordLink !== ''): ?>
+      <div class="box credentials"><span>Senha</span><strong>Crie a sua senha pelo botão abaixo (link válido por 48 horas, uso único).</strong></div>
+      <?php else: ?>
       <div class="box credentials"><span>Senha inicial</span><strong id="passwordValue"><?= signup_success_e($password) ?></strong><button class="copy" type="button" data-copy="passwordValue">Copiar</button></div>
+      <?php endif; ?>
       <div class="box"><span>Painel administrativo</span><a href="<?= signup_success_e($adminUrl) ?>" target="_blank" rel="noopener"><?= signup_success_e($adminUrl) ?></a></div>
       <div class="box"><span>Catálogo de pedidos</span><a href="<?= signup_success_e($catalogUrl) ?>" target="_blank" rel="noopener"><?= signup_success_e($catalogUrl) ?></a></div>
       <div class="box"><span>Catálogo público</span><a href="<?= signup_success_e($publicCatalogUrl) ?>" target="_blank" rel="noopener"><?= signup_success_e($publicCatalogUrl) ?></a></div>
@@ -99,13 +104,17 @@ a{text-decoration:none;color:inherit}.page{width:min(1040px,calc(100% - 28px));m
     </section>
 
     <div class="actions">
+      <?php if ($passwordLink !== ''): ?>
+      <a class="btn primary" href="<?= signup_success_e($passwordLink) ?>">Criar minha senha</a>
+      <?php else: ?>
       <a class="btn primary" href="<?= signup_success_e($adminUrl) ?>">Entrar no painel administrativo</a>
+      <?php endif; ?>
       <a class="btn" href="<?= signup_success_e($catalogUrl) ?>">Abrir catálogo</a>
       <?php if ($manualWhatsappUrl !== ''): ?><a class="btn whatsapp" href="<?= signup_success_e($manualWhatsappUrl) ?>" target="_blank" rel="noopener"><?= $whatsappSent ? 'Reenviar pelo WhatsApp' : 'Enviar credenciais pelo WhatsApp' ?></a><?php endif; ?>
     </div>
 
     <?php if (!empty($result['email_was_generated'])): ?><p class="note">Como não foi informado um e-mail, o sistema criou um login técnico. Ele pode ser alterado posteriormente no cadastro da empresa.</p><?php endif; ?>
-    <p class="note">Recomendamos alterar a senha após o primeiro acesso.</p>
+    <?php if ($passwordLink === ''): ?><p class="note">Recomendamos alterar a senha após o primeiro acesso.</p><?php endif; ?>
   </main>
 </div>
 <script>
