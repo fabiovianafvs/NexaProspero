@@ -1,0 +1,12 @@
+[Unit]
+Description=Nexa Brain - executar regras a cada 15 minutos
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=90
+Persistent=true
+Unit=nexa-brain-actions.service
+
+[Install]
+WantedBy=timers.target

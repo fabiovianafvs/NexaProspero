@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS compras_ranking_config (
+ company_id BIGINT NOT NULL PRIMARY KEY,
+ peso_pontualidade SMALLINT UNSIGNED NOT NULL DEFAULT 50,
+ peso_divergencias SMALLINT UNSIGNED NOT NULL DEFAULT 30,
+ peso_parciais SMALLINT UNSIGNED NOT NULL DEFAULT 20,
+ updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ KEY idx_compras_ranking_config_update (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

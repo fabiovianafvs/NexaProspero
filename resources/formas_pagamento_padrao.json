@@ -1,0 +1,145 @@
+{
+    "format": "nexa_payment_methods",
+    "version": 1,
+    "exported_at": "2026-10-20T16:17:26-03:00",
+    "payments": [
+        {
+            "fields": {
+                "code": "DINHEIRO",
+                "name": "Dinheiro",
+                "type": "DINHEIRO",
+                "is_active": 1,
+                "sort_order": 10,
+                "notes": null,
+                "generate_receivable": 0,
+                "allow_installments": 0,
+                "default_installments": 1,
+                "first_due_days": 0,
+                "keep_due_day": 1,
+                "affects_cash": 1,
+                "require_open_cash": 1,
+                "allow_change": 1,
+                "nfce_payment_type": "01",
+                "nfce_payment_indicator": "0",
+                "nfce_card_integration": null,
+                "nfce_card_brand": null,
+                "nfce_card_cnpj": null
+            }
+        },
+        {
+            "fields": {
+                "code": "PIX",
+                "name": "Pix",
+                "type": "PIX",
+                "is_active": 1,
+                "sort_order": 20,
+                "notes": null,
+                "generate_receivable": 0,
+                "allow_installments": 0,
+                "default_installments": 1,
+                "first_due_days": 0,
+                "keep_due_day": 1,
+                "affects_cash": 1,
+                "require_open_cash": 1,
+                "allow_change": 0,
+                "nfce_payment_type": "20",
+                "nfce_payment_indicator": "0",
+                "nfce_card_integration": null,
+                "nfce_card_brand": null,
+                "nfce_card_cnpj": null
+            }
+        },
+        {
+            "fields": {
+                "code": "CARTAO_DEBITO",
+                "name": "Cartão de Débito",
+                "type": "CARTAO",
+                "is_active": 1,
+                "sort_order": 30,
+                "notes": null,
+                "generate_receivable": 0,
+                "allow_installments": 0,
+                "default_installments": 1,
+                "first_due_days": 0,
+                "keep_due_day": 1,
+                "affects_cash": 1,
+                "require_open_cash": 1,
+                "allow_change": 0,
+                "nfce_payment_type": "04",
+                "nfce_payment_indicator": "0",
+                "nfce_card_integration": null,
+                "nfce_card_brand": null,
+                "nfce_card_cnpj": null
+            }
+        },
+        {
+            "fields": {
+                "code": "CARTAO_CREDITO",
+                "name": "Cartão de Crédito",
+                "type": "CARTAO",
+                "is_active": 1,
+                "sort_order": 40,
+                "notes": null,
+                "generate_receivable": 0,
+                "allow_installments": 0,
+                "default_installments": 1,
+                "first_due_days": 0,
+                "keep_due_day": 1,
+                "affects_cash": 1,
+                "require_open_cash": 1,
+                "allow_change": 0,
+                "nfce_payment_type": "03",
+                "nfce_payment_indicator": "0",
+                "nfce_card_integration": null,
+                "nfce_card_brand": null,
+                "nfce_card_cnpj": null
+            }
+        },
+        {
+            "fields": {
+                "code": "A_PRAZO",
+                "name": "A Prazo / Conta a receber",
+                "type": "PRAZO",
+                "is_active": 1,
+                "sort_order": 50,
+                "notes": null,
+                "generate_receivable": 1,
+                "allow_installments": 1,
+                "default_installments": 1,
+                "first_due_days": 30,
+                "keep_due_day": 1,
+                "affects_cash": 1,
+                "require_open_cash": 1,
+                "allow_change": 0,
+                "nfce_payment_type": "14",
+                "nfce_payment_indicator": "1",
+                "nfce_card_integration": null,
+                "nfce_card_brand": null,
+                "nfce_card_cnpj": null
+            }
+        },
+        {
+            "fields": {
+                "code": "VALE",
+                "name": "Vale",
+                "type": "VALE",
+                "is_active": 1,
+                "sort_order": 70,
+                "notes": null,
+                "generate_receivable": 0,
+                "allow_installments": 0,
+                "default_installments": 1,
+                "first_due_days": 0,
+                "keep_due_day": 1,
+                "affects_cash": 0,
+                "require_open_cash": 0,
+                "allow_change": 0,
+                "nfce_payment_type": "21",
+                "nfce_payment_indicator": "0",
+                "nfce_card_integration": null,
+                "nfce_card_brand": null,
+                "nfce_card_cnpj": null
+            }
+        }
+    ]
+}

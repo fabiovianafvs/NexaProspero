@@ -1,0 +1,14 @@
+Backup_30072026_1156.zip
+u807353405_nexadelivery_30072026_1157.sql
+
+Arquivos NFS-e identificados no backup posterior:
+- db/patch_nfse_nacional_servicos_29072026.sql
+- db/patch_nfse_emissor_nacional_homologacao_30072026.sql
+- admin/fiscal_nfse_acao.php
+- admin/fiscal_nfse_nacional.php
+- config/nfse_emitter.php
+- config/nfse_nacional.php
+- Correcao_Banco_NFSe_30072026.sql
+- instalar_xsd_nfse_homologacao.sh
+- tools/configurar_nfse_xsd.sh
+- tools/corrigir_nfse_banco.php

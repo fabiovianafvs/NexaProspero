@@ -1,0 +1,29 @@
+{
+  "ServerUrl": "https://SEU-DOMINIO/api/comanda_print_agent.php",
+  "Token": "nexa_COPIE_A_CHAVE_GERADA_NO_SISTEMA",
+  "StationName": "COMPUTADOR-COZINHA",
+  "PollSeconds": 3,
+  "RequestTimeoutSeconds": 20,
+  "Mappings": [
+    {
+      "Group": "Cozinha",
+      "Mode": "WINDOWS",
+      "Destination": "EPSON TM-T20X Receipt",
+      "Columns": 48,
+      "Encoding": 850,
+      "EscPosTable": 2,
+      "Cut": true,
+      "OpenDrawer": false
+    },
+    {
+      "Group": "Bar",
+      "Mode": "TCP",
+      "Destination": "192.168.1.50:9100",
+      "Columns": 48,
+      "Encoding": 850,
+      "EscPosTable": 2,
+      "Cut": true,
+      "OpenDrawer": false
+    }
+  ]
+}

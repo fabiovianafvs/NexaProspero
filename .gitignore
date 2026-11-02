@@ -1,0 +1,35 @@
+# Dados de clientes e arquivos gerados
+/uploads/
+/storage/
+/tmp/
+/downloads/
+/vendor/
+node_modules/
+*.log
+
+# Senhas, chaves e certificados
+*.env
+!*.env.example
+/config/database.php
+/config/db.php
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Backups e sobras
+*.bak*
+*.save
+*.zip
+*.tar.gz
+/*.sql
+
+# Historico de LEIA-ME/README dos zips (fica no servidor)
+/*.md
+/*.txt
+/*.json.old
+/CHECKSUMS*
+/MANIFESTO*
+/SHA256*
+!/README.md
+!/CLAUDE.md

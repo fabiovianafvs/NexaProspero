@@ -1,0 +1,12 @@
+[Unit]
+Description=Nexa Fiscal - Sincronização RADAR NF-e
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/nexa
+ExecStart=/usr/bin/php /var/www/nexa/workers/fiscal_dfe_sync_worker.php --max-companies=100 --max-batches=10
+Nice=10

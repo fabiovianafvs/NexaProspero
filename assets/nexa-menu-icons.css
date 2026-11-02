@@ -1,0 +1,116 @@
+/* Nexa Próspero: ícones brancos de linha fina em todos os links administrativos. */
+body.nexa-menu-icons-v3 .admin-sidebar .nexa-menu-glyph,
+body.nexa-menu-icons-v3 .navlinks .nexa-menu-glyph,
+body.nexa-menu-icons-v3 .admin-compact-nav .nexa-menu-glyph {
+ display:inline-grid;place-items:center;flex:0 0 21px;width:21px;height:21px;color:#fff!important;
+}
+body.nexa-menu-icons-v3 .admin-sidebar .nexa-menu-glyph svg,
+body.nexa-menu-icons-v3 .navlinks .nexa-menu-glyph svg,
+body.nexa-menu-icons-v3 .admin-compact-nav .nexa-menu-glyph svg {
+ display:block;width:20px;height:20px;fill:none!important;stroke:#fff!important;
+ stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round;
+}
+body.nexa-menu-icons-v3 .admin-sidebar .admin-side-link,
+body.nexa-menu-icons-v3 .admin-sidebar .admin-side-main,
+body.nexa-menu-icons-v3 .admin-sidebar .admin-side-children a {gap:10px}
+body.nexa-menu-icons-v3 .admin-sidebar .nexa-menu-caption {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Menu superior: ícone ao lado do rótulo, sem alterar o comportamento de dropdown. */
+body.nexa-menu-icons-v3 .navlinks > a,
+body.nexa-menu-icons-v3 .navlinks .nav-dropdown > a,
+body.nexa-menu-icons-v3 .navlinks .nav-submenu a,
+body.nexa-menu-icons-v3 .admin-compact-nav a {display:inline-flex;align-items:center;gap:8px}
+body.nexa-menu-icons-v3 .navlinks .nexa-menu-glyph,
+body.nexa-menu-icons-v3 .admin-compact-nav .nexa-menu-glyph {color:currentColor!important}
+body.nexa-menu-icons-v3 .navlinks .nexa-menu-glyph svg,
+body.nexa-menu-icons-v3 .admin-compact-nav .nexa-menu-glyph svg {stroke:currentColor!important}
+/* Menu superior usa cores do tema para manter o contraste nos itens brancos. */
+@media (min-width:921px) {
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar {
+   display:flex!important;transform:none!important;width:80px!important;
+ }
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .topbar,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .container,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-footer {
+   margin-left:80px!important;margin-right:0!important;
+ }
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .container {
+   width:auto!important;max-width:none!important;
+ }
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar-head {
+   justify-content:center;padding:16px 7px 12px;
+ }
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar-brand {justify-content:center;}
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar-logo {flex:0 0 44px;width:44px;height:44px;}
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar-brand > span:last-child,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar .nexa-menu-caption,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar .admin-side-subtitle,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar .admin-side-main::after {display:none!important}
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-sidebar-nav {padding:12px 7px 18px;overflow-x:hidden;}
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-side-main,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-side-link {justify-content:center;min-height:48px;padding:11px 8px;}
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed .admin-side-children {display:none!important;}
+ /* Telas fullscreen do PDV/Comandas não recebem barra compacta nem margens laterais. */
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.pdv-checkout-mode) .admin-sidebar,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.cmd-checkout-mode) .admin-sidebar {transform:translateX(-106%)!important;}
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.pdv-checkout-mode) .container,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.cmd-checkout-mode) .container,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.pdv-checkout-mode) .topbar,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.cmd-checkout-mode) .topbar,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.pdv-checkout-mode) .admin-footer,
+ body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.cmd-checkout-mode) .admin-footer {margin-left:0!important;}
+}
+@media(max-width:920px){
+ body.nexa-menu-icons-v3 .navlinks > a,
+ body.nexa-menu-icons-v3 .navlinks .nav-dropdown > a,
+ body.nexa-menu-icons-v3 .navlinks .nav-submenu a,
+ body.nexa-menu-icons-v3 .admin-compact-nav a {display:flex;}
+}
+
+/* V4 - passar o mouse expande temporariamente a barra, sem deslocar o conteúdo.
+   O botão ☰ continua responsável por fixar/desfixar a barra (admin.js). */
+@media(min-width:921px) {
+  body.admin-side-menu-enabled.nexa-menu-icons-v3 .admin-sidebar {
+    transition:width .18s ease, transform .22s ease;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar {
+    width:292px!important;
+    transform:none!important;
+    box-shadow:18px 0 54px rgba(15,23,42,.26);
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar-head {
+    padding:18px 16px 14px;
+    justify-content:space-between;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar-brand {
+    justify-content:flex-start;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar-brand > span:last-child {
+    display:block!important;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar .nexa-menu-caption {
+    display:inline-block!important;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar .admin-side-subtitle {
+    display:block!important;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar .admin-side-main::after {
+    display:block!important;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-sidebar-nav {
+    padding:12px 10px 20px;
+    overflow-x:hidden;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-side-main,
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-side-link {
+    justify-content:flex-start;
+    padding:11px 12px;
+  }
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed.nexa-sidebar-hover-expanded .admin-side-group.is-open > .admin-side-children {
+    display:flex!important;
+  }
+  /* Evita que o novo comportamento apareça sobre telas especiais de checkout. */
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.pdv-checkout-mode) .admin-sidebar,
+  body.admin-side-menu-enabled.nexa-menu-icons-v3.admin-sidebar-collapsed:has(.cmd-checkout-mode) .admin-sidebar {
+    transform:translateX(-106%)!important;
+  }
+}

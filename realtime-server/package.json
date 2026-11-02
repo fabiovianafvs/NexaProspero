@@ -1,0 +1,14 @@
+{
+  "name": "nexa-brain-realtime-server",
+  "version": "2.2.0",
+  "private": true,
+  "description": "Servidor WebSocket do Nexa Brain com Redis Streams e salas isoladas por empresa.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

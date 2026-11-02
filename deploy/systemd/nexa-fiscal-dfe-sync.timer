@@ -1,0 +1,11 @@
+[Unit]
+Description=Executa o RADAR NF-e do Nexa a cada hora
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=10m
+Persistent=true
+Unit=nexa-fiscal-dfe-sync.service
+
+[Install]
+WantedBy=timers.target

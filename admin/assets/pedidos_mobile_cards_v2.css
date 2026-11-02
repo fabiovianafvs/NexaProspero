@@ -1,0 +1,190 @@
+/* Nexa Próspero | Consulta de Pedidos, cards móveis v2 - contraste e ações por card (opt-in pelo mesmo
+   app_config.business.orders_grid.enabled já usado no grid de desktop).
+   O layout tradicional não recebe nenhuma dessas classes. */
+.pedidos-mobile-icon-host { display:none; }
+@media (max-width:900px) {
+  .pedidos-grid-compact-card .pedidos-table-wrap,
+  .pedidos-grid-compact-card .pedidos-grid-v1-wrap { display:none!important; }
+  .pedidos-grid-compact-card .pedidos-mobile-list-v2 {
+    display:grid!important; grid-template-columns:minmax(0,1fr); gap:10px;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 {
+    display:block; background:#f9fbff; border:2px solid #a6bad7; border-radius:12px;
+    box-shadow:0 3px 12px rgba(15,23,42,.10); overflow:hidden;
+    transition:border-color .15s ease,box-shadow .15s ease;
+    min-width:0; cursor:pointer;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2[hidden] { display:none!important; }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2:hover,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2:focus-visible {
+    border-color:#4578b8; box-shadow:0 6px 20px rgba(15,23,42,.17); outline:none;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-head {
+    display:flex; flex-direction:row; align-items:center; justify-content:space-between;
+    gap:8px; padding:9px 11px 8px; border-bottom:1px solid #b9cbe3;
+    background:#eaf1fa;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-label {
+    display:none!important;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-head strong {
+    font-size:15px; line-height:1.2; margin:0; font-weight:900;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-head .status-pill,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-head [class*="status-"] {
+    max-width:62%; min-width:0; font-size:10px;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-client {
+    padding:7px 11px 8px; min-width:0; background:#f2f6fc;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-client strong {
+    font-size:13px; line-height:1.2; white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; display:block;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-client .muted {
+    margin-top:2px; font-size:10px; line-height:1.2;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+    padding:9px 10px 10px; gap:7px 8px; border-top:1px solid #bccde4;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid .item {
+    min-width:0; background:#e9f0fa; border:1px solid #c1d1e6; border-radius:8px; padding:7px 8px;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid .item span {
+    display:block; font-size:10px; color:#3c5474; font-weight:800;
+    line-height:1.15; letter-spacing:.02em; text-transform:none;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid .item strong {
+    margin:3px 0 0; font-size:12px; line-height:1.25; font-weight:800; color:#142a49;
+    white-space:normal; overflow-wrap:anywhere;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid .total strong {
+    font-size:15px; font-weight:900; color:#047857;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid .wide {
+    grid-column:1/-1;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-fiscal .pedidos-fiscal-summary-values {
+    margin-top:4px; gap:4px; display:flex; align-items:center; flex-wrap:wrap;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-fiscal .pedidos-nfce-badge {
+    font-size:9px; padding:3px 5px;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-actions {
+    padding:8px 10px!important; border-top:1px solid #b8cae1;
+    display:flex!important; flex-direction:row!important; gap:4px!important;
+    align-items:center; justify-content:flex-end; background:#eaf1fa;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-actions-title {
+    font-size:10px; font-weight:750; color:#64748b; margin-right:auto;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host {
+    display:flex; flex:1 1 auto; align-items:center; justify-content:flex-end;
+    gap:4px; min-width:0;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host .orders-grid-icons {
+    display:flex!important; flex-wrap:wrap; gap:4px; align-items:center;
+    justify-content:flex-end; width:100%;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host .orders-grid-icon {
+    display:inline-flex!important; align-items:center; justify-content:center;
+    width:32px!important; height:32px!important; min-width:32px!important;
+    min-height:32px!important; padding:0!important; border-radius:7px;
+    background:#fff; border:1px solid #9fb8da; color:#183b78;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host .orders-grid-icon svg {
+    width:15px; height:15px;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host form {
+    display:inline-flex!important; width:auto!important; margin:0!important;
+  }
+  /* Habilitação individual: uma linha irregular não interfere nas demais. */
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-enhanced .pedidos-mobile-buttons,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-fallback .pedidos-mobile-buttons {
+    display:none!important;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-enhanced .pedidos-mobile-actions-title,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-fallback .pedidos-mobile-actions-title {
+    display:none!important;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-enhanced .pedidos-mobile-icon-host,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-fallback .pedidos-mobile-icon-host {
+    display:flex!important;
+  }
+  /* Formulário de status original continua vivo para manter validações. */
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-fallback > .pedidos-status-form,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2.orders-mobile-card-fallback .pedidos-mobile-actions > .pedidos-status-form {
+    display:none!important;
+  }
+  /* Enquanto JS não iniciar, mantém os botões legados acessíveis. */
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2:not(.orders-mobile-card-enhanced):not(.orders-mobile-card-fallback) .pedidos-mobile-icon-host {
+    display:none!important;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2:not(.orders-mobile-card-enhanced):not(.orders-mobile-card-fallback) .pedidos-mobile-buttons {
+    display:flex!important; flex-wrap:wrap!important; gap:5px;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2:not(.orders-mobile-card-enhanced):not(.orders-mobile-card-fallback) .pedidos-mobile-buttons .btn {
+    width:auto!important; min-height:30px!important; padding:5px 7px!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head {
+    flex-wrap:wrap!important; flex-direction:row!important;
+    align-items:center!important; gap:6px!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head h2 {
+    font-size:14px!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head .pedidos-count-wrap {
+    flex:1 1 auto!important; flex-direction:row!important; gap:7px!important;
+    justify-content:flex-end!important; flex-wrap:wrap!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head .orders-grid-picker,
+  .pedidos-grid-compact-card .pedidos-grid-compact-head #ordersGridPrefState {
+    display:none!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head .orders-grid-toolbar {
+    display:flex!important; align-items:center!important; margin:0!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head .orders-grid-pagesize {
+    display:flex!important; align-items:center!important; gap:4px!important;
+  }
+  .pedidos-grid-compact-card .pedidos-grid-compact-head .orders-grid-pagesize select {
+    width:62px!important; height:29px!important; min-height:29px!important;
+    font-size:12px!important;
+  }
+  .pedidos-grid-compact-card .orders-grid-pagination {
+    justify-content:center; gap:5px; padding-top:12px;
+  }
+  .pedidos-grid-compact-card .orders-grid-pagination span {
+    flex-basis:100%; text-align:center; margin:0 0 4px;
+  }
+}
+@media (max-width:380px) {
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid {
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host .orders-grid-icon {
+    width:30px!important;height:30px!important;min-width:30px!important;min-height:30px!important;
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 { transition:none!important; }
+}
+
+/* Cards mobile v2: campos mais contrastados e bordas visíveis. */
+@media(max-width:900px) {
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-client strong { color:#142b4f!important; }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-client .muted { color:#4d6688!important; }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-grid .wide { background:#e7effa!important; border-color:#b5c9e3!important; }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host form { display:inline-flex!important; }
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host .orders-grid-icon:focus-visible,
+  .pedidos-grid-compact-card .pedidos-mobile-card-v2 .pedidos-mobile-icon-host .orders-grid-icon:hover {
+    background:#dbeafe; border-color:#4e7fbf;
+  }
+}
+/* Menus e status mobile são inseridos no body; usam os componentes existentes do grid. */
+.orders-mobile-popover .pedidos-fiscal-menu-list { position:static!important; display:grid!important; }
+.orders-mobile-popover .pedidos-fiscal-menu { display:block!important; width:100%; }
+.orders-mobile-popover .pedidos-fiscal-menu > button { display:none!important; }
+.orders-mobile-popover .pedidos-fiscal-menu-list form { display:block!important; }
+.orders-mobile-status-modal .pedidos-status-form { display:grid!important; }

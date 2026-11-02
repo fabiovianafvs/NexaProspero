@@ -1,0 +1,5 @@
+<?php
+declare(strict_types=1);
+header('Content-Type: application/json; charset=UTF-8');
+require_once __DIR__.'/../config/pdo.php';require_once __DIR__.'/../config/saas_billing.php';require_once __DIR__.'/../config/pagbank.php';
+try{$cfg=pagbank_get_config($pdo,false)?:[];$expected=trim((string)($cfg['webhook_token']??''));$received=trim((string)($_GET['token']??''));if($expected!==''&&!hash_equals($expected,$received)){http_response_code(403);echo json_encode(['ok'=>false,'message'=>'Token interno inválido.']);exit;}$raw=file_get_contents('php://input')?:'{}';$payload=json_decode($raw,true);if(!is_array($payload))throw new RuntimeException('Payload JSON inválido.');$headers=function_exists('getallheaders')?(getallheaders()?:[]):[];$result=saas_process_pagbank_webhook($pdo,$headers,$payload);http_response_code(200);echo json_encode(['ok'=>(bool)$result['processed'],'message'=>$result['message']],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);}catch(Throwable $e){http_response_code(500);echo json_encode(['ok'=>false,'message'=>$e->getMessage()],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);}

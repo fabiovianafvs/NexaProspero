@@ -1,0 +1,21 @@
+{
+  "name": "nexa-prospero/delivery-fiscal",
+  "description": "Dependencias fiscais para emissao de NF-e e NFC-e do Nexa Prospero.",
+  "type": "project",
+  "require": {
+    "php": ">=7.4",
+    "ext-dom": "*",
+    "ext-json": "*",
+    "ext-libxml": "*",
+    "ext-openssl": "*",
+    "ext-simplexml": "*",
+    "ext-soap": "*",
+    "ext-zlib": "*",
+    "nfephp-org/sped-da": "^1.1",
+    "nfephp-org/sped-nfe": "^5.2"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

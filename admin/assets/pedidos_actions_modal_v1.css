@@ -1,0 +1,25 @@
+/* Nexa Próspero · Opções de impressão, documento fiscal e situação · Grid opt-in */
+.orders-action-dialog[hidden]{display:none!important}
+.orders-action-dialog{position:fixed;inset:0;z-index:100120;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(11,22,58,.57);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+body.orders-action-dialog-open{overflow:hidden!important}
+.orders-action-dialog-card{box-sizing:border-box;width:min(440px,100%);max-height:min(86dvh,720px);overflow-y:auto;background:#fff;border:1px solid #b6c8e5;border-radius:17px;padding:18px;box-shadow:0 22px 65px rgba(15,23,42,.34);color:#14213d}
+.orders-action-dialog-card h3{margin:0 0 7px;color:#10285a;font-size:18px;line-height:1.25;font-weight:900}
+.orders-action-dialog-card p{margin:0 0 15px;color:#64748b;font-size:12px;line-height:1.5}
+.orders-action-dialog-body,.orders-action-dialog-body form{min-width:0}
+.orders-action-dialog-options{display:grid;gap:8px}
+.orders-action-dialog-options>*{min-width:0}
+.orders-action-dialog-options form{margin:0!important;display:block!important;width:100%;max-width:100%}
+.orders-action-dialog-options .pedidos-fiscal-menu,.orders-action-dialog-options .pedidos-os-fiscal-actions{display:grid!important;gap:8px!important;width:100%;margin:0!important}
+.orders-action-dialog-options .pedidos-fiscal-menu>button:first-child{display:none!important}
+.orders-action-dialog-options .pedidos-fiscal-menu-list{display:grid!important;position:static!important;inset:auto!important;box-shadow:none!important;border:none!important;min-width:0!important;max-width:none!important;width:100%!important;margin:0!important;padding:0!important;gap:8px!important}
+.orders-action-dialog-options a.btn,.orders-action-dialog-options button.btn,.orders-action-dialog-options form button,.orders-action-dialog-options .pedidos-os-fiscal-actions .btn{box-sizing:border-box;display:flex!important;align-items:center!important;justify-content:flex-start!important;white-space:normal!important;text-align:left!important;border-radius:10px!important;border:1px solid #c7d7ee!important;background:#f1f5fc!important;color:#123473!important;width:100%!important;min-height:42px!important;min-width:0!important;padding:10px 13px!important;font-size:13px!important;font-weight:800!important;cursor:pointer}
+.orders-action-dialog-options .btn:hover,.orders-action-dialog-options .btn:focus-visible,.orders-action-dialog-options form button:hover{background:#dbeafe!important;border-color:#79a7eb!important}
+.orders-action-dialog-options input:not([type=hidden]),.orders-action-dialog-options select{max-width:100%}
+.orders-action-dialog-footer{display:flex;justify-content:flex-start;margin-top:16px}
+.orders-action-back{background:#fff;color:#1e293b;border:1px solid #bccbe0;border-radius:10px;padding:8px 14px;min-height:36px;min-width:126px;font-size:12px;cursor:pointer}
+.orders-action-back:hover,.orders-action-back:focus-visible{background:#f1f5f9}
+.orders-action-dialog-card .pedidos-status-form.orders-action-dialog-status-form{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:10px!important;align-items:center!important;margin:0!important;width:100%!important}
+.orders-action-dialog-card .pedidos-status-form.orders-action-dialog-status-form select{grid-row:1;grid-column:1/-1;max-width:none!important;width:100%!important;height:42px!important;min-height:42px;border:1px solid #a7bde0;border-radius:10px;padding:8px 10px;background:#fff}
+.orders-action-dialog-card .pedidos-status-form.orders-action-dialog-status-form button[type="submit"]{grid-row:2!important;grid-column:2!important;min-width:0!important;width:100%!important;min-height:37px!important;margin:0!important;order:unset!important}
+.orders-action-dialog-card .pedidos-status-form.orders-action-dialog-status-form button.orders-action-back{grid-row:2!important;grid-column:1!important;min-width:0!important;width:100%!important;min-height:37px!important;margin:0!important;order:unset!important}
+@media(max-width:450px){.orders-action-dialog{padding:10px}.orders-action-dialog-card{padding:15px}.orders-action-dialog-card h3{font-size:17px}}

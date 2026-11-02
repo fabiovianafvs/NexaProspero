@@ -1,0 +1,12 @@
+-- Nexa Próspero - Ordem de Serviço v1.14
+-- Fotos opcionais das avarias do veículo.
+-- Preferencialmente execute: php workers/migrate_ordem_servico_v1.php
+-- A migração PHP é idempotente e verifica as colunas antes de criá-las.
+
+-- Estrutura esperada após a migração:
+-- os_vehicle_damage_points.photo_path VARCHAR(255) NULL
+-- os_vehicle_damage_points.photo_created_at DATETIME NULL
+-- os_vehicle_damage_points.photo_deleted_at DATETIME NULL
+--
+-- Os arquivos NÃO ficam no banco. São armazenados em:
+-- /var/www/nexa/storage/os_damage_photos/

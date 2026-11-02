@@ -1,0 +1,180 @@
+/* Nexa Próspero - barra compacta padrão para telas de impressão.
+   V11.45.19.7: alinhada ao padrão visual da NFC-e. */
+.nexa-print-toolbar{
+  width:min(980px,100%);
+  margin:0 auto 12px;
+  padding:10px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  background:#fff;
+  border:1px solid #dbe4ee;
+  border-radius:14px;
+  box-shadow:0 8px 22px rgba(15,23,42,.06);
+}
+.nexa-print-toolbar-copy{min-width:0;flex:1 1 auto}
+.nexa-print-toolbar-title{
+  display:block;
+  margin:0;
+  color:#0B1F5B;
+  font-size:14px;
+  line-height:1.15;
+  font-weight:950;
+}
+.nexa-print-toolbar-hint{
+  margin-top:3px;
+  color:#64748b;
+  font-size:10px;
+  line-height:1.25;
+  font-weight:750;
+}
+.nexa-print-toolbar-message{
+  margin-top:3px;
+  color:#15803d;
+  font-size:10px;
+  line-height:1.2;
+  font-weight:850;
+}
+.nexa-print-actions{
+  display:flex;
+  align-items:stretch;
+  justify-content:flex-end;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.nexa-print-action{
+  position:relative;
+  flex:0 0 auto;
+  width:58px;
+  min-width:58px;
+  height:48px;
+  padding:4px 3px;
+  display:inline-flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  background:#fff;
+  color:#111827;
+  text-decoration:none;
+  text-align:center;
+  font-family:Arial,Helvetica,sans-serif;
+  font-weight:800;
+  cursor:pointer;
+  line-height:1;
+  box-shadow:none;
+  transition:background .14s ease,border-color .14s ease,box-shadow .14s ease,transform .14s ease;
+}
+.nexa-print-action:hover{
+  background:#f8fafc;
+  border-color:#94a3b8;
+  color:#0f172a;
+  transform:translateY(-1px);
+}
+.nexa-print-action:focus-visible{
+  outline:3px solid rgba(36,84,214,.28);
+  outline-offset:2px;
+}
+.nexa-print-action-icon{
+  display:block;
+  font-size:17px;
+  line-height:18px;
+  font-weight:900;
+}
+.nexa-print-action-label{
+  display:block;
+  max-width:100%;
+  font-size:8.5px;
+  line-height:1.05;
+  font-weight:850;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.nexa-print-action.is-primary{
+  background:#0B1F5B;
+  border-color:#0B1F5B;
+  color:#fff;
+}
+.nexa-print-action.is-primary:hover{background:#102b78;border-color:#102b78;color:#fff}
+.nexa-print-action.is-whatsapp{
+  background:#25D366;
+  border-color:#1ebe57;
+  color:#fff;
+  box-shadow:0 5px 12px rgba(37,211,102,.18);
+}
+.nexa-print-action.is-whatsapp:hover{background:#1fbd5a;border-color:#18a94c;color:#fff}
+.nexa-print-action.is-active{
+  background:#eff6ff;
+  border-color:#2454D6;
+  color:#0B1F5B;
+  box-shadow:inset 0 0 0 1px rgba(36,84,214,.14);
+}
+.nexa-print-action.is-active::after{
+  content:'✓';
+  position:absolute;
+  top:3px;
+  right:5px;
+  width:13px;
+  height:13px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  background:#2454D6;
+  color:#fff;
+  font-size:8px;
+  line-height:1;
+  font-weight:950;
+}
+.nexa-print-action.is-muted{background:#f8fafc;color:#475569}
+.nexa-print-toolbar--compact{
+  display:block;
+  width:min(72mm,100%);
+  max-width:72mm;
+  padding:8px;
+}
+.nexa-print-toolbar--compact .nexa-print-toolbar-copy{margin-bottom:7px}
+.nexa-print-toolbar--compact .nexa-print-toolbar-title{font-size:12px}
+.nexa-print-toolbar--compact .nexa-print-toolbar-hint{font-size:8.5px;margin-top:2px}
+.nexa-print-toolbar--compact .nexa-print-actions{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:5px;
+  width:100%;
+}
+.nexa-print-toolbar--compact .nexa-print-action{
+  width:100%;
+  min-width:0;
+  height:44px;
+  border-radius:9px;
+}
+.nexa-print-toolbar--compact .nexa-print-action-icon{font-size:16px;line-height:16px}
+.nexa-print-toolbar--compact .nexa-print-action-label{font-size:7.5px}
+@media(max-width:760px){
+  .nexa-print-toolbar{
+    width:100%;
+    margin:0 auto 10px;
+    padding:8px;
+    display:block;
+    border-radius:12px;
+  }
+  .nexa-print-toolbar-copy{margin-bottom:7px}
+  .nexa-print-actions{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:5px;
+    width:100%;
+  }
+  .nexa-print-action{width:100%;min-width:0;height:44px}
+  .nexa-print-action-label{font-size:7.5px}
+}
+@media(max-width:380px){
+  .nexa-print-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .nexa-print-toolbar--compact .nexa-print-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media print{
+  .nexa-print-toolbar{display:none!important}
+}

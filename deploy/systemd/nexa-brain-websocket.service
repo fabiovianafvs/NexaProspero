@@ -1,0 +1,20 @@
+[Unit]
+Description=Nexa Brain WebSocket Server
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/html/nexa/realtime-server
+EnvironmentFile=/etc/nexa/nexa-brain.env
+ExecStart=/usr/bin/node /var/www/html/nexa/realtime-server/server.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

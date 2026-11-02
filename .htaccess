@@ -1,0 +1,33 @@
+# Nexa Próspero - rotas amigáveis
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# Central geral do Contador Próspero. Deve ser resolvida antes da rota de empresas.
+RewriteRule ^contadorprospero/?$ contadorprospero/index.php [L,QSA]
+RewriteRule ^contadorprospero/(index|login|cadastro|logout|download)\.php$ contadorprospero/$1.php [L,QSA]
+
+
+# Landing de proposta da Nexa ou da revenda, preservando o subdomínio atual.
+RewriteRule ^montesuaproposta/?$ montesuaproposta.php [L,QSA]
+RewriteRule ^revenda/?$ revenda/index.php [L,QSA]
+
+# Mantém arquivos e diretórios reais funcionando normalmente.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Catálogo completo de pedidos em modo path-based: /c/empresa-padrao/
+RewriteRule ^c/([a-zA-Z0-9-]+)/?$ index.php?company=$1 [L,QSA]
+RewriteRule ^c/([a-zA-Z0-9-]+)/(.*)$ $2?company=$1 [L,QSA]
+
+# Catálogo público sem compra: /empresa-padrao
+# Não interfere em arquivos/diretórios existentes, como /admin, /api, /assets, /uploads etc.
+RewriteRule ^([a-zA-Z0-9][a-zA-Z0-9-]{1,100})/?$ catalogo_publico.php?empresa=$1 [L,QSA]
+</IfModule>
+
+# BEGIN NEXA_DB_OVERRIDE
+# Banco oficial da instalação Nexa Próspero na VPS.
+<IfModule mod_env.c>
+    SetEnv DB_NAME nexaprospero
+</IfModule>
+# END NEXA_DB_OVERRIDE

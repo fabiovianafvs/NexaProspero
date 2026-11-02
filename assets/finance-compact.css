@@ -1,0 +1,51 @@
+/* Nexa — modo compacto somente nas telas do Financeiro.
+   Não modifica escala do navegador, menus de outros módulos nem operações de dados. */
+@media screen and (min-width: 821px) and (max-width: 1500px) {
+  body.nexa-finance-compact .container { padding: 10px 12px; }
+  body.nexa-finance-compact h1 { font-size: clamp(20px, 1.7vw, 25px); line-height: 1.2; margin-top: 4px; margin-bottom: 8px; }
+  body.nexa-finance-compact h2 { line-height: 1.25; }
+  body.nexa-finance-compact .card,
+  body.nexa-finance-compact .finance-card,
+  body.nexa-finance-compact .finance-filter-card { padding: 10px 12px; }
+  body.nexa-finance-compact .filters { gap: 7px; }
+  body.nexa-finance-compact .filters input,
+  body.nexa-finance-compact .filters select,
+  body.nexa-finance-compact .finance-filter input,
+  body.nexa-finance-compact .finance-filter select,
+  body.nexa-finance-compact .fixed-filter input,
+  body.nexa-finance-compact .fixed-filter select { min-height: 36px; height: 36px; font-size: 13px; }
+  body.nexa-finance-compact .filters .btn,
+  body.nexa-finance-compact .finance-filter .btn,
+  body.nexa-finance-compact .fixed-filter-actions .btn { min-height: 36px; height: 36px; padding: 6px 10px; font-size: 12px; }
+  body.nexa-finance-compact table th { padding: 7px 9px; }
+  body.nexa-finance-compact table td { padding: 7px 9px; }
+  body.nexa-finance-compact .finance-modal-dialog { max-height: calc(100dvh - 24px); }
+}
+
+/* V2 - aproxima a área Financeiro do zoom 90% sem reduzir o menu Chrome.
+   O zoom é restrito à área de conteúdo e somente a monitores desktop compactos. */
+@media screen and (min-width: 921px) and (max-width: 1500px) {
+  body.nexa-finance-compact.admin-side-menu-enabled:not(.admin-sidebar-collapsed) > .container {
+    zoom: 0.90;
+    max-width: none;
+    width: calc((100vw - 292px) / 0.90);
+    margin-left: calc(292px / 0.90);
+    margin-right: 0;
+    padding: 12px 14px;
+  }
+  body.nexa-finance-compact.admin-side-menu-enabled.admin-sidebar-collapsed > .container {
+    zoom: 0.90;
+    max-width: none;
+    width: calc(100vw / 0.90);
+    margin-left: 0;
+    margin-right: 0;
+    padding: 12px 14px;
+  }
+  body.nexa-finance-compact:not(.admin-side-menu-enabled) > .container {
+    zoom: 0.90;
+    max-width: none;
+    width: calc(100vw / 0.90);
+    margin: 0;
+    padding: 12px 14px;
+  }
+}

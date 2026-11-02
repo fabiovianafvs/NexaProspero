@@ -1,0 +1,71 @@
+/* Nexa Próspero · Consulta de Pedidos · grid opt-in. Isolado por classe. */
+.orders-grid-toolbar{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin:0 0 10px;color:#475569;font-size:12px}
+.orders-grid-picker{position:relative}.orders-grid-picker>summary{list-style:none;cursor:pointer}.orders-grid-picker>summary::-webkit-details-marker{display:none}
+.orders-grid-picker-panel{position:absolute;z-index:60;right:0;top:calc(100% + 5px);width:260px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 14px 38px #0f172a2b;padding:12px}
+.orders-grid-picker-panel strong{display:block;margin-bottom:8px}.orders-grid-picker-panel label{display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12px;font-weight:700}.orders-grid-picker-panel small{display:block;border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;color:#64748b}
+#ordersGridPrefState{font-size:11px;font-weight:700}
+/* v2 20261022 - Sem rolagem vertical interna: o elemento cresce com 1 a 300 pedidos;
+ * somente o eixo horizontal pode rolar. A página principal rola verticalmente. */
+.pedidos-grid-v1-wrap{max-height:none!important;height:auto!important;overflow-x:auto!important;overflow-y:hidden!important;position:relative;scrollbar-gutter:auto;background:#fff}
+/* Uma única faixa de título/contadores/colunas em telas de computador. */
+.pedidos-grid-compact-head{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;gap:8px!important;margin-bottom:7px!important;min-height:32px}
+.pedidos-grid-compact-head h2{font-size:15px!important;line-height:1.2!important;white-space:nowrap!important;flex:none}
+.pedidos-grid-compact-head .pedidos-count-wrap{flex:1;min-width:0;display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:9px!important;flex-wrap:nowrap!important}
+.pedidos-grid-compact-head .pedidos-count,.pedidos-grid-compact-head .pedidos-selected-total{font-size:11px!important;white-space:nowrap}
+.orders-grid-visible-count{font-size:11px;font-weight:750;color:#64748b;white-space:nowrap}
+.pedidos-grid-compact-head .orders-grid-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin:0;flex:none}
+.pedidos-grid-compact-head .orders-grid-picker>summary{height:29px;min-height:29px;padding:4px 9px;font-size:11px;white-space:nowrap}
+.orders-grid-pagesize{display:flex;align-items:center;gap:5px;margin:0;color:#64748b;font-size:11px;font-weight:800;white-space:nowrap}
+.orders-grid-pagesize select{height:29px;min-height:29px;padding:2px 5px;margin:0;border:1px solid #dbe4f0;border-radius:8px;color:#102856;font-weight:800;background:#fff;cursor:pointer;font-size:11px}
+.pedidos-grid-compact-head #ordersGridPrefState:empty{display:none}
+.pedidos-grid-compact-head #ordersGridPrefState{font-size:10px}
+.orders-grid-pagination{display:flex;justify-content:flex-end;align-items:center;gap:6px;flex-wrap:wrap;padding:11px 3px 2px;font-size:12px;color:#475569}
+.orders-grid-pagination span{margin-right:auto}
+.orders-grid-pagination .btn{padding:5px 9px;min-height:30px}
+@media(max-width:1000px){.pedidos-grid-compact-head{flex-wrap:wrap!important}.pedidos-grid-compact-head .pedidos-count-wrap{flex-wrap:wrap!important}}
+
+.pedidos-orders-table.pedidos-grid-v1{width:max-content;min-width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}
+.pedidos-grid-v1 th,.pedidos-grid-v1 td{box-sizing:border-box!important;width:auto!important;min-width:0;white-space:nowrap}
+.pedidos-grid-v1 thead th{position:sticky;top:0;z-index:8;background:#eff5ff!important;padding:9px 6px;border-bottom:1px solid #cbd5e1;user-select:none}
+.pedidos-grid-v1 .orders-grid-head{display:flex;gap:5px;align-items:center;min-width:0}
+.pedidos-grid-v1 .orders-grid-head-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;background:transparent;border:0;font-weight:800;font-size:12px;text-align:left;color:#102856;cursor:pointer;padding:0}
+.pedidos-grid-v1 .orders-grid-drag{cursor:grab;font-size:14px;color:#9aa9c0;flex:0 0 auto}.pedidos-grid-v1 .orders-grid-drag:active{cursor:grabbing}
+.pedidos-grid-v1 .orders-grid-filter-btn{background:none;border:0;cursor:pointer;color:#64748b;font-size:13px;padding:1px 3px;border-radius:4px}.pedidos-grid-v1 .orders-grid-filter-btn.active{background:#bfdbfe;color:#1d4ed8}
+.pedidos-grid-v1 .orders-grid-resizer{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:col-resize;touch-action:none}.pedidos-grid-v1 .orders-grid-resizer:hover{background:#a5b4fc}
+.pedidos-grid-v1 tbody .pedidos-order-row td{padding:9px 8px!important;border-bottom:1px solid #e5edf6!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pedidos-grid-v1 tbody .pedidos-order-row:nth-child(4n+1) td{background:#fff}
+.pedidos-grid-v1 tbody .pedidos-order-row:hover td{background:#e8f0fc!important}
+.pedidos-grid-v1 .pedidos-client{max-width:none;overflow:hidden!important}
+.pedidos-grid-v1 .pedidos-client strong{font-size:12px}.pedidos-grid-v1 .pedidos-client .muted{font-size:11px;margin-top:2px}
+.pedidos-grid-v1 .orders-grid-actions-col{position:sticky!important;right:0!important;z-index:7!important;width:250px!important;min-width:250px!important;max-width:250px!important;background:#fff!important;border-left:1px solid #dbe4f0!important;box-shadow:-6px 0 12px #0f172a12}
+.pedidos-grid-v1 thead .orders-grid-actions-col{z-index:12!important;background:#e7effc!important}
+.pedidos-grid-v1 tbody tr:hover .orders-grid-actions-col{background:#e8f0fc!important}
+.pedidos-grid-v1 .orders-grid-icons{display:flex;justify-content:flex-end;align-items:center;gap:4px;overflow:visible}
+.pedidos-grid-v1 .orders-grid-icons form{margin:0;display:inline-flex;align-items:center}
+.pedidos-grid-v1 .orders-grid-icon{width:30px;height:30px;min-width:30px;min-height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d5e0f0;border-radius:8px;background:#fff;color:#1e40af;padding:0;cursor:pointer;text-decoration:none;transition:background .12s}
+.pedidos-grid-v1 .orders-grid-icon:hover,.pedidos-grid-v1 .orders-grid-icon:focus-visible{background:#dce9fe;border-color:#93b4ec}
+.orders-grid-icon svg{width:16px;height:16px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.pedidos-grid-v1 .orders-grid-fiscal-cell{white-space:nowrap!important;overflow:hidden!important;max-width:260px;text-overflow:ellipsis}
+.pedidos-grid-v1 .orders-grid-fiscal-cell .pedidos-fiscal-summary-values{display:flex;flex-wrap:nowrap;overflow:hidden;gap:3px}
+.pedidos-grid-v1 .orders-grid-fiscal-cell .pedidos-nfce-badge{font-size:9px;padding:3px 5px}
+.pedidos-grid-v1 [data-col].orders-grid-hidden{display:none!important}
+.orders-grid-ready .pedidos-grid-v1 .pedidos-action-row{display:none!important}
+.orders-grid-popover{position:fixed;z-index:100050;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 16px 45px #0f172a40;min-width:194px;max-width:min(360px,calc(100vw - 18px));max-height:70vh;overflow:auto;padding:7px;display:grid;gap:5px}
+.orders-grid-popover[hidden]{display:none!important}
+.orders-grid-popover .btn,.orders-grid-popover form,.orders-grid-popover a,.orders-grid-popover button{box-sizing:border-box}
+.orders-grid-popover form{display:block!important;margin:0!important;width:100%}
+.orders-grid-popover .btn,.orders-grid-popover form .btn{display:flex!important;align-items:center;justify-content:flex-start!important;text-align:left;width:100%;min-width:0;min-height:32px;padding:7px 9px;font-size:12px;white-space:normal}
+.orders-grid-popover .pedidos-fiscal-menu{display:block}.orders-grid-popover .pedidos-fiscal-menu-list{position:static;display:grid!important;box-shadow:none;border:0;padding:0}
+.orders-grid-popover .pedidos-os-fiscal-actions{display:grid!important}.orders-grid-popover .pedidos-fiscal-summary{display:none}
+.orders-grid-popover .orders-grid-filter-label{font-size:12px;font-weight:850;color:#334155}.orders-grid-popover input[type=search]{width:100%;min-height:36px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px}
+.orders-grid-modal{position:fixed;inset:0;background:#0b163a8c;z-index:100060;display:flex;align-items:center;justify-content:center;padding:16px}
+.orders-grid-modal[hidden]{display:none!important}
+.orders-grid-modal-card{background:#fff;border:1px solid #dbe4f0;box-shadow:0 22px 60px #0f172a55;border-radius:18px;width:min(440px,100%);padding:20px}
+.orders-grid-modal-card h3{margin:0 0 8px;color:#10285a;font-size:20px}.orders-grid-modal-card p{font-size:12px;color:#64748b;margin:0 0 14px}
+.orders-grid-modal-card .pedidos-status-form{display:grid!important;grid-template-columns:1fr 1fr;gap:10px!important;width:100%}
+.orders-grid-modal-card .pedidos-status-form select{grid-column:1/-1;min-width:0;max-width:none;width:100%;height:42px}
+/* Rodapé do modal: Voltar à esquerda e Trocar status à direita, alinhados. */
+.orders-grid-modal-card .pedidos-status-form button[type="submit"]{grid-column:2;grid-row:2;min-width:0;width:100%;min-height:36px;margin:0}
+.orders-grid-modal-card .pedidos-status-form button.orders-grid-modal-close{grid-column:1;grid-row:2;min-width:0;width:100%;min-height:36px;margin:0}
+.orders-grid-modal-close{grid-column:1;grid-row:2;width:100%;border:1px solid #cbd5e1;background:#fff;border-radius:12px;min-height:36px;cursor:pointer}
+@media(max-width:900px){.pedidos-grid-v1-wrap{display:none!important}.orders-grid-toolbar{display:none!important}}

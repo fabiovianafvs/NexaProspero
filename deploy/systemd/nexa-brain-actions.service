@@ -1,0 +1,18 @@
+[Unit]
+Description=Nexa Brain - avaliação periódica da Central de Ações
+After=network.target mariadb.service redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/nexa
+EnvironmentFile=-/etc/nexa/nexa-brain.env
+ExecStart=/usr/bin/php /var/www/nexa/workers/brain_actions_worker.php
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=Nexa Brain Transactional Outbox Worker
+After=network.target mariadb.service redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/html/nexa
+EnvironmentFile=/etc/nexa/nexa-brain.env
+ExecStart=/usr/bin/php /var/www/html/nexa/workers/brain_outbox_worker.php --batch=50 --sleep=2
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
