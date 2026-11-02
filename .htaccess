@@ -31,3 +31,16 @@ RewriteRule ^([a-zA-Z0-9][a-zA-Z0-9-]{1,100})/?$ catalogo_publico.php?empresa=$1
     SetEnv DB_NAME nexaprospero
 </IfModule>
 # END NEXA_DB_OVERRIDE
+
+# BEGIN NEXA_BLOQUEIO_ARQUIVOS_INTERNOS
+# Impede o download de logs, backups, SQL, scripts e anotações internas pelo navegador.
+<FilesMatch "(?i)(\.(log|sql|env|save|patch|sh|bak[^/]*)$|^(LEIA|_LEIA|README_|VALIDACAO|_VALIDACAO|MANIFESTO|SHA256|CHECKSUMS|REGISTRO|ALTERACOES|ARQUIVOS-ALTERADOS|AUDITORIA|TESTES_E)|^composer\.(json|lock)$|^\.git)">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+# END NEXA_BLOQUEIO_ARQUIVOS_INTERNOS
