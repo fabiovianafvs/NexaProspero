@@ -8,7 +8,23 @@ Sistema SaaS de gestão para varejo (PDV, pedidos, comandas, estoque, financeiro
 - Código em `/var/www/nexa` (este repositório). Landing separada em `/var/www/nexa-landing` (fora deste repo).
 - Banco oficial: `nexaprospero` (definido via `SetEnv DB_NAME` no `.htaccess`).
 - O histórico Git da VPS fica em `/root/git/nexa.git` (fora da pasta pública).
-- Deploy: alterações vão para a branch `main` no GitHub; na VPS roda-se `cd /var/www/nexa && git pull`.
+- Apache só na porta 80 (HTTPS feito pela Cloudflare). Sites: `nexa-app.conf` (app.nexaprospero.com.br), `nexaprospero.conf` (domínio raiz → `/var/www/nexa-landing`; curinga `*.nexaprospero.com.br` → `/var/www/nexa`), `nexa-homolog.conf` (homologação).
+- Crons em produção: `workers/os_fiscal_queue_worker.php` e `workers/whatsapp_keepalive.php` (a cada minuto). Serviços systemd: `nexa-brain-worker`, `nexa-realtime`, `nexa-fiscal-dfe-sync`, `redis-server`, `php8.3-fpm`.
+
+## Fluxo de trabalho: homologação → produção
+
+| | Branch | Pasta na VPS | Banco | Endereço |
+|---|---|---|---|---|
+| Homologação | `homolog` | `/var/www/nexa-homolog` | `nexaprospero_homolog` (usuário MySQL `nexa_homolog`, sem acesso à produção) | `homolog.nexaprospero.com.br` (empresa-padrao) |
+| Produção | `main` | `/var/www/nexa` | `nexaprospero` | subdomínios das empresas |
+
+1. Toda alteração é feita primeiro na branch `homolog`. Na VPS: `cd /var/www/nexa-homolog && git pull`.
+2. O dono testa em `https://homolog.nexaprospero.com.br/admin/login.php`.
+3. Aprovado, fazer merge de `homolog` em `main`. Na VPS: `cd /var/www/nexa && git pull`.
+4. Migrações de banco: aplicar primeiro pelo Atualizador do Banco da homologação, depois no de produção.
+- Correções urgentes podem ir direto para `main`, mas depois fazer merge de `main` em `homolog`.
+- Recriar a homologação com cópia nova do banco: `bash /var/www/nexa/deploy/homolog/criar_homologacao.sh`.
+- Na homologação, notas fiscais e bancos ficam em HOMOLOGACAO/sandbox, WhatsApp e e-mail ficam sem configuração, e não há crons. Não remover essas travas.
 - Serviços auxiliares: `realtime-server/` (Node, WebSocket do Nexa Brain com Redis), units em `deploy/systemd/`, e o `agente-impressao-windows/` que roda no computador dos clientes.
 
 ## O que NÃO está no repositório (ver `.gitignore`)
