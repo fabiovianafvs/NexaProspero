@@ -331,3 +331,7 @@ function delivery_fee(array $biz, string $tipoEntrega, string $bairro): float {
   }
   return $default;
 }
+
+// Faixa "AMBIENTE DE HOMOLOGAÇÃO" (só age quando NEXA_AMBIENTE=homologacao; em produção não faz nada).
+require_once __DIR__ . '/ambiente.php';
+nexa_homologacao_banner_start();
