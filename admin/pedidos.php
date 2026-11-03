@@ -778,7 +778,7 @@ if ($ordersCrossContext && function_exists('multi_company_context_url')) $report
   <div class="pedidos-alert pedidos-alert-error"><?= pedidos_h($nfceErr) ?></div>
 <?php endif; ?>
 
-<form method="get" class="pedidos-filter-card pedidos-filters">
+<form method="get" class="pedidos-filter-card pedidos-filters" data-lembrar-filtros="pedidos" data-lembrar-extra="pg,por_pagina">
   <?php if ($ordersCrossContext && $ordersMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= pedidos_h($ordersMcCtx) ?>"><?php endif; ?>
   <?php if ($ordersNewGrid): ?><input type="hidden" name="por_pagina" value="<?= (int)$ordersGridPerPage ?>"><?php endif; ?>
   <label class="pedidos-search-field">Histórico / Cliente / número
@@ -808,9 +808,9 @@ if ($ordersCrossContext && function_exists('multi_company_context_url')) $report
   <?php endif; ?>
   <div class="pedidos-filter-actions">
     <button type="submit" class="btn btn-primary">Filtrar</button>
-    <a class="btn" href="<?= pedidos_h($ordersCrossContext && function_exists('multi_company_context_url') ? multi_company_context_url('pedidos.php') : 'pedidos.php') ?>">Limpar</a>
+    <a class="btn" href="<?= pedidos_h($ordersCrossContext && function_exists('multi_company_context_url') ? multi_company_context_url('pedidos.php?limpar_filtros=1') : 'pedidos.php?limpar_filtros=1') ?>">Limpar</a>
   </div>
-</form>
+</form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script>
 
 <?php if($contractBatchOk!==''):?><div class="contract-batch-alert ok"><?=pedidos_h($contractBatchOk)?></div><?php endif;?><?php if($contractBatchErr!==''):?><div class="contract-batch-alert err"><?=pedidos_h($contractBatchErr)?></div><?php endif;?>
 <?php if($contractOrderMap && !$ordersCrossContext):?><form id="contractBatchForm" method="post" action="pedidos_contratos_lote.php" class="contract-batch-bar"><input type="hidden" name="csrf_token" value="<?=pedidos_h(nfse_emitter_csrf_token('contract_nfse_batch'))?>"><input type="hidden" name="return_to" value="<?=pedidos_h($returnTo)?>"><strong>Pedidos de contratos</strong><span class="hint">Selecione os pedidos recorrentes para boleto; a NFS-e usa a Central de Emissão em Lote.</span><button type="button" class="btn" id="contractSelectAll">Marcar todos</button><button type="button" class="btn" id="contractClearAll">Desmarcar</button><?php if($canEmitNfsePedidos):?><a class="btn btn-primary" href="fiscal_emissao_lote.php?tipo=NFSE&amp;origem=CONTRATOS">NFS-e em lote</a><?php endif;?><button type="submit" name="action" value="generate_boleto" class="btn" onclick="return confirm('Preparar boletos para os pedidos de contratos selecionados?')">Gerar boletos em lote</button></form><?php endif;?>

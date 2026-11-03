@@ -386,7 +386,7 @@ $linkWithAction = static function (array $extra) use ($filterArgs, $financeCross
   if ($financeCrossContext && function_exists('multi_company_context_url')) $url = multi_company_context_url($url);
   return $url;
 };
-$clearUrl = 'financeiro_movimentos.php';
+$clearUrl = 'financeiro_movimentos.php?limpar_filtros=1';
 if ($financeCrossContext && function_exists('multi_company_context_url')) $clearUrl = multi_company_context_url($clearUrl);
 
 finance_admin_start('Financeiro - Movimento Financeiro', 'fin_mov');
@@ -487,7 +487,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div class="finance-kpi"><small>Saldo final</small><strong class="<?= $saldoFinalPeriodo>=0?'pos':'neg' ?>">R$ <?= finance_money_br($saldoFinalPeriodo) ?></strong></div>
 </div>
 
-<div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
+<div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter" data-lembrar-filtros="movimentos" data-lembrar-ignorar="edit,new,cancel,adjust_date"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
   <div><label>Data inicial</label><input type="date" name="ini" value="<?= finance_h($ini) ?>"></div>
   <div><label>Data final</label><input type="date" name="fim" value="<?= finance_h($fim) ?>"></div>
   <div><label>Tipo</label><select name="type"><option value="">Todos</option><option value="CREDITO" <?= $typeFilter==='CREDITO'?'selected':'' ?>>Créditos</option><option value="DEBITO" <?= $typeFilter==='DEBITO'?'selected':'' ?>>Débitos</option></select></div>
@@ -495,7 +495,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div><label>Caixa/Banco</label><select name="bank_account_id"><option value="">Todos</option><?php foreach($banks as $bank): ?><option value="<?= (int)$bank['id'] ?>" <?= $bankFilter===(int)$bank['id']?'selected':'' ?>><?= finance_h($bank['name'] ?? '') ?></option><?php endforeach; ?></select></div>
   <div class="history"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento, pessoa, plano ou motivo"></div>
   <div class="finance-filter-actions"><button class="btn">Filtrar</button><a class="btn" href="<?= finance_h($clearUrl) ?>">Limpar</a></div>
-</form></div>
+</form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script></div>
 
 <div class="finance-card"><div class="finance-card-head"><h2 class="finance-subtitle">Movimentos</h2><span class="finance-muted"><?= count($rows) ?> movimento(s)</span></div><div class="table-wrap"><table class="finance-list-table finance-table-movements"><thead><tr><th>Data</th><th>Tipo</th><th>Pessoa</th><th>Plano</th><th>Centro</th><th>Conta/Caixa</th><th>Origem</th><th>Valor</th><th class="finance-actions-th">Ações</th></tr></thead><tbody>
 <?php if(!$rows): ?><tr><td colspan="9" class="finance-empty">Nenhum movimento encontrado.</td></tr><?php endif; ?>

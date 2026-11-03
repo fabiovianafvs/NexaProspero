@@ -285,7 +285,7 @@ finance_page_header('Contas a Pagar', 'Lançamentos de fornecedores. A baixa ger
 finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
 
 <div class="finance-card finance-filter-card">
-  <form method="get" class="payable-filter-form">
+  <form method="get" class="payable-filter-form" data-lembrar-filtros="contas_pagar" data-lembrar-ignorar="edit,new,settle,fixed_expense_id">
     <?php if ($fixedExpenseId > 0): ?><input type="hidden" name="fixed_expense_id" value="<?= $fixedExpenseId ?>"><?php endif; ?>
     <div class="payable-filter-grid">
       <div><label>Emissão inicial</label><input type="date" name="issue_ini" value="<?= finance_h($issueIni ?? '') ?>"></div>
@@ -313,9 +313,9 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         </div>
       </div>
       <div class="payable-history payable-history-second"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento ou fornecedor"></div>
-      <div class="payable-filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn" href="financeiro_contas_pagar.php">Limpar filtros</a></div>
+      <div class="payable-filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn" href="financeiro_contas_pagar.php?limpar_filtros=1">Limpar filtros</a></div>
     </div>
-  </form>
+  </form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script>
 </div>
 
 <?php if ($fixedExpenseId > 0): ?>

@@ -847,7 +847,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
 <?php endif; ?>
 
 <div class="finance-card finance-filter-card">
-  <form method="get" class="receivable-filter-form">
+  <form method="get" class="receivable-filter-form" data-lembrar-filtros="contas_receber" data-lembrar-ignorar="edit,new,settle,action,id">
     <div class="receivable-filter-grid">
       <div><label>Emissão inicial</label><input type="date" name="issue_ini" value="<?= finance_h($issueIni ?? '') ?>"></div>
       <div><label>Emissão final</label><input type="date" name="issue_fim" value="<?= finance_h($issueFim ?? '') ?>"></div>
@@ -874,9 +874,9 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         </div>
       </div>
       <div class="receivable-history receivable-history-second"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento ou cliente"></div>
-      <div class="receivable-filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn" href="financeiro_contas_receber.php">Limpar filtros</a></div>
+      <div class="receivable-filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn" href="financeiro_contas_receber.php?limpar_filtros=1">Limpar filtros</a></div>
     </div>
-  </form>
+  </form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script>
 </div>
 
 <div class="finance-card">
