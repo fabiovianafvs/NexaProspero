@@ -31,6 +31,12 @@ try {
 try {$renewed=saas_renewal_reconcile($pdo,$companyId);} catch(Throwable $e){error_log('[SaaS renewal] Falha conciliação: '.$e->getMessage());$error='Não foi possível concluir a regularização. A cobrança existente foi preservada; solicite suporte.';}
 if ($renewed) {header('Location: dashboard.php?assinatura=regularizada',true,302);exit;}
 $blocked=saas_company_is_blocked($pdo,$company);
+// Ao abrir a tela (aviso de vencimento), gera a cobrança da renovação sozinha,
+// com boleto/Pix vencendo na data do contrato. Uma tentativa por sessão/dia.
+$autoCharge=['generated'=>false,'message'=>''];
+if (($_SERVER['REQUEST_METHOD']??'GET')==='GET' && !isset($_GET['baixar_boleto'])) {
+    $autoCharge=saas_renewal_auto_charge($pdo,$companyId,$userId);
+}
 // Portal acessível durante aviso, no último dia, na carência e no bloqueio.
 if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
     try {
@@ -39,11 +45,10 @@ if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
         $action=(string)($_POST['action']??'');
         if (!in_array($action,['gerar','registrar_boleto'],true)) throw new RuntimeException('Ação não reconhecida.');
         // O vencimento bancário é calculado exclusivamente no servidor:
-        // três dias corridos após a confirmação e ajuste a dia útil bancário.
-        // A data de contrato/assinatura permanece independente.
+        // data de vencimento do contrato, ajustada a dia útil bancário.
         $previewContext=saas_renewal_context($pdo,$companyId);
         saas_renewal_validate_boleto_due(
-            saas_renewal_suggest_boleto_due(), (string)($previewContext['cycle_due_date']??'')
+            saas_renewal_bank_due((string)($previewContext['due_date']??'')), (string)($previewContext['cycle_due_date']??'')
         );
         if ($action==='gerar') {
             $termInput=filter_input(INPUT_POST,'renewal_term_months',FILTER_VALIDATE_INT);
@@ -68,6 +73,7 @@ if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
     }catch(Throwable $e){$error=$e->getMessage();}
 }
 if (!empty($_SESSION['nexa_saas_renew_flash'])) {$message=(string)$_SESSION['nexa_saas_renew_flash'];unset($_SESSION['nexa_saas_renew_flash']);}
+if ($message==='' && !empty($autoCharge['message'])) $message=(string)$autoCharge['message'];
 try{$ctx=saas_renewal_context($pdo,$companyId);}catch(Throwable $e){$ctx=['eligible'=>false,'error'=>'Não foi possível consultar o vínculo de cobrança. Entre em contato com o suporte.'];error_log('[SaaS renewal] '.$e->getMessage());}
 function sr_h($x):string{return htmlspecialchars((string)$x,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
 function sr_money($x):string{return 'R$ '.number_format((float)$x,2,',','.');}
@@ -96,7 +102,8 @@ $boletoNeedsCheck=$hasOrder && $billing && !$boletoCanRegister && !in_array($cha
 
 // V11.60: apenas a data do boleto é automática; assinatura/competência não mudam.
 $bankDueExisting=substr(trim((string)($billing['due_date']??$title['due_date']??'')),0,10);
-$bankDueAutomatic=saas_renewal_suggest_boleto_due();
+$bankDueAutomatic=saas_renewal_bank_due($due);
+$bankDueNote=$bankDueAutomatic===$due?'data de vencimento do contrato':'vencimento do contrato ajustado para o próximo dia útil bancário possível';
 
 $trialContract=$elig&&strtoupper((string)($ctx['contract']['status']??''))==='TESTE';
 $trialOptions=$trialContract?saas_renewal_trial_options($pdo,$ctx):[];
@@ -225,11 +232,11 @@ body{margin:0;background:linear-gradient(180deg,#f4f8ff 0%,#eef5ff 42%,#f9fbff 1
 <div class="sr-grid"><div class="sr-stat"><small>Contrato automático</small><strong>#<?=sr_h($ctx['contract']['contract_number']??$ctx['contract_id'])?></strong></div><div class="sr-stat"><small>Vencimento original da assinatura</small><strong><?=sr_h(sr_date($ctx['cycle_due_date']??$due))?></strong></div><div class="sr-stat"><small>Valor da competência</small><strong><?=sr_h(sr_money($amount))?></strong></div></div><p class="sr-muted" style="margin:8px 0 0">Competência de faturamento: <b><?=sr_h(sr_date($due))?></b>. Ela não muda ao regularizar o boleto.</p>
 <?php if(!empty($ctx['due_date_note'])): ?><div class="sr-alert"><?=sr_h($ctx['due_date_note'])?></div><?php endif;?>
 <?php if($hasOrder):?><div class="sr-alert <?=($line!==''||$pix!=='')?'ok':''?>"><strong>Pedido já gerado:</strong> #<?=sr_h($gen['order_id'])?>. Não será duplicado.<?php if($title):?> Conta a Receber #<?=sr_h($title['id'])?> · <?=sr_h($title['status']??'ABERTO')?>.<?php endif;?> <br><strong>Situação do boleto:</strong> <?=sr_h($chargeStatus?:'NÃO PREPARADO')?>.<?php if($billing && $bankDueExisting!==''):?> <strong>Vencimento bancário:</strong> <?=sr_h(sr_date($bankDueExisting))?>.<?php endif;?></div>
-<?php if($boletoCanRegister):?><div class="sr-alert"><strong>A cobrança ainda não possui boleto registrado.</strong> Você pode registrar o boleto Itaú deste mesmo pedido, sem criar outra fatura.</div><form method="post" onsubmit="return confirm('Registrar o boleto Itaú da fatura existente? Esta ação não cria outro pedido.');" style="margin:12px 0"><input type="hidden" name="csrf" value="<?=sr_h($csrf)?>"><input type="hidden" name="action" value="registrar_boleto"><p class="sr-muted" style="margin:6px 0 10px">Vencimento automático do boleto: <strong><?=sr_h(sr_date($bankDueAutomatic))?></strong> (3 dias após a confirmação, com ajuste para dia bancário). A data da assinatura será preservada.</p><button class="sr-btn" type="submit">Registrar boleto Itaú da fatura</button></form><?php endif;?>
+<?php if($boletoCanRegister):?><div class="sr-alert"><strong>A cobrança ainda não possui boleto registrado.</strong> Você pode registrar o boleto Itaú deste mesmo pedido, sem criar outra fatura.</div><form method="post" onsubmit="return confirm('Registrar o boleto Itaú da fatura existente? Esta ação não cria outro pedido.');" style="margin:12px 0"><input type="hidden" name="csrf" value="<?=sr_h($csrf)?>"><input type="hidden" name="action" value="registrar_boleto"><p class="sr-muted" style="margin:6px 0 10px">Vencimento automático do boleto: <strong><?=sr_h(sr_date($bankDueAutomatic))?></strong> (<?=sr_h($bankDueNote)?>). A data da assinatura será preservada.</p><button class="sr-btn" type="submit">Registrar boleto Itaú da fatura</button></form><?php endif;?>
 <?php if($boletoNeedsCheck):?><div class="sr-alert err">A cobrança existente está em <strong><?=sr_h($chargeStatus)?></strong>. Não será reenviada automaticamente para evitar duplicidade. Solicite ao suporte a conferência do retorno Itaú e do motivo do erro.</div><?php endif;?>
 <?php elseif($canGenerate):?>
 <form method="post" style="margin-top:18px" onsubmit="return confirm('Confirmar a contratação/cobrança desta competência?')">
-<input type="hidden" name="csrf" value="<?=sr_h($csrf)?>"><input type="hidden" name="action" value="gerar"><p class="sr-muted" style="margin:7px 0 12px">O boleto será gerado com vencimento automático em <strong><?=sr_h(sr_date($bankDueAutomatic))?></strong> (3 dias após a confirmação, ajustado para dia bancário), sem alterar o vencimento da assinatura.</p>
+<input type="hidden" name="csrf" value="<?=sr_h($csrf)?>"><input type="hidden" name="action" value="gerar"><p class="sr-muted" style="margin:7px 0 12px">O boleto será gerado com vencimento automático em <strong><?=sr_h(sr_date($bankDueAutomatic))?></strong> (<?=sr_h($bankDueNote)?>), sem alterar o vencimento da assinatura.</p>
 <?php if($trialContract):?>
   <?php if(!$trialOptions):?><div class="sr-alert err">As periodicidades ou serviços SaaS ainda não estão configurados. Nenhuma cobrança foi criada. Confira o mapa de módulos e os períodos comerciais da Central SaaS.</div><?php else:?>
   <h3 style="margin:0 0 12px;color:#123d79">Escolha a periodicidade da assinatura</h3>

@@ -312,6 +312,28 @@ function saas_renewal_suggest_boleto_due(?DateTimeImmutable $generatedAt=null): 
     return $due->format('Y-m-d');
 }
 
+/**
+ * Vencimento do boleto = data de vencimento do contrato (competência), ajustada
+ * para o próximo dia útil bancário. Quando essa data já passou, é hoje ou está
+ * além do prazo aceito pelo banco (30 dias), usa a regra anterior: 3 dias após a
+ * geração, em dia útil. Não altera contrato, competência nem assinatura.
+ */
+function saas_renewal_bank_due(string $contractDue): string {
+    $tz=new DateTimeZone('America/Sao_Paulo');
+    $date=DateTimeImmutable::createFromFormat('!Y-m-d',trim($contractDue),$tz);
+    if ($date && $date->format('Y-m-d')===trim($contractDue)) {
+        for ($n=0; $n<10 && saas_renewal_bank_is_nonbusiness_day($date); $n++) $date=$date->modify('+1 day');
+        $today=new DateTimeImmutable('today',$tz);
+        $value=$date->format('Y-m-d');
+        if (!saas_renewal_bank_is_nonbusiness_day($date)
+            && $value>=$today->modify('+1 day')->format('Y-m-d')
+            && $value<=$today->modify('+30 days')->format('Y-m-d')) {
+            return $value;
+        }
+    }
+    return saas_renewal_suggest_boleto_due();
+}
+
 /** V11.60: valida a data bancária sem vinculá-la ao vencimento da assinatura. */
 function saas_renewal_validate_boleto_due(string $value,string $originalDue): string {
     // $originalDue permanece no contrato da função por compatibilidade;
@@ -393,11 +415,10 @@ function saas_renewal_register_existing_boleto(PDO $pdo,int $saasCompanyId,?int 
     }
     $title=(array)($ctx['receivable']??[]);
     if (!$title || (int)($title['id']??0)<=0) throw new RuntimeException('Conta a Receber do pedido não encontrada; solicite conferência do financeiro.');
-    // A data do boleto é sempre calculada no servidor durante o POST.
-    // O parâmetro opcional antigo é ignorado para não permitir alterar
-    // a data por requisição, nem herdar o vencimento contratual.
+    // A data do boleto é sempre calculada no servidor (saas_renewal_bank_due):
+    // vencimento do contrato, ajustado a dia útil; o parâmetro opcional antigo é ignorado.
     $bankDue=saas_renewal_validate_boleto_due(
-        saas_renewal_suggest_boleto_due(), (string)($ctx['cycle_due_date']??'')
+        saas_renewal_bank_due((string)($ctx['due_date']??'')), (string)($ctx['cycle_due_date']??'')
     );
     if ((float)($title['open_amount']??0)<=0.009 || strtoupper((string)($title['status']??''))==='BAIXADO') {
         return ['ok'=>true,'message'=>'A fatura já foi liquidada; nenhum novo boleto será emitido.'];
@@ -478,5 +499,64 @@ function saas_renewal_register_existing_boleto(PDO $pdo,int $saasCompanyId,?int 
         return ['ok'=>true,'message'=>'Boleto registrado no Itaú. Consulte abaixo a linha digitável e o Pix, quando retornado pelo banco.'];
     } finally {
         $st=$pdo->prepare('SELECT RELEASE_LOCK(?)');$st->execute([$lock]);
+    }
+}
+
+/**
+ * Geração automática da cobrança quando o aviso de vencimento aparece
+ * (tela de Contratação e renovação, aviso da tela Início).
+ *
+ * - Somente contratos ATIVOS de cobrança AUTOMÁTICA (renovação). A primeira
+ *   contratação do teste continua exigindo a escolha da periodicidade.
+ * - Respeita a janela de 3 dias antes do vencimento (saas_renewal_generate).
+ * - Nunca duplica: usa as mesmas travas e conferências da geração manual.
+ * - Registra o boleto Itaú com vencimento na data do contrato.
+ * - Uma tentativa por sessão e por dia, para não chamar o banco a cada página.
+ * Nunca lança exceção: falhas ficam no log e a tela continua normalmente.
+ */
+function saas_renewal_auto_charge(PDO $pdo,int $saasCompanyId,?int $userId): array {
+    $out=['generated'=>false,'registered'=>false,'message'=>''];
+    if ($saasCompanyId<=0) return $out;
+    if (session_status()===PHP_SESSION_ACTIVE) {
+        $key='nexa_saas_auto_charge_'.$saasCompanyId;
+        if (($_SESSION[$key]??'')===date('Y-m-d')) return $out;
+        $_SESSION[$key]=date('Y-m-d');
+    }
+    $oldDdl=$GLOBALS['NEXA_MULTI_COMPANY_NO_RUNTIME_DDL']??null;
+    $GLOBALS['NEXA_MULTI_COMPANY_NO_RUNTIME_DDL']=true;
+    try {
+        $ctx=saas_renewal_context($pdo,$saasCompanyId);
+        if (empty($ctx['eligible'])) return $out;
+        if (strtoupper((string)($ctx['contract']['status']??''))!=='ATIVO') return $out;
+        $title=(array)($ctx['receivable']??[]);
+        if ($title && ((float)($title['open_amount']??0)<=0.009 || strtoupper((string)($title['status']??''))==='BAIXADO')) return $out;
+
+        if ((int)($ctx['generation']['order_id']??0)<=0) {
+            try {
+                $res=saas_renewal_generate($pdo,$saasCompanyId,$userId,null);
+                $out['generated']=empty($res['existing']);
+            } catch (Throwable $e) {
+                // Fora da janela de 3 dias ou contrato sem item faturável: nada a fazer agora.
+                error_log('[Nexa][SaaS cobrança automática] Empresa '.$saasCompanyId.': '.$e->getMessage());
+                return $out;
+            }
+        }
+        try {
+            $bank=saas_renewal_register_existing_boleto($pdo,$saasCompanyId,$userId);
+            $out['registered']=!empty($bank['ok']);
+            if (empty($bank['ok'])) error_log('[Nexa][SaaS cobrança automática] Boleto empresa '.$saasCompanyId.': '.(string)($bank['message']??''));
+        } catch (Throwable $e) {
+            error_log('[Nexa][SaaS cobrança automática] Boleto empresa '.$saasCompanyId.': '.$e->getMessage());
+        }
+        if ($out['generated']) {
+            $out['message']='A cobrança deste vencimento foi gerada automaticamente.'.($out['registered']?' O boleto com Pix já está disponível abaixo.':'');
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('[Nexa][SaaS cobrança automática] Empresa '.$saasCompanyId.': '.$e->getMessage());
+        return $out;
+    } finally {
+        if ($oldDdl===null) unset($GLOBALS['NEXA_MULTI_COMPANY_NO_RUNTIME_DDL']);
+        else $GLOBALS['NEXA_MULTI_COMPANY_NO_RUNTIME_DDL']=$oldDdl;
     }
 }

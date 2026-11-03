@@ -28,6 +28,11 @@ if (nexa_user_contract_notice_enabled($pdo,(int)COMPANY_ID,(int)(auth_user_id()?
 }
 $workspaceWarn=in_array((string)($workspaceCycle['phase']??''),['warning','last_day','grace','blocked'],true);
 $workspaceLate=in_array((string)($workspaceCycle['phase']??''),['grace','blocked'],true);
+// Primeira exibição do aviso: já gera a cobrança da renovação (uma vez por sessão/dia).
+if ($workspaceWarn) {
+  try { require_once __DIR__ . '/../config/saas_renewal_portal.php'; saas_renewal_auto_charge($pdo,(int)COMPANY_ID,auth_user_id()); }
+  catch (Throwable $e) { error_log('[Nexa][Workspace cobrança automática] '.$e->getMessage()); }
+}
 admin_topbar('Nexa Próspero', 'inicio');
 ?>
 <style>

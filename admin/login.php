@@ -14,8 +14,14 @@ $erro = '';
  */
 function nexa_login_subscription_destination(PDO $pdo, int $companyId): ?string {
   $role = auth_role();
-  if (!in_array($role, ['company_admin', 'platform_admin'], true)) return null;
-  if ($role !== 'platform_admin' && (int)auth_company_id() !== $companyId) return null;
+  if (!in_array($role, ['company_admin', 'company_user', 'platform_admin'], true)) return null;
+  if ($role !== 'platform_admin') {
+    if ((int)auth_company_id() !== $companyId) return null;
+    // Administrador e usuário seguem a configuração "Habilita mensagem de vencimento
+    // de contrato" do cadastro do usuário. A senha master sempre vê a tela.
+    require_once __DIR__ . '/../config/saas_user_notice.php';
+    if (!nexa_user_contract_notice_enabled($pdo, $companyId, (int)(auth_user_id() ?? 0))) return null;
+  }
   require_once __DIR__ . '/../config/saas_trial_cycle.php';
   try {
     $sub = tenant_latest_subscription($pdo, $companyId);

@@ -543,6 +543,11 @@ $dashChargeNotice=nexa_user_contract_notice_enabled($pdo,(int)COMPANY_ID,(int)(a
   && in_array((string)($dashCycle['phase']??''),['warning','last_day','grace','blocked'],true)
   && in_array((string)auth_role(),['company_admin','company_user','platform_admin'],true)
   && (auth_role()==='platform_admin' || (int)auth_company_id()===(int)COMPANY_ID);
+// Primeira exibição do aviso: já gera a cobrança da renovação (uma vez por sessão/dia).
+if ($dashChargeNotice) {
+  try { require_once __DIR__ . '/../config/saas_renewal_portal.php'; saas_renewal_auto_charge($pdo,(int)COMPANY_ID,auth_user_id()); }
+  catch (Throwable $e) { error_log('[Nexa][Dashboard cobrança automática] '.$e->getMessage()); }
+}
 ?>
 <?php if($dashChargeNotice): ?>
 <?php $dashOverdue=in_array((string)($dashCycle['phase']??''),['grace','blocked'],true); ?>
