@@ -26,22 +26,62 @@ $options = ['pedido' => ['label' => 'Pedido (PDF)', 'detail' => $modernPrintEnab
 foreach ($boletos as $b) $options['boleto:' . $b['id']] = ['label' => $b['label'], 'detail' => $b['detail']];
 foreach ($fiscais as $f) $options['fiscal:' . $f['id']] = ['label' => $f['label'], 'detail' => $f['detail']];
 
-// Modelo de mensagem por tipo de documento presente na tela.
+// Modelo de mensagem: UM campo, logo abaixo do telefone. Lista os modelos dos
+// tipos presentes no pedido (agrupados) e já vem com o modelo marcado como padrão.
+// O modelo escolhido vale para os documentos do seu tipo; os demais documentos
+// usam o modelo padrão de cada tipo.
 $contextLabels = ['pedido' => 'Pedido', 'boleto' => 'Boleto', 'nfe' => 'NF-e', 'nfce' => 'NFC-e', 'nfse' => 'NFS-e'];
 $modelContexts = ['pedido'];
 if ($boletos) $modelContexts[] = 'boleto';
 foreach ($fiscais as $f) if (!in_array($f['context'], $modelContexts, true)) $modelContexts[] = $f['context'];
 $modelChoices = [];
-$selectedModels = [];
 foreach ($modelContexts as $ctx) {
   try { $modelChoices[$ctx] = owb_model_choices($pdo, $cid, $ctx); } catch (Throwable $e) { $modelChoices[$ctx] = ['models' => [], 'default' => 0]; }
-  $posted = $_POST['models'][$ctx] ?? null;
-  $mid = $posted !== null ? max(0, (int)$posted) : (int)$modelChoices[$ctx]['default'];
-  if ($mid > 0 && !isset($modelChoices[$ctx]['models'][$mid])) $mid = (int)$modelChoices[$ctx]['default'];
-  $selectedModels[$ctx] = $mid;
 }
 $fiscalContextById = [];
-foreach ($fiscais as $f) $fiscalContextById[(int)$f['id']] = $f['context'];
+$firstFiscalByContext = [];
+foreach ($fiscais as $f) {
+  $fiscalContextById[(int)$f['id']] = $f['context'];
+  if (!isset($firstFiscalByContext[$f['context']])) $firstFiscalByContext[$f['context']] = (int)$f['id'];
+}
+
+// Escolha inicial: o modelo padrão do pedido; se o pedido não tiver padrão, o
+// primeiro tipo que tiver um modelo padrão configurado.
+$defaultChoice = 'pedido:' . (int)$modelChoices['pedido']['default'];
+if ((int)$modelChoices['pedido']['default'] === 0) {
+  foreach ($modelContexts as $ctx) {
+    if ((int)$modelChoices[$ctx]['default'] > 0) { $defaultChoice = $ctx . ':' . (int)$modelChoices[$ctx]['default']; break; }
+  }
+}
+$chosen = (string)($_POST['model_choice'] ?? $defaultChoice);
+[$chosenCtx, $chosenId] = array_pad(explode(':', $chosen, 2), 2, '0');
+$chosenId = max(0, (int)$chosenId);
+if (!isset($modelChoices[$chosenCtx]) || ($chosenId > 0 && !isset($modelChoices[$chosenCtx]['models'][$chosenId]))) {
+  [$chosenCtx, $chosenId] = explode(':', $defaultChoice, 2);
+  $chosenId = (int)$chosenId;
+}
+$chosen = $chosenCtx . ':' . $chosenId;
+$selectedModels = [];
+foreach ($modelContexts as $ctx) $selectedModels[$ctx] = $ctx === $chosenCtx ? $chosenId : (int)$modelChoices[$ctx]['default'];
+
+// Prévia da mensagem de cada opção (mesmo texto que será enviado).
+$pedidoMessage = static function (int $modelId) use ($pdo, $cid, $data, $appWa, $modelChoices): string {
+  $msgCfg = whatsapp_load_config($pdo, $cid, false);
+  if ($modelId > 0) $msgCfg['templates']['order_customer_full'] = (string)$modelChoices['pedido']['models'][$modelId]['message'];
+  return order_message_build_full($data['pedido'], $data['itens'], $appWa, $msgCfg);
+};
+$previews = [];
+foreach ($modelContexts as $ctx) {
+  foreach (array_merge([0], array_keys($modelChoices[$ctx]['models'])) as $mid) {
+    $text = '';
+    try {
+      if ($ctx === 'pedido') $text = $pedidoMessage((int)$mid);
+      elseif ($ctx === 'boleto') $text = (string)(owb_send_boleto($pdo, $cid, (int)$boletos[0]['id'], '', (int)$mid, true)['message'] ?? '');
+      else $text = (string)(owb_send_fiscal($pdo, $cid, (int)$firstFiscalByContext[$ctx], '', (int)$mid, true)['message'] ?? '');
+    } catch (Throwable $e) { $text = ''; }
+    $previews[$ctx . ':' . (int)$mid] = $text;
+  }
+}
 
 auth_start();
 if (empty($_SESSION['pedido_wa_docs_csrf'])) $_SESSION['pedido_wa_docs_csrf'] = bin2hex(random_bytes(24));
@@ -65,10 +105,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['action'
       try {
         if ($key === 'pedido') {
           $cfg = owb_send_cfg($pdo, $cid);
-          $msgCfg = whatsapp_load_config($pdo, $cid, false); // igual à tela antiga: modelo só quando escolhido
-          $pedidoModel = (int)($selectedModels['pedido'] ?? 0);
-          if ($pedidoModel > 0) $msgCfg['templates']['order_customer_full'] = (string)$modelChoices['pedido']['models'][$pedidoModel]['message'];
-          $message = order_message_build_full($data['pedido'], $data['itens'], $appWa, $msgCfg);
+          $message = $pedidoMessage((int)($selectedModels['pedido'] ?? 0));
           if ($modernPrintEnabled) {
             $companyName = trim((string)($appWa['site_name'] ?? ($appWa['brand']['catalog_title'] ?? ''))) ?: 'Nexa Próspero';
             $pdf = order_email_pdf_build((array)$data['pedido'], (array)$data['itens'], $companyName, $modernPrintModel, $pdo, $cid);
@@ -124,10 +161,9 @@ input[type=text]{width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-ra
 .doc input{width:18px;height:18px;margin-top:2px}.doc strong{display:block;color:#0b1f5b}.doc span{font-size:13px;color:#64748b}
 .empty{font-size:13px;color:#64748b;padding:4px 2px}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-.models{display:grid;gap:10px;padding:14px;border:1px solid #dbe4f0;border-radius:14px;background:#fff}
-.model span{display:block;font-weight:700;font-size:13px;margin:0 0 5px;color:#0b1f5b}
-.model select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;background:#fff}
-.hint{margin:0;font-size:12px;color:#64748b}
+.select{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:12px;font-size:15px;background:#fff;color:#0f172a}
+.preview{width:100%;min-height:130px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:12px;font:13px/1.45 ui-monospace,Consolas,monospace;background:#f8fafc;color:#0f172a;resize:vertical}
+.hint{margin:6px 0 0;font-size:12px;color:#64748b}
 .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 16px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;color:#0b1f5b;font-weight:700;text-decoration:none;cursor:pointer;font-size:14px}
 .btn.wa{background:#16a34a;border-color:#16a34a;color:#fff}
 .msg{padding:12px 14px;border-radius:12px;margin:0 0 14px;font-size:14px;line-height:1.5}
@@ -139,7 +175,7 @@ input[type=text]{width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-ra
 <body>
 <div class="wrap"><div class="card">
   <h1>Enviar pelo WhatsApp · Pedido #<?= pedido_wa_h($pedidoNumero) ?></h1>
-  <p class="muted">Cliente: <b><?= pedido_wa_h($cliente) ?></b>. Confira o número e marque o que deseja enviar. Cada documento vai em PDF, com a mensagem padrão do seu modelo.</p>
+  <p class="muted">Cliente: <b><?= pedido_wa_h($cliente) ?></b>. Confira o número, escolha o modelo da mensagem e marque o que deseja enviar. Cada documento vai em PDF.</p>
 
   <?php if ($err !== ''): ?><div class="msg err"><?= pedido_wa_h($err) ?></div><?php endif; ?>
   <?php if ($results): ?>
@@ -154,8 +190,24 @@ input[type=text]{width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-ra
     <input type="hidden" name="csrf" value="<?= pedido_wa_h($csrf) ?>">
     <input type="hidden" name="id" value="<?= (int)$id ?>">
     <input type="hidden" name="return_to" value="<?= pedido_wa_h($returnTo) ?>">
-    <label class="field" for="wa-phone">WhatsApp do cliente</label>
+    <label class="field" for="wa-phone">Número do WhatsApp</label>
     <input type="text" id="wa-phone" name="phone" value="<?= pedido_wa_h($phone) ?>" inputmode="numeric" placeholder="Ex.: 31999999999">
+
+    <label class="field" for="wa-model" style="margin-top:12px">Modelo da mensagem</label>
+    <select id="wa-model" name="model_choice" class="select">
+      <?php foreach ($modelContexts as $ctx): $choice = $modelChoices[$ctx]; ?>
+        <optgroup label="<?= pedido_wa_h($contextLabels[$ctx] ?? $ctx) ?>">
+          <option value="<?= pedido_wa_h($ctx) ?>:0" <?= $chosen === $ctx . ':0' ? 'selected' : '' ?>>Mensagem padrão do sistema<?= count($modelContexts) > 1 ? ' (' . pedido_wa_h($contextLabels[$ctx] ?? $ctx) . ')' : '' ?></option>
+          <?php foreach ($choice['models'] as $mid => $m): ?>
+            <option value="<?= pedido_wa_h($ctx . ':' . (int)$mid) ?>" <?= $chosen === $ctx . ':' . (int)$mid ? 'selected' : '' ?>><?= pedido_wa_h($m['title']) ?><?= (int)$choice['default'] === (int)$mid ? ' — padrão' : '' ?></option>
+          <?php endforeach; ?>
+        </optgroup>
+      <?php endforeach; ?>
+    </select>
+
+    <label class="field" for="wa-preview" style="margin-top:12px">Mensagem que acompanhará o documento</label>
+    <textarea id="wa-preview" class="preview" readonly><?= pedido_wa_h($previews[$chosen] ?? '') ?></textarea>
+    <?php if (count($modelContexts) > 1): ?><p class="hint">O modelo escolhido vale para os documentos do mesmo tipo. Os outros documentos vão com o modelo padrão do tipo deles (WhatsApp › Modelos de mensagens).</p><?php endif; ?>
 
     <div class="docs">
       <?php foreach ($options as $key => $opt): ?>
@@ -165,20 +217,6 @@ input[type=text]{width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-ra
       <?php if ($canFiscal && !$fiscais): ?><div class="empty">Nenhuma nota fiscal autorizada para este pedido.</div><?php endif; ?>
     </div>
 
-    <div class="models">
-      <?php foreach ($modelContexts as $ctx): $choice = $modelChoices[$ctx]; ?>
-        <label class="model"><span>Modelo da mensagem · <?= pedido_wa_h($contextLabels[$ctx] ?? $ctx) ?></span>
-          <select name="models[<?= pedido_wa_h($ctx) ?>]">
-            <option value="0" <?= $selectedModels[$ctx] === 0 ? 'selected' : '' ?>>Mensagem padrão do sistema</option>
-            <?php foreach ($choice['models'] as $mid => $m): ?>
-              <option value="<?= (int)$mid ?>" <?= $selectedModels[$ctx] === (int)$mid ? 'selected' : '' ?>><?= pedido_wa_h($m['title']) ?><?= (int)$choice['default'] === (int)$mid ? ' — padrão' : '' ?></option>
-            <?php endforeach; ?>
-          </select>
-        </label>
-      <?php endforeach; ?>
-      <p class="hint">Os modelos são cadastrados em <b>WhatsApp › Modelos de mensagens</b>.</p>
-    </div>
-
     <div class="actions">
       <button class="btn wa" type="submit">Enviar selecionados</button>
       <a class="btn" href="<?= pedido_wa_h($textOnlyUrl) ?>">Abrir no WhatsApp (só texto)</a>
@@ -186,5 +224,10 @@ input[type=text]{width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-ra
     </div>
   </form>
 </div></div>
+<script>
+(function(){var sel=document.getElementById('wa-model'),box=document.getElementById('wa-preview');if(!sel||!box)return;
+var previews=<?= json_encode($previews, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+sel.addEventListener('change',function(){box.value=previews[sel.value]||'';});})();
+</script>
 </body>
 </html>

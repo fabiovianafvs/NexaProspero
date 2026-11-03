@@ -79,7 +79,7 @@ if (!function_exists('owb_order_fiscal_docs')) {
 
 if (!function_exists('owb_send_boleto')) {
   /** $modelId: null = modelo padrão do boleto; 0 = mensagem do sistema; >0 = modelo escolhido. */
-  function owb_send_boleto(PDO $pdo, int $cid, int $chargeId, string $phone, ?int $modelId = null): array {
+  function owb_send_boleto(PDO $pdo, int $cid, int $chargeId, string $phone, ?int $modelId = null, bool $previewOnly = false): array {
     $data = boleto_document_load($pdo, $cid, $chargeId, 0);
     if (!boleto_document_ready($data)) throw new RuntimeException('O boleto ainda não foi registrado no banco.');
     $companyName = boleto_document_company_name($data);
@@ -101,6 +101,7 @@ if (!function_exists('owb_send_boleto')) {
       'pix_copia_cola' => trim((string)($data['pix_emv'] ?? '')),
     ];
     $message = whatsapp_message_model_render($pdo, $cid, 'boleto', $vars, $fallback, $modelId);
+    if ($previewOnly) return ['ok' => true, 'message' => $message];
     $filename = 'boleto-' . ((int)($data['receivable_id'] ?? 0) ?: (int)$data['id']) . '.pdf';
     return whatsapp_send_document($pdo, $cid, $phone, $message, $filename, 'application/pdf', boleto_document_pdf($data), 'finance_boleto_admin', null, owb_send_cfg($pdo, $cid));
   }
@@ -108,7 +109,7 @@ if (!function_exists('owb_send_boleto')) {
 
 if (!function_exists('owb_send_fiscal')) {
   /** $modelId: null = modelo padrão do tipo de nota; 0 = mensagem do sistema; >0 = modelo escolhido. */
-  function owb_send_fiscal(PDO $pdo, int $cid, int $docId, string $phone, ?int $modelId = null): array {
+  function owb_send_fiscal(PDO $pdo, int $cid, int $docId, string $phone, ?int $modelId = null, bool $previewOnly = false): array {
     $st = $pdo->prepare("SELECT d.*,n.provider_code,n.dps_series,n.dps_number,n.nfse_number,n.verification_code,n.response_xml FROM fiscal_documents d LEFT JOIN fiscal_nfse_details n ON n.company_id=d.company_id AND n.fiscal_document_id=d.id WHERE d.company_id=? AND d.id=? AND d.model IN ('55','65','NFSE') LIMIT 1");
     $st->execute([$cid, $docId]);
     $doc = $st->fetch(PDO::FETCH_ASSOC);
@@ -135,6 +136,7 @@ if (!function_exists('owb_send_fiscal')) {
       'serie' => $series, 'dps_serie' => $series, 'dps_numero' => (string)($doc['dps_number'] ?? $doc['number'] ?? ''),
       'codigo_verificacao' => (string)($doc['verification_code'] ?? ''), 'total' => owb_money($doc['total_document'] ?? 0), 'chave_acesso' => $key,
     ], $fallback, $modelId);
+    if ($previewOnly) return ['ok' => true, 'message' => $message];
     if (function_exists('fiscal_company_report_identity')) $doc['_issuer_identity'] = fiscal_company_report_identity($pdo, $cid);
     if ($isNfse) { $doc['_prestador'] = $emit; $doc['_tomador'] = $dest; }
     $pdf = fiscal_document_pdf_build($doc);
