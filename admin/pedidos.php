@@ -1114,12 +1114,16 @@ if ($ordersCrossContext && function_exists('multi_company_context_url')) $report
                   <?php endif; ?>
                 <?php endif; ?>
                 <?php if ($wlink): ?>
+                  <?php if (!$ordersCrossContext): ?>
+                  <a class="btn btn-sm" href="pedido_whatsapp.php?id=<?= $id ?>&documentos=1&return_to=<?= rawurlencode($returnTo) ?>" title="Enviar pedido, boleto e nota fiscal pelo WhatsApp">WhatsApp</a>
+                  <?php else: ?>
                   <form method="post" action="pedido_whatsapp.php" class="pedidos-whatsapp-form">
                     <input type="hidden" name="id" value="<?= $id ?>">
                     <input type="hidden" name="mode" value="api">
                     <input type="hidden" name="return_to" value="<?= pedidos_h($returnTo) ?>">
                     <button class="btn btn-sm" type="submit">WhatsApp</button>
                   </form>
+                  <?php endif; ?>
                 <?php endif; ?>
                 <a class="btn btn-sm" href="email_documento.php?type=pedido&id=<?= $id ?>&return_to=<?= rawurlencode($returnTo) ?>" title="Enviar pedido por e-mail">✉ E-mail</a>
                 <?php endif; ?>
@@ -1367,12 +1371,16 @@ if ($ordersCrossContext && function_exists('multi_company_context_url')) $report
               <?php endif; ?>
             <?php endif; ?>
             <?php if ($wlink): ?>
+              <?php if (!$ordersCrossContext): ?>
+              <a class="btn btn-sm" href="pedido_whatsapp.php?id=<?= $id ?>&documentos=1&return_to=<?= rawurlencode($returnTo) ?>" title="Enviar pedido, boleto e nota fiscal pelo WhatsApp">WhatsApp</a>
+              <?php else: ?>
               <form method="post" action="pedido_whatsapp.php">
                 <input type="hidden" name="id" value="<?= $id ?>">
                 <input type="hidden" name="mode" value="api">
                 <input type="hidden" name="return_to" value="<?= pedidos_h($returnTo) ?>">
                 <button class="btn btn-sm" type="submit">WhatsApp</button>
               </form>
+              <?php endif; ?>
             <?php endif; ?>
             <a class="btn btn-sm" href="email_documento.php?type=pedido&id=<?= $id ?>&return_to=<?= rawurlencode($returnTo) ?>" title="Enviar pedido por e-mail">✉ E-mail</a>
             <?php endif; ?>

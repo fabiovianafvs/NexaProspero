@@ -73,6 +73,15 @@ try {
   }
 } catch (Throwable $e) {}
 
+// Tela única da Consulta de pedidos: escolher Pedido, Boleto(s) e Nota(s) Fiscal(is)
+// com o número do cliente preenchido. No contexto F11 (outra empresa) mantém o fluxo antigo.
+$waCrossContext = defined('MULTI_COMPANY_CONTEXT_VALID') && MULTI_COMPANY_CONTEXT_VALID === true
+  && defined('MULTI_COMPANY_CONTEXT_ID') && (int)MULTI_COMPANY_CONTEXT_ID !== (int)COMPANY_ID;
+if (!$waCrossContext && (isset($_GET['documentos']) || (string)($_POST['action'] ?? '') === 'send_bundle')) {
+  require __DIR__ . '/_pedido_whatsapp_documentos.php';
+  exit;
+}
+
 if ($modernPrintEnabled) {
   $docUrl = 'documento_whatsapp.php?type=pedido&id=' . $id . '&modelo=' . rawurlencode($modernPrintModel) . '&return_to=' . rawurlencode($returnTo);
   if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
