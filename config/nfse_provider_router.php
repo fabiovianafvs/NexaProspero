@@ -86,8 +86,48 @@ if (!function_exists('nfse_provider_prepare_order')) {
   }
 }
 
+if (!function_exists('nfse_provider_adopt_company_provider')) {
+  /**
+   * Migração Pronim -> Ambiente Nacional (Resolução CGSN 191/2026: desde 01/11/2026
+   * o Pronim rejeita prestadores do Simples Nacional, código P3084).
+   *
+   * Um documento gravado como PRONIM passa a ser transmitido pelo Ambiente Nacional,
+   * mantendo a MESMA série/número de DPS, somente quando:
+   *  - a empresa já está configurada no provider Nacional;
+   *  - o documento está REJEITADA, PREPARADA ou ASSINADA (nunca em transmissão
+   *    incerta: TRANSMITINDO/ERRO_COMUNICACAO);
+   *  - não há qualquer sinal de autorização (número da NFS-e, id, código de
+   *    verificação ou data de autorização).
+   * Documentos autorizados no Pronim continuam no Pronim (consulta/cancelamento).
+   */
+  function nfse_provider_adopt_company_provider(PDO $pdo, int $companyId, int $docId): bool {
+    if ($docId <= 0 || !fiscal_table_exists($pdo, 'fiscal_nfse_details') || !fiscal_column_exists($pdo, 'fiscal_nfse_details', 'provider_code')) return false;
+    if (nfse_provider_company_code($pdo, $companyId) !== 'NACIONAL') return false;
+    $st = $pdo->prepare("SELECT d.status AS doc_status, nd.status, nd.provider_code, nd.nfse_number, nd.nfse_id, nd.verification_code, nd.authorized_at
+      FROM fiscal_documents d
+      INNER JOIN fiscal_nfse_details nd ON nd.fiscal_document_id=d.id AND nd.company_id=d.company_id
+      WHERE d.company_id=? AND d.id=? AND d.model='NFSE' LIMIT 1");
+    $st->execute([$companyId, $docId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row || nfse_provider_normalize($row['provider_code'] ?? '') !== 'PRONIM') return false;
+    $status = strtoupper(trim((string)(($row['status'] ?? '') ?: ($row['doc_status'] ?? ''))));
+    if (!in_array($status, ['REJEITADA', 'PREPARADA', 'ASSINADA'], true)) return false;
+    foreach (['nfse_number', 'nfse_id', 'verification_code', 'authorized_at'] as $key) {
+      if (trim((string)($row[$key] ?? '')) !== '') return false;
+    }
+    $up = $pdo->prepare("UPDATE fiscal_nfse_details SET provider_code='NACIONAL' WHERE company_id=? AND fiscal_document_id=? AND provider_code='PRONIM'");
+    $up->execute([$companyId, $docId]);
+    if ($up->rowCount() === 1) {
+      error_log('[Nexa][NFS-e] Documento #' . $docId . ' da empresa ' . $companyId . ' (status ' . $status . ') migrado de PRONIM para NACIONAL antes da transmissão.');
+      return true;
+    }
+    return false;
+  }
+}
+
 if (!function_exists('nfse_provider_authorize_document')) {
   function nfse_provider_authorize_document(PDO $pdo, int $companyId, int $docId): array {
+    nfse_provider_adopt_company_provider($pdo, $companyId, $docId);
     return nfse_provider_document_code($pdo, $companyId, $docId) === 'PRONIM'
       ? nfse_pronim_authorize_document($pdo, $companyId, $docId)
       : nfse_emitter_authorize_document($pdo, $companyId, $docId);
