@@ -70,14 +70,16 @@ if (!function_exists('owb_order_fiscal_docs')) {
       $model = strtoupper((string)$row['model']);
       $label = $model === '55' ? 'NF-e' : ($model === '65' ? 'NFC-e' : 'NFS-e');
       $number = $model === 'NFSE' ? (trim((string)($row['nfse_number'] ?? '')) ?: (string)$row['number']) : ((string)$row['series'] . '/' . (string)$row['number']);
-      $out[] = ['id' => (int)$row['id'], 'label' => $label . ' nº ' . $number, 'detail' => 'Total ' . owb_money($row['total_document'] ?? 0)];
+      $out[] = ['id' => (int)$row['id'], 'label' => $label . ' nº ' . $number, 'detail' => 'Total ' . owb_money($row['total_document'] ?? 0),
+        'context' => $model === '55' ? 'nfe' : ($model === '65' ? 'nfce' : 'nfse')];
     }
     return $out;
   }
 }
 
 if (!function_exists('owb_send_boleto')) {
-  function owb_send_boleto(PDO $pdo, int $cid, int $chargeId, string $phone): array {
+  /** $modelId: null = modelo padrão do boleto; 0 = mensagem do sistema; >0 = modelo escolhido. */
+  function owb_send_boleto(PDO $pdo, int $cid, int $chargeId, string $phone, ?int $modelId = null): array {
     $data = boleto_document_load($pdo, $cid, $chargeId, 0);
     if (!boleto_document_ready($data)) throw new RuntimeException('O boleto ainda não foi registrado no banco.');
     $companyName = boleto_document_company_name($data);
@@ -98,16 +100,15 @@ if (!function_exists('owb_send_boleto')) {
       'nosso_numero' => trim((string)($data['nosso_numero'] ?? '')), 'linha_digitavel' => trim((string)($data['linha_digitavel'] ?? '')),
       'pix_copia_cola' => trim((string)($data['pix_emv'] ?? '')),
     ];
-    $state = whatsapp_message_models_load($pdo, $cid);
-    $modelId = max(0, (int)($state['defaults']['boleto'] ?? 0));
-    $message = whatsapp_message_model_render($pdo, $cid, 'boleto', $vars, $fallback, $modelId > 0 ? $modelId : null);
+    $message = whatsapp_message_model_render($pdo, $cid, 'boleto', $vars, $fallback, $modelId);
     $filename = 'boleto-' . ((int)($data['receivable_id'] ?? 0) ?: (int)$data['id']) . '.pdf';
     return whatsapp_send_document($pdo, $cid, $phone, $message, $filename, 'application/pdf', boleto_document_pdf($data), 'finance_boleto_admin', null, owb_send_cfg($pdo, $cid));
   }
 }
 
 if (!function_exists('owb_send_fiscal')) {
-  function owb_send_fiscal(PDO $pdo, int $cid, int $docId, string $phone): array {
+  /** $modelId: null = modelo padrão do tipo de nota; 0 = mensagem do sistema; >0 = modelo escolhido. */
+  function owb_send_fiscal(PDO $pdo, int $cid, int $docId, string $phone, ?int $modelId = null): array {
     $st = $pdo->prepare("SELECT d.*,n.provider_code,n.dps_series,n.dps_number,n.nfse_number,n.verification_code,n.response_xml FROM fiscal_documents d LEFT JOIN fiscal_nfse_details n ON n.company_id=d.company_id AND n.fiscal_document_id=d.id WHERE d.company_id=? AND d.id=? AND d.model IN ('55','65','NFSE') LIMIT 1");
     $st->execute([$cid, $docId]);
     $doc = $st->fetch(PDO::FETCH_ASSOC);
@@ -133,10 +134,24 @@ if (!function_exists('owb_send_fiscal')) {
       'empresa' => $issuerName, 'cliente' => $customerName, 'documento' => $label, 'numero' => $number,
       'serie' => $series, 'dps_serie' => $series, 'dps_numero' => (string)($doc['dps_number'] ?? $doc['number'] ?? ''),
       'codigo_verificacao' => (string)($doc['verification_code'] ?? ''), 'total' => owb_money($doc['total_document'] ?? 0), 'chave_acesso' => $key,
-    ], $fallback);
+    ], $fallback, $modelId);
     if (function_exists('fiscal_company_report_identity')) $doc['_issuer_identity'] = fiscal_company_report_identity($pdo, $cid);
     if ($isNfse) { $doc['_prestador'] = $emit; $doc['_tomador'] = $dest; }
     $pdf = fiscal_document_pdf_build($doc);
     return whatsapp_send_document($pdo, $cid, $phone, $message, (string)$pdf['filename'], (string)$pdf['mimetype'], (string)$pdf['content'], 'fiscal_document_admin', null, owb_send_cfg($pdo, $cid));
+  }
+}
+
+if (!function_exists('owb_model_choices')) {
+  /** Modelos ativos do contexto + o padrão configurado em WhatsApp > Modelos de mensagens. */
+  function owb_model_choices(PDO $pdo, int $cid, string $context): array {
+    $state = whatsapp_message_models_load($pdo, $cid);
+    $models = [];
+    foreach (whatsapp_message_models_for_context($pdo, $cid, $context) as $m) {
+      $models[(int)$m['id']] = ['title' => (string)($m['title'] ?? ('Modelo #' . (int)$m['id'])), 'message' => (string)($m['message'] ?? '')];
+    }
+    $default = max(0, (int)($state['defaults'][$context] ?? 0));
+    if (!isset($models[$default])) $default = 0;
+    return ['models' => $models, 'default' => $default];
   }
 }
