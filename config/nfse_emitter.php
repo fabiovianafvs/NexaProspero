@@ -704,8 +704,13 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
     $trib = nfse_emitter_xml_element($dom,'trib'); $valores->appendChild($trib);
     $tribMun = nfse_emitter_xml_element($dom,'tribMun'); $trib->appendChild($tribMun);
     nfse_emitter_xml_add($dom,$tribMun,'tribISSQN',nfse_emitter_iss_taxation($tax));
-    nfse_emitter_xml_add($dom,$tribMun,'tpRetISSQN',!empty($tax['iss_withheld']) ? '2' : '1');
-    if ((float)($tax['iss_rate'] ?? 0) > 0) nfse_emitter_xml_add($dom,$tribMun,'pAliq',nfse_emitter_percent($tax['iss_rate']));
+    $issWithheld = !empty($tax['iss_withheld']);
+    nfse_emitter_xml_add($dom,$tribMun,'tpRetISSQN',$issWithheld ? '2' : '1');
+    // Regra E0625 do Sistema Nacional: ME/EPP do Simples (opSimpNac=3) com ISSQN
+    // apurado pelo Simples (regApTribSN=1) e SEM retenção (tpRetISSQN=1) não pode
+    // informar alíquota: o ISS é recolhido no DAS. Com retenção, a alíquota segue.
+    $omitIssRate = $simpleStatus === '3' && $simpleRegime === '1' && !$issWithheld;
+    if (!$omitIssRate && (float)($tax['iss_rate'] ?? 0) > 0) nfse_emitter_xml_add($dom,$tribMun,'pAliq',nfse_emitter_percent($tax['iss_rate']));
 
     $net = max(0.0,(float)$context['net']);
     $pisRetention = nfse_emitter_code_from_label($tax['pis_cofins_retention_type'] ?? '', [
