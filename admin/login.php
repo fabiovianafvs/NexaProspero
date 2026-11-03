@@ -303,6 +303,8 @@ input:focus{
   box-shadow:none;
 }
 .np-btn:hover{transform:translateY(-1px)}
+.forgot-link{display:inline-block;margin-top:14px;color:var(--secondary);font-weight:700;font-size:14px;text-decoration:none}
+.forgot-link:hover{text-decoration:underline}
 .footer-note{
   margin-top:18px;
   color:#64748B;
@@ -360,6 +362,7 @@ input:focus{
           <button class="np-btn" type="submit">Entrar</button>
           <a class="np-btn secondary" href="<?= e($catalogUrl) ?>">Voltar ao catálogo</a>
         </div>
+        <a class="forgot-link" href="esqueci_senha.php">Esqueci minha senha</a>
       </form>
 
       <div class="footer-note">
