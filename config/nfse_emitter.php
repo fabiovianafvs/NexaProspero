@@ -366,7 +366,12 @@ if (!function_exists('nfse_emitter_order_context')) {
     $cityIbge = nfse_emitter_digits($cfg['city_ibge'] ?? '');
     if (strlen($companyCnpj) !== 14) $issues[] = 'CNPJ do prestador inválido.';
     if (strlen($cityIbge) !== 7) $issues[] = 'Código IBGE do prestador inválido.';
-    if (trim((string)($cfg['municipal_registration'] ?? '')) === '') $issues[] = 'Inscrição municipal do prestador não informada.';
+    // Ambiente Nacional: a IM é opcional e NÃO deve ser enviada quando o município
+    // não tem informações complementares no CNC NFS-e (rejeição E0120). Quando vazia,
+    // a tag <IM> é omitida da DPS. O Pronim/GOVBR continua exigindo a inscrição.
+    $providerRaw = strtoupper(trim((string)($cfg['nfse_provider'] ?? '')));
+    $isPronimProvider = $providerRaw !== '' && (str_contains($providerRaw, 'PRONIM') || str_contains($providerRaw, 'GOVBR') || str_contains($providerRaw, 'ISS'));
+    if ($isPronimProvider && trim((string)($cfg['municipal_registration'] ?? '')) === '') $issues[] = 'Inscrição municipal do prestador não informada.';
 
     $tomadorDocument = nfse_emitter_digits(nfse_emitter_value($order, ['customer_document','document','cpf_cnpj'], ''));
     $tomadorName = nfse_emitter_text(nfse_emitter_value($order, ['nome_cliente','customer_name','cliente_nome'], ''), 150);
