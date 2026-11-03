@@ -27,6 +27,13 @@ Sistema SaaS de gestão para varejo (PDV, pedidos, comandas, estoque, financeiro
 - Na homologação, notas fiscais e bancos ficam em HOMOLOGACAO/sandbox, WhatsApp e e-mail ficam sem configuração, e não há crons. Não remover essas travas.
 - Serviços auxiliares: `realtime-server/` (Node, WebSocket do Nexa Brain com Redis), units em `deploy/systemd/`, e o `agente-impressao-windows/` que roda no computador dos clientes.
 
+## NFS-e (Ambiente Nacional)
+
+- Desde 01/11/2026 (Resolução CGSN 191/2026) ME/EPP do Simples emitem pelo Sistema Nacional; o Pronim rejeita (P3084). Provider por empresa em Configurações fiscais (`nfse_provider`).
+- Produção liberada no servidor por `NFSE_ENABLE_PRODUCTION=1` em `/etc/nexa/nfse.env`; a homologação força `0` no vhost.
+- Regras já tratadas no emissor Nacional (`config/nfse_emitter.php`): IM do prestador opcional (E0120); sem `pAliq` para ME/EPP com ISS pelo Simples e sem retenção (E0625); `pTotTribSN` no lugar de `indTotTrib` para ME/EPP (E0712), com o % guardado em `app_config` chave `nfse_nacional`.
+- DPS rejeitada no Pronim e nunca autorizada é reenviada pelo Nacional com a mesma série/número (`nfse_provider_adopt_company_provider`).
+
 ## O que NÃO está no repositório (ver `.gitignore`)
 
 - `config/db.php` e `config/database.php` — credenciais do MySQL. Existem só na VPS. Nunca recriar com senha real.
