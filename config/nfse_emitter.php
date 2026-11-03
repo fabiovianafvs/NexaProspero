@@ -182,6 +182,23 @@ if (!function_exists('nfse_emitter_simple_status')) {
   }
 }
 
+if (!function_exists('nfse_emitter_sn_total_tax_rate')) {
+  /**
+   * % aproximado do total de tributos da alíquota do Simples Nacional (pTotTribSN),
+   * exigido pelo Sistema Nacional para ME/EPP (rejeição E0712 com indTotTrib).
+   * Guardado por empresa em app_config (cfg_key 'nfse_nacional'), sem DDL.
+   */
+  function nfse_emitter_sn_total_tax_rate(PDO $pdo, int $companyId): float {
+    try {
+      require_once __DIR__ . '/config_store.php';
+      $saved = config_store_get($pdo, $companyId, 'nfse_nacional');
+      return max(0.0, min(100.0, round((float)($saved['sn_total_tax_rate'] ?? 0), 2)));
+    } catch (Throwable $e) {
+      return 0.0;
+    }
+  }
+}
+
 if (!function_exists('nfse_emitter_simple_regime')) {
   function nfse_emitter_simple_regime(array $tax, string $simpleStatus): string {
     if ($simpleStatus !== '3') return '';
@@ -359,6 +376,7 @@ if (!function_exists('nfse_emitter_order_context')) {
 
     $tax = $serviceItems[0] ?? [];
     $cfg = fiscal_company_config($pdo, $companyId);
+    $cfg['nfse_sn_total_tax_rate'] = nfse_emitter_sn_total_tax_rate($pdo, $companyId);
     $environment = strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO')));
     if (!in_array($environment, ['HOMOLOGACAO','PRODUCAO'], true)) $environment = 'HOMOLOGACAO';
 
@@ -372,6 +390,9 @@ if (!function_exists('nfse_emitter_order_context')) {
     $providerRaw = strtoupper(trim((string)($cfg['nfse_provider'] ?? '')));
     $isPronimProvider = $providerRaw !== '' && (str_contains($providerRaw, 'PRONIM') || str_contains($providerRaw, 'GOVBR') || str_contains($providerRaw, 'ISS'));
     if ($isPronimProvider && trim((string)($cfg['municipal_registration'] ?? '')) === '') $issues[] = 'Inscrição municipal do prestador não informada.';
+    if (!$isPronimProvider && nfse_emitter_simple_status($cfg) === '3' && (float)$cfg['nfse_sn_total_tax_rate'] <= 0) {
+      $issues[] = 'Informe o "% aproximado de tributos do Simples Nacional" em Configurações fiscais (bloco NFC-e e NFS-e). O Portal Nacional exige este percentual para ME/EPP.';
+    }
 
     $tomadorDocument = nfse_emitter_digits(nfse_emitter_value($order, ['customer_document','document','cpf_cnpj'], ''));
     $tomadorName = nfse_emitter_text(nfse_emitter_value($order, ['nome_cliente','customer_name','cliente_nome'], ''), 150);
@@ -751,7 +772,14 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
       if ($csllRate > 0) nfse_emitter_xml_add($dom,$tribFed,'vRetCSLL',nfse_emitter_money($net*$csllRate/100));
     }
     $totTrib = nfse_emitter_xml_element($dom,'totTrib'); $trib->appendChild($totTrib);
-    nfse_emitter_xml_add($dom,$totTrib,'indTotTrib','0');
+    // ME/EPP do Simples (opSimpNac=3) não pode usar indTotTrib (E0712): informa o
+    // % aproximado de tributos da alíquota do Simples Nacional (pTotTribSN).
+    $snTotalRate = (float)($cfg['nfse_sn_total_tax_rate'] ?? 0);
+    if ($simpleStatus === '3' && $snTotalRate > 0) {
+      nfse_emitter_xml_add($dom,$totTrib,'pTotTribSN',number_format($snTotalRate,2,'.',''));
+    } else {
+      nfse_emitter_xml_add($dom,$totTrib,'indTotTrib','0');
+    }
 
     $cIndOp = substr(nfse_emitter_digits($tax['nfse_national_operation_indicator'] ?? ''),0,6);
     $ibsCbsCst = str_pad(substr(nfse_emitter_digits($tax['ibs_cbs_cst'] ?? ''),0,3),3,'0',STR_PAD_LEFT);
