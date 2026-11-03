@@ -17,6 +17,7 @@ require_once __DIR__ . '/config/company_sequences.php';
 require_once __DIR__ . '/config/saas_subscription_bridge.php';
 require_once __DIR__ . '/config/company_signup_defaults.php';
 require_once __DIR__ . '/config/password_setup.php';
+require_once __DIR__ . '/config/saas_email.php';
 
 function slugify(string $s): string {
   return company_subdomain_normalize($s);
@@ -703,6 +704,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           if ($waNumber !== '') $manualWhatsappUrl = 'https://wa.me/' . rawurlencode($waNumber) . '?text=' . rawurlencode($whatsappMessage);
         } catch (Throwable $e) {}
 
+        // Também envia os dados de acesso para o e-mail informado no cadastro (Central SaaS > E-mail).
+        $emailCredentials = ['ok' => false, 'skipped' => true];
+        try {
+          $emailCredentials = saas_email_send_signup($pdo, $companyId, $email, $empresa, $whatsappMessage);
+        } catch (Throwable $e) {
+          $emailCredentials = ['ok' => false, 'error' => $e->getMessage()];
+        }
+
         $result = [
           'company_id' => $companyId,
           'company_name' => $empresa,
@@ -728,6 +737,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           'whatsapp' => $telefoneContato,
           'whatsapp_credentials' => $whatsappCredentials,
           'whatsapp_manual_url' => $manualWhatsappUrl,
+          'email_credentials' => $emailCredentials,
           'created_at' => time(),
         ];
         $_SESSION['signup_success'] = $result;
@@ -741,6 +751,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $charge = saas_create_pix_charge($pdo, $company, $plan, $subscriptionId, 'Assinatura do plano ' . (string)$plan['name']);
         $paymentUrl = (string)($charge['payment_url'] ?? '');
         $whatsappCredentials = saas_whatsapp_send_credentials($pdo, $companyId, $credential, $paymentUrl, $eadSync, $signupContext);
+        $emailCredentials = ['ok' => false, 'skipped' => true];
+        try {
+          $emailMessage = saas_whatsapp_build_credentials_message($pdo, $company, $loginEmail, $credential, $paymentUrl, $eadSync, $signupContext);
+          $emailCredentials = saas_email_send_signup($pdo, $companyId, $email, $empresa, $emailMessage);
+        } catch (Throwable $e) {
+          $emailCredentials = ['ok' => false, 'error' => $e->getMessage()];
+        }
         $_SESSION['signup_success'] = [
           'company_id' => $companyId,
           'company_name' => $empresa,
@@ -760,6 +777,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           'modules' => $moduleLabels,
           'signup_context' => $signupContext,
           'whatsapp_credentials' => $whatsappCredentials,
+          'email_credentials' => $emailCredentials,
           'payment_url' => $paymentUrl,
           'created_at' => time(),
         ];
@@ -830,7 +848,7 @@ $segmentOptions = ['Restaurante','Lanchonete','Pizzaria','Hamburgueria','Padaria
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/cadastro-empresa-v2.css?v=20261020-1">
+  <link rel="stylesheet" href="/assets/cadastro-empresa-v2.css?v=20261102-1">
   <?php if ($isResellerSignup && $signupResellerTheme): ?>
   <style>
     :root{--primary-dark:<?= e((string)$signupResellerTheme['primary']) ?>;--primary:<?= e((string)$signupResellerTheme['secondary']) ?>}
@@ -989,15 +1007,32 @@ $segmentOptions = ['Restaurante','Lanchonete','Pizzaria','Hamburgueria','Padaria
     <?php endif; ?>
   </div>
 </section>
-<div class="nexa-signup-progress" id="nexa-signup-progress" role="status" aria-live="polite" aria-atomic="true" aria-busy="true" hidden>
+<div class="nexa-signup-progress" id="nexa-signup-progress" role="status" aria-live="polite" aria-atomic="false" aria-busy="true" hidden>
   <div class="nexa-signup-progress-panel">
-    <div class="nexa-signup-progress-icon"><img src="/assets/logo-nexa-prospero.jpg" alt="Nexa Próspero"></div>
+    <img class="nexa-signup-progress-logo" src="/assets/logo-nexa-v6-1.png" alt="Nexa Próspero" onerror="this.onerror=null;this.src='/assets/logo-nexa-prospero.jpg'">
     <div class="nexa-signup-progress-spinner" aria-hidden="true"></div>
-    <h2>Criando seu ambiente Nexa Próspero...</h2>
-    <p id="nexa-signup-progress-message" class="nexa-signup-progress-message">Estamos preparando o acesso da sua empresa.</p>
-    <p class="nexa-signup-progress-help">Aguarde a confirmação. Não feche a página nem clique novamente em Cadastrar.</p>
+    <h2>Criando o ambiente da sua empresa</h2>
+    <p id="nexa-signup-progress-message" class="nexa-signup-progress-message">Recebemos o seu cadastro. Estamos montando tudo para você.</p>
+    <div class="nexa-signup-progress-bar" aria-hidden="true"><span id="nexa-signup-progress-fill"></span></div>
+    <ol class="nexa-signup-steps" id="nexa-signup-steps">
+      <li data-at="0">Conferindo os dados informados</li>
+      <li data-at="4">Criando a empresa e o seu endereço exclusivo (subdomínio)</li>
+      <li data-at="10">Configurando plano, módulos e cadastros iniciais</li>
+      <li data-at="18">Preparando o catálogo e o painel administrativo</li>
+      <li data-at="26">Enviando os seus dados de acesso</li>
+    </ol>
+    <div class="nexa-signup-instructions">
+      <strong>Enquanto isso:</strong>
+      <ul>
+        <li>Não feche nem atualize esta página.</li>
+        <li>Não clique em cadastrar de novo: o seu pedido já foi recebido.</li>
+        <li>Normalmente leva menos de 1 minuto.</li>
+        <li>Ao terminar, os seus dados de acesso aparecem nesta tela e também são enviados por WhatsApp e e-mail.</li>
+      </ul>
+    </div>
+    <p class="nexa-signup-progress-time">Tempo decorrido: <span id="nexa-signup-elapsed">0s</span></p>
   </div>
 </div>
-<script src="/assets/cadastro-empresa-v2.js?v=20261020-1"></script>
+<script src="/assets/cadastro-empresa-v2.js?v=20261102-1"></script>
 </body>
 </html>

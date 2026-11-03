@@ -123,7 +123,7 @@ for t in fiscal_company_config finance_bank_billing_configs finance_bank_credent
 done
 
 # WhatsApp e e-mail: remove configurações (a homologação nunca envia mensagens reais).
-if tbl_exists app_config; then mysql "$HML_DB" -e "DELETE FROM app_config WHERE cfg_key='whatsapp';"; fi
+if tbl_exists app_config; then mysql "$HML_DB" -e "DELETE FROM app_config WHERE cfg_key IN ('whatsapp','saas_email');"; fi
 for t in saas_whatsapp_config saas_reseller_whatsapp_config user_email_settings; do
   if tbl_exists "$t"; then mysql "$HML_DB" -e "DELETE FROM \`$t\`;"; fi
 done

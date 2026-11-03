@@ -184,6 +184,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
           </div>
         </div>
         <a href="/saas/whatsapp.php" class="<?= basename($_SERVER['PHP_SELF']) === 'whatsapp.php' ? 'active' : '' ?>">WhatsApp</a>
+        <a href="/saas/email.php" class="<?= basename($_SERVER['PHP_SELF']) === 'email.php' ? 'active' : '' ?>">E-mail</a>
         <a href="/saas/pagbank.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pagbank.php' ? 'active' : '' ?>">PagBank</a>
         <a href="/escolher_plano.php">Escolher plano</a>
         <a href="/cadastro.php">Nova empresa</a>

@@ -37,6 +37,9 @@ $whatsappSent = !empty($whatsappResult['ok']);
 $whatsappDestination = (string)($whatsappResult['destino'] ?? $result['whatsapp'] ?? '');
 $manualWhatsappUrl = (string)($result['whatsapp_manual_url'] ?? '');
 $whatsappError = trim((string)($whatsappResult['error'] ?? ''));
+$emailResult = (array)($result['email_credentials'] ?? []);
+$emailSent = !empty($emailResult['ok']);
+$emailDestination = (string)($emailResult['to'] ?? '');
 $planLabel = trim((string)($context['plan_label'] ?? 'Nexa Próspero')) ?: 'Nexa Próspero';
 $sellerBrand = trim((string)($result['seller_brand'] ?? 'Nexa Próspero')) ?: 'Nexa Próspero';
 $sellerLogo = trim((string)($result['seller_logo'] ?? '/assets/logo-nexa-prospero.jpg')) ?: '/assets/logo-nexa-prospero.jpg';
@@ -81,6 +84,10 @@ a{text-decoration:none;color:inherit}.page{width:min(1040px,calc(100% - 28px));m
       <div class="status ok">✓ As credenciais também foram enviadas automaticamente pelo WhatsApp<?= $whatsappDestination !== '' ? ' para ' . signup_success_e($whatsappDestination) : '' ?>.</div>
     <?php else: ?>
       <div class="status warn">A empresa foi criada, mas o envio automático pelo WhatsApp não foi confirmado<?= $whatsappError !== '' ? ': ' . signup_success_e($whatsappError) : '.' ?> Use o botão abaixo para enviar a mensagem manualmente.</div>
+    <?php endif; ?>
+
+    <?php if ($emailSent): ?>
+      <div class="status ok">✓ Enviamos também os dados de acesso para o e-mail <?= signup_success_e($emailDestination) ?>. Se não encontrar, confira a caixa de spam.</div>
     <?php endif; ?>
 
     <section class="grid">
