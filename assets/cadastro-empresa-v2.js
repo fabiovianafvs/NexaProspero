@@ -336,13 +336,36 @@
   const signupSubmitButtons = Array.from(form.querySelectorAll('button[type="submit"],input[type="submit"]'));
   let signupSubmitting = false;
   let signupProgressTimer = null;
+  const signupFill = document.getElementById('nexa-signup-progress-fill');
+  const signupElapsed = document.getElementById('nexa-signup-elapsed');
+  const signupSteps = Array.from(document.querySelectorAll('#nexa-signup-steps li'));
+  let signupStartedAt = 0;
   const signupMessages = [
-    'Estamos preparando o acesso da sua empresa.',
-    'Criando seu ambiente Nexa Próspero... Aguarde um instante.',
-    'Aguarde para uma nova experiência em gestão!',
-    'A configuração inicial pode levar alguns instantes. Continue nesta página.',
-    'Estamos aguardando a confirmação do servidor. Não é necessário reenviar o cadastro.'
+    [0, 'Recebemos o seu cadastro. Estamos montando tudo para você.'],
+    [12, 'Tudo certo até aqui. Continue nesta página.'],
+    [30, 'Quase lá! Estamos finalizando o seu ambiente.'],
+    [60, 'Está levando um pouco mais que o normal, mas o cadastro continua em andamento. Não é preciso reenviar.'],
+    [150, 'Ainda processando. Se passar de 3 minutos, fale com o suporte pelo WhatsApp antes de tentar de novo.']
   ];
+  const formatElapsed = (seconds) => seconds < 60 ? seconds + 's' : Math.floor(seconds / 60) + 'min ' + String(seconds % 60).padStart(2, '0') + 's';
+  const renderSignupProgress = () => {
+    const t = Math.floor((Date.now() - signupStartedAt) / 1000);
+    if (signupElapsed) signupElapsed.textContent = formatElapsed(t);
+    // A barra se aproxima de 95% sem chegar ao fim: só a resposta do servidor conclui.
+    if (signupFill) signupFill.style.width = (3 + 92 * (1 - Math.exp(-t / 20))).toFixed(1) + '%';
+    let current = 0;
+    signupSteps.forEach((step, index) => { if (t >= Number(step.dataset.at || 0)) current = index; });
+    signupSteps.forEach((step, index) => {
+      step.classList.toggle('is-done', index < current);
+      step.classList.toggle('is-active', index === current);
+    });
+    let text = signupMessages[0][1];
+    signupMessages.forEach(([at, message]) => { if (t >= at) text = message; });
+    if (signupProgressMessage && signupProgressMessage.textContent !== text) {
+      signupProgressMessage.textContent = text;
+      signupProgressMessage.classList.toggle('is-slow', t >= 60);
+    }
+  };
   const clearSignupProgress = () => {
     signupSubmitting = false;
     if (signupProgressTimer !== null) window.clearInterval(signupProgressTimer);
@@ -377,12 +400,9 @@
     signupSubmitting = true;
     signupSubmitButtons.forEach((button) => { button.disabled = true; });
     if (signupProgress) { signupProgress.hidden = false; signupProgress.classList.add('is-active'); }
-    let messageIndex = 0;
-    if (signupProgressMessage) signupProgressMessage.textContent = signupMessages[0];
-    signupProgressTimer = window.setInterval(() => {
-      messageIndex = Math.min(messageIndex + 1, signupMessages.length - 1);
-      if (signupProgressMessage) signupProgressMessage.textContent = signupMessages[messageIndex];
-    }, 6500);
+    signupStartedAt = Date.now();
+    renderSignupProgress();
+    signupProgressTimer = window.setInterval(renderSignupProgress, 1000);
   });
 
   refreshPersonType();

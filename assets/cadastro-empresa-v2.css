@@ -219,14 +219,25 @@ body.nexa-flow{background:linear-gradient(180deg,#f7faff 0,#edf4ff 48%,#fff 100%
 @media(max-width:620px){.person-type-selector{grid-template-columns:1fr}.person-type-card{min-height:0}}
 
 /* Cadastro SaaS: confirmação visual desde o envio até a resposta do servidor. */
-.nexa-signup-progress{position:fixed;inset:0;background:rgba(244,248,255,.97);z-index:20000;display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px)}
+.nexa-signup-progress{position:fixed;inset:0;background:rgba(244,248,255,.97);z-index:20000;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(5px);overflow-y:auto}
 .nexa-signup-progress.is-active{display:flex}
-.nexa-signup-progress-panel{width:min(100%,510px);text-align:center;padding:clamp(26px,5vw,48px);border-radius:26px;background:#fff;border:1px solid #dae5fa;box-shadow:0 25px 75px rgba(11,31,91,.16);color:#0b1f5b}
-.nexa-signup-progress-icon{width:72px;height:72px;border-radius:20px;display:grid;place-items:center;margin:0 auto 21px;background:#eff6ff}
-.nexa-signup-progress-icon img{max-width:54px;max-height:54px;object-fit:contain}
-.nexa-signup-progress-spinner{width:36px;height:36px;border-radius:50%;border:4px solid #e0ebff;border-top-color:#2454d6;animation:nexa-signup-spin 1s linear infinite;margin:0 auto 22px}
+.nexa-signup-progress-panel{width:min(100%,540px);max-height:calc(100vh - 32px);overflow-y:auto;text-align:center;padding:clamp(22px,4vw,38px);border-radius:26px;background:#fff;border:1px solid #dae5fa;box-shadow:0 25px 75px rgba(11,31,91,.16);color:#0b1f5b}
+.nexa-signup-progress-logo{display:block;width:auto;max-width:200px;max-height:80px;object-fit:contain;margin:0 auto 16px}
+.nexa-signup-progress-spinner{width:38px;height:38px;border-radius:50%;border:4px solid #e0ebff;border-top-color:#2454d6;animation:nexa-signup-spin .9s linear infinite;margin:0 auto 16px}
 @keyframes nexa-signup-spin{to{transform:rotate(360deg)}}
-.nexa-signup-progress h2{font-size:clamp(20px,3vw,25px);margin:0 0 12px;line-height:1.3}
-.nexa-signup-progress-message{min-height:48px;color:#475569;line-height:1.6;margin:0 0 15px}
-.nexa-signup-progress-help{color:#64748b;font-size:13px;line-height:1.5;margin:0}
-@media(prefers-reduced-motion:reduce){.nexa-signup-progress-spinner{animation-duration:3s}}
+.nexa-signup-progress h2{font-size:clamp(20px,3vw,24px);margin:0 0 8px;line-height:1.3}
+.nexa-signup-progress-message{min-height:44px;color:#475569;line-height:1.55;margin:0 0 14px}
+.nexa-signup-progress-message.is-slow{color:#b45309;font-weight:700}
+.nexa-signup-progress-bar{height:8px;border-radius:999px;background:#e8effc;overflow:hidden;margin:0 0 18px}
+.nexa-signup-progress-bar span{display:block;height:100%;width:3%;border-radius:999px;background:linear-gradient(90deg,#2454d6,#00b8ff);transition:width .9s ease}
+.nexa-signup-steps{list-style:none;margin:0 0 18px;padding:0;text-align:left;display:grid;gap:8px}
+.nexa-signup-steps li{position:relative;padding:9px 12px 9px 40px;border-radius:12px;background:#f8fafd;border:1px solid #edf2fb;color:#94a3b8;font-size:14px;line-height:1.4;transition:all .3s ease}
+.nexa-signup-steps li::before{content:"";position:absolute;left:13px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;border:2px solid #cbd5e1;box-sizing:border-box;background:#fff}
+.nexa-signup-steps li.is-active{color:#0b1f5b;font-weight:700;background:#eff6ff;border-color:#bfdbfe}
+.nexa-signup-steps li.is-active::before{border-color:#2454d6;border-top-color:transparent;animation:nexa-signup-spin .9s linear infinite}
+.nexa-signup-steps li.is-done{color:#047857;background:#f0fdf4;border-color:#bbf7d0}
+.nexa-signup-steps li.is-done::before{content:"\2713";border-color:#10b981;background:#10b981;color:#fff;font-size:11px;line-height:12px;text-align:center;font-weight:900}
+.nexa-signup-instructions{text-align:left;background:#fffbeb;border:1px solid #fde68a;border-radius:14px;padding:12px 14px;color:#78350f;font-size:13px;line-height:1.5}
+.nexa-signup-instructions ul{margin:6px 0 0;padding-left:18px}
+.nexa-signup-progress-time{margin:12px 0 0;color:#64748b;font-size:12px}
+@media(prefers-reduced-motion:reduce){.nexa-signup-progress-spinner,.nexa-signup-steps li.is-active::before{animation-duration:3s}}
