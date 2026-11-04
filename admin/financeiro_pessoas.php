@@ -52,11 +52,15 @@ if (!function_exists('fp_grid_csrf_token')) {
   }
 }
 // Aba Anexos - ações interceptadas antes do POST geral de Pessoas.
-// Por padrão, anexos sensíveis ficam restritos ao administrador mestre da empresa.
-$paAccessAllowed = function_exists('access_is_company_master') && access_is_company_master();
+// Ver, abrir e incluir anexos: todo usuário da empresa com acesso ao cadastro de
+// Pessoas (a permissão da tela já é validada pelo _bootstrap). Remover o vínculo do
+// anexo continua restrito ao administrador da empresa e à senha master.
+$paAccessAllowed = in_array((string)auth_role(), ['company_admin', 'company_user', 'platform_admin'], true);
+$paDeleteAllowed = function_exists('access_is_company_master') && access_is_company_master();
 $paAction = (string)($_REQUEST['action'] ?? '');
 if (in_array($paAction, ['pa_upload','pa_delete','pa_download','pa_view'], true)) {
   if (!$paAccessAllowed) {http_response_code(403);exit('Sem permissão para acessar anexos de pessoas.');}
+  if ($paAction === 'pa_delete' && !$paDeleteAllowed) {http_response_code(403);exit('Somente o administrador da empresa pode remover anexos.');}
   $personId = max(0,(int)($_REQUEST['person_id'] ?? $_GET['edit'] ?? 0));
   if ($personId <= 0 || !pa_person_exists($pdo,$cid,$personId)) { http_response_code(404); exit('Pessoa não encontrada.'); }
   // Respeitar o papel da tela F11 (cliente / fornecedor).
@@ -804,11 +808,13 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
          <a class="btn btn-sm btn-primary" href="financeiro_pessoas.php?<?=finance_h(http_build_query($viewParams))?>" target="_blank" rel="noopener noreferrer">Abrir</a>
          <?php endif; ?>
          <a class="btn btn-sm" href="financeiro_pessoas.php?<?=finance_h(http_build_query($params))?>">Baixar</a>
+         <?php if ($paDeleteAllowed): ?>
          <form method="post" onsubmit="return confirm('Remover este anexo do cadastro?')">
            <input type="hidden" name="action" value="pa_delete"><input type="hidden" name="person_id" value="<?= (int)$editId ?>">
            <input type="hidden" name="attachment_id" value="<?= (int)$ar['id'] ?>"><input type="hidden" name="csrf" value="<?=finance_h(fp_grid_csrf_token())?>">
            <button class="btn btn-sm btn-danger" type="submit">Remover</button>
-         </form></div></td></tr>
+         </form>
+         <?php endif; ?></div></td></tr>
       <?php endforeach; ?></tbody></table></div>
       <?php endif; endif; ?>
     </section>
