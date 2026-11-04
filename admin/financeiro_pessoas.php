@@ -52,15 +52,19 @@ if (!function_exists('fp_grid_csrf_token')) {
   }
 }
 // Aba Anexos - ações interceptadas antes do POST geral de Pessoas.
-// Ver, abrir e incluir anexos: todo usuário da empresa com acesso ao cadastro de
-// Pessoas (a permissão da tela já é validada pelo _bootstrap). Remover o vínculo do
-// anexo continua restrito ao administrador da empresa e à senha master.
-$paAccessAllowed = in_array((string)auth_role(), ['company_admin', 'company_user', 'platform_admin'], true);
-$paDeleteAllowed = function_exists('access_is_company_master') && access_is_company_master();
+// Aba Anexos: controlada pelo perfil do usuário (Tabelas > Perfis de usuário).
+// O administrador da empresa e a senha master têm todas as permissões.
+$paCan = static function (string $permission) use ($pdo): bool {
+  return function_exists('access_has_permission') && access_has_permission($pdo, (int)COMPANY_ID, $permission);
+};
+$paViewAllowed = $paCan('pessoas_anexos_ver');
+$paUploadAllowed = $paCan('pessoas_anexos_incluir');
+$paDeleteAllowed = $paCan('pessoas_anexos_remover');
+$paAccessAllowed = $paViewAllowed || $paUploadAllowed || $paDeleteAllowed; // mostra a aba
 $paAction = (string)($_REQUEST['action'] ?? '');
 if (in_array($paAction, ['pa_upload','pa_delete','pa_download','pa_view'], true)) {
-  if (!$paAccessAllowed) {http_response_code(403);exit('Sem permissão para acessar anexos de pessoas.');}
-  if ($paAction === 'pa_delete' && !$paDeleteAllowed) {http_response_code(403);exit('Somente o administrador da empresa pode remover anexos.');}
+  $paActionAllowed = ['pa_upload' => $paUploadAllowed, 'pa_delete' => $paDeleteAllowed, 'pa_download' => $paViewAllowed, 'pa_view' => $paViewAllowed][$paAction];
+  if (!$paActionAllowed) {http_response_code(403);exit('Seu perfil de usuário não tem permissão para esta ação nos anexos de pessoas.');}
   $personId = max(0,(int)($_REQUEST['person_id'] ?? $_GET['edit'] ?? 0));
   if ($personId <= 0 || !pa_person_exists($pdo,$cid,$personId)) { http_response_code(404); exit('Pessoa não encontrada.'); }
   // Respeitar o papel da tela F11 (cliente / fornecedor).
@@ -790,12 +794,14 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       <?php if ($paListError): ?><div class="msg err"><?=finance_h($paListError)?></div><?php endif; ?>
       <?php if (isset($_GET['pa_result'])): ?><p class="finance-muted"><?=finance_h((string)$_GET['pa_result'])?></p><?php endif; ?>
       <?php if (!$paListError): ?>
+      <?php if ($paUploadAllowed): ?>
       <form method="post" enctype="multipart/form-data" class="pa-upload-form">
         <input type="hidden" name="action" value="pa_upload"><input type="hidden" name="person_id" value="<?= (int)$editId ?>">
         <input type="hidden" name="csrf" value="<?=finance_h(fp_grid_csrf_token())?>">
         <div class="pa-upload-field"><label for="paUploadFile">Selecionar anexo (máximo 30 MB)</label><input id="paUploadFile" type="file" name="person_attachment" required accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.doc,.docx,.xls,.xlsx,.txt"></div>
         <button class="btn btn-primary pa-upload-submit" type="submit">Adicionar anexo</button>
       </form>
+      <?php endif; ?>
       <?php if (!$paRows): ?><p class="finance-muted">Nenhum anexo cadastrado.</p><?php else: ?>
       <div style="overflow-x:auto"><table class="pa-list"><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Origem</th><th>Data</th><th>Ações</th></tr></thead><tbody>
       <?php foreach ($paRows as $ar):
@@ -804,10 +810,12 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       ?>
        <tr><td><?=finance_h($ar['original_name'])?></td><td><?=finance_h(number_format(((int)$ar['size_stored'])/1024,1,',','.'))?> KB</td><td><?=finance_h($ar['source_system']?:'Manual')?></td><td><?=finance_h($ar['created_at'])?></td>
        <td><div style="display:flex;gap:8px;flex-wrap:wrap">
+         <?php if ($paViewAllowed): ?>
          <?php if(in_array(strtolower(trim((string)($ar['mime_type']??''))),['image/jpeg','image/png','image/webp','image/gif','image/bmp','application/pdf'],true)): $viewParams=$params; $viewParams['action']='pa_view'; ?>
          <a class="btn btn-sm btn-primary" href="financeiro_pessoas.php?<?=finance_h(http_build_query($viewParams))?>" target="_blank" rel="noopener noreferrer">Abrir</a>
          <?php endif; ?>
          <a class="btn btn-sm" href="financeiro_pessoas.php?<?=finance_h(http_build_query($params))?>">Baixar</a>
+         <?php endif; ?>
          <?php if ($paDeleteAllowed): ?>
          <form method="post" onsubmit="return confirm('Remover este anexo do cadastro?')">
            <input type="hidden" name="action" value="pa_delete"><input type="hidden" name="person_id" value="<?= (int)$editId ?>">

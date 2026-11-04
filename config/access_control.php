@@ -122,6 +122,10 @@ if (!function_exists('access_permissions_catalog')) {
       // Financeiro
       'financeiro_dashboard' => ['label' => 'Dashboard financeiro', 'group' => 'Financeiro', 'module' => 'financeiro', 'pages' => ['financeiro.php'], 'nav' => ['fin_dashboard']],
       'financeiro_pessoas' => ['label' => 'Pessoas', 'group' => 'Financeiro', 'module' => ['financeiro','delivery','orcamento'], 'pages' => ['financeiro_pessoas.php','pessoa_aniversario_whatsapp.php'], 'nav' => ['fin_pessoas']],
+      // Aba Anexos do cadastro de Pessoas (ações dentro da tela; o administrador e a senha master têm todas).
+      'pessoas_anexos_ver' => ['label' => 'Pessoas · Anexos: ver, abrir e baixar', 'group' => 'Financeiro', 'module' => ['financeiro','delivery','orcamento'], 'pages' => [], 'nav' => []],
+      'pessoas_anexos_incluir' => ['label' => 'Pessoas · Anexos: incluir', 'group' => 'Financeiro', 'module' => ['financeiro','delivery','orcamento'], 'pages' => [], 'nav' => []],
+      'pessoas_anexos_remover' => ['label' => 'Pessoas · Anexos: remover', 'group' => 'Financeiro', 'module' => ['financeiro','delivery','orcamento'], 'pages' => [], 'nav' => []],
       'financeiro_receber' => ['label' => 'Contas a receber / Controle de Cartões', 'group' => 'Financeiro', 'module' => 'financeiro', 'pages' => ['financeiro_contas_receber.php','financeiro_cartoes.php','financeiro_recibo_baixa.php','financeiro_recibo_whatsapp.php'], 'nav' => ['fin_receber','fin_cartoes']],
       'financeiro_pagar' => ['label' => 'Contas a pagar', 'group' => 'Financeiro', 'module' => 'financeiro', 'pages' => ['financeiro_contas_pagar.php'], 'nav' => ['fin_pagar']],
       'financeiro_despesas_fixas' => ['label' => 'Despesas fixas', 'group' => 'Financeiro', 'module' => 'financeiro', 'pages' => ['financeiro_despesas_fixas.php'], 'nav' => ['fin_fixas']],
