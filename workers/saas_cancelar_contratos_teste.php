@@ -20,6 +20,8 @@ declare(strict_types=1);
  * Uso (na pasta do sistema):
  *   php workers/saas_cancelar_contratos_teste.php              # simulação
  *   php workers/saas_cancelar_contratos_teste.php --executar   # cancela
+ *   ... --ignorar=50,51,52   (não mexe nessas empresas)
+ *   ... --somente=27,44      (só nessas empresas)
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -33,6 +35,15 @@ require $root . '/config/pdo.php';
 require_once $root . '/config/saas_subscription_bridge.php';
 
 $execute = in_array('--executar', $argv, true);
+// --ignorar=50,51,52  não mexe nessas empresas · --somente=27,44  só nessas.
+$parseIds = static function (string $prefix) use ($argv): array {
+    foreach ($argv as $a) {
+        if (strpos($a, $prefix) === 0) return array_values(array_filter(array_map('intval', explode(',', substr($a, strlen($prefix))))));
+    }
+    return [];
+};
+$ignoreIds = $parseIds('--ignorar=');
+$onlyIds = $parseIds('--somente=');
 
 if (!saas_sub_bridge_schema_ready($pdo)) {
     exit("Integração de Assinaturas SaaS não instalada neste banco. Nada a fazer.\n");
@@ -65,6 +76,11 @@ foreach ($rows as $r) {
     $label = sprintf('Empresa #%d %s · contrato nº %s (#%d) · R$ %s',
         (int)$r['saas_company_id'], (string)$r['company_name'], (string)$r['contract_number'],
         (int)$r['contract_id'], number_format((float)$r['total_amount'], 2, ',', '.'));
+    if (in_array((int)$r['saas_company_id'], $ignoreIds, true) || ($onlyIds && !in_array((int)$r['saas_company_id'], $onlyIds, true))) {
+        echo "[IGNORADO] {$label} — fora da lista informada.\n";
+        $skipped++;
+        continue;
+    }
     if (!in_array(strtolower((string)($r['sub_status'] ?? '')), ['trial', 'complimentary'], true)) {
         echo "[PULADO] {$label} — assinatura não está em teste nem bonificada (" . ($r['sub_status'] ?: 'sem assinatura') . ").\n";
         $skipped++;
