@@ -28,7 +28,9 @@ function saas_renewal_context(PDO $pdo, int $saasCompanyId): array {
     if (!$sub || (int)($link['saas_subscription_id']??0)!==(int)($sub['id']??0)) {
         return array_merge($base,['error'=>'O vínculo não corresponde à assinatura atual. Solicite conferência cadastral.']);
     }
-    if (!in_array(strtolower((string)($sub['status']??'')),['trial','active','past_due'],true)) {
+    // Vencida/aguardando pagamento também pode gerar a cobrança e pagar; somente
+    // assinatura cancelada (ou outro status administrativo) exige o suporte.
+    if (!in_array(strtolower((string)($sub['status']??'')),['trial','active','past_due','pending_payment'],true)) {
         return array_merge($base,['error'=>'O status da assinatura exige regularização administrativa, sem geração automática de cobrança.']);
     }
     // Data da assinatura: define quando mostrar aviso e quando começa a carência.
@@ -245,7 +247,7 @@ function saas_renewal_reconcile(PDO $pdo,int $saasCompanyId): bool {
         if (!$locked || substr((string)($locked['next_due_date']??''),0,10)!==$due) { $pdo->commit();return false; }
         $st=$pdo->prepare('SELECT * FROM subscriptions WHERE id=? AND company_id=? FOR UPDATE');
         $st->execute([(int)$sub['id'],$saasCompanyId]);$lockedSub=$st->fetch(PDO::FETCH_ASSOC)?:[];
-        if (!$lockedSub || !in_array(strtolower((string)($lockedSub['status']??'')),['trial','active','past_due'],true)) {
+        if (!$lockedSub || !in_array(strtolower((string)($lockedSub['status']??'')),['trial','active','past_due','pending_payment'],true)) {
             $pdo->rollBack();return false;
         }
         $months=max(1,min(12,(int)($locked['renewal_term_months']??1)));

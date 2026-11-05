@@ -38,8 +38,22 @@ if (!function_exists('saas_company_is_blocked')) {
     return ['blocked'=>$companyStatus==='blocked','reason'=>'Verifique sua assinatura.','cycle'=>$cycle];
   }
 }
+if (!function_exists('saas_company_can_self_regularize')) {
+  /**
+   * O próprio cliente pode gerar o boleto/Pix e reativar quando a assinatura está
+   * vencida/aguardando pagamento. Não pode quando está cancelada ou quando a empresa
+   * foi suspensa administrativamente.
+   */
+  function saas_company_can_self_regularize(PDO $pdo, array $company): bool {
+    if (strtolower((string)($company['status'] ?? 'active')) === 'suspended') return false;
+    $sub = saas_get_latest_subscription($pdo, (int)($company['id'] ?? 0));
+    if (!$sub) return false;
+    return in_array(strtolower((string)($sub['status'] ?? '')), ['trial', 'active', 'past_due', 'pending_payment'], true);
+  }
+}
+
 if (!function_exists('saas_render_block_page')) {
-  function saas_render_block_page(string $title, string $message): void {
+  function saas_render_block_page(string $title, string $message, string $actionUrl = '', string $actionLabel = ''): void {
     http_response_code(403);
     ?>
     <!doctype html>
@@ -86,7 +100,12 @@ if (!function_exists('saas_render_block_page')) {
         <div class="tag">Acesso bloqueado</div>
         <h1><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></h1>
         <p><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></p>
+        <?php if ($actionUrl !== ''): ?>
+          <p>Se você é o responsável pela empresa, entre no painel para gerar o boleto/Pix e reativar o sistema. O acesso volta assim que o pagamento for confirmado.</p>
+          <p><a href="<?= htmlspecialchars($actionUrl, ENT_QUOTES, 'UTF-8') ?>" style="display:inline-block;margin-top:6px;padding:12px 18px;border-radius:12px;background:#0b1f5b;color:#fff;font-weight:700;text-decoration:none"><?= htmlspecialchars($actionLabel !== '' ? $actionLabel : 'Entrar e regularizar', ENT_QUOTES, 'UTF-8') ?></a></p>
+        <?php else: ?>
         <p>Entre em contato para regularizar o acesso.</p>
+        <?php endif; ?>
       </div>
     </body>
     </html>
@@ -103,6 +122,13 @@ if (!function_exists('saas_enforce_company_access')) {
 
     $title = $context === 'admin' ? 'Painel temporariamente indisponível' : 'Catálogo temporariamente indisponível';
     $message = (string)($check['reason'] ?? 'Acesso bloqueado no momento.');
-    saas_render_block_page($title, $message);
+    // Vencido (não cancelado e não suspenso manualmente): oferece o caminho para o
+    // responsável entrar e pagar. O painel leva direto à tela de Contratação e renovação.
+    $actionUrl = '';
+    if (saas_company_can_self_regularize($pdo, $company)) {
+      $slug = trim((string)($company['slug'] ?? ''));
+      $actionUrl = '/admin/login.php' . (function_exists('tenant_extract_subdomain') && $slug !== '' && !tenant_extract_subdomain((string)($_SERVER['HTTP_HOST'] ?? '')) ? '?company=' . rawurlencode($slug) : '');
+    }
+    saas_render_block_page($title, $message, $actionUrl, 'Sou o responsável: entrar e regularizar');
   }
 }
