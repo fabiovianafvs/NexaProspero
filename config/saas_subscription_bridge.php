@@ -644,6 +644,19 @@ if (!function_exists('saas_sub_bridge_migrate_existing')) {
       saas_sub_bridge_sync_subscription_dates($pdo,(int)$subscription['id'],$saasCompanyId,$periodEnd,$nextDue);
       $pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();if($newContractCreated){try{$pdo->prepare("UPDATE contracts SET status='CANCELADO',cancellation_date=CURDATE(),notes=CONCAT(COALESCE(notes,''),' | Criação de migração revertida por erro posterior.'),updated_at=NOW() WHERE company_id=? AND id=?")->execute([$billingCompanyId,$contractId]);}catch(Throwable $ignore){}}throw$e;}
+    // Vínculo trocado do contrato de TESTE do cadastro para outro contrato: cancela o
+    // de teste que ficou sem uso (somente se nunca gerou cobrança).
+    $oldContractId=(int)($oldLink['contract_id']??0);
+    if($oldContractId>0 && $oldContractId!==$contractId){
+      try{
+        $ob=saas_sub_bridge_contract_billing_state($pdo,$billingCompanyId,$oldContractId);
+        if($ob['generation_count']===0 && $ob['order_count']===0 && $ob['boleto_count']===0 && $ob['open_receivable_count']===0){
+          $oc=$pdo->prepare("UPDATE contracts SET status='CANCELADO',cancellation_date=CURDATE(),notes=CONCAT(COALESCE(notes,''),?),updated_at=NOW() WHERE company_id=? AND id=? AND UPPER(status)='TESTE'");
+          $oc->execute([' | Cancelado: assinatura vinculada ao contrato #'.$contractId.'.',$billingCompanyId,$oldContractId]);
+          if($oc->rowCount()===1)$pdo->prepare("UPDATE contract_items SET status='CANCELADO',canceled_at=NOW(),updated_at=NOW() WHERE company_id=? AND contract_id=? AND status='ATIVO'")->execute([$billingCompanyId,$oldContractId]);
+        }
+      }catch(Throwable $e){error_log('[SaaS bridge] Cancelar contrato de teste antigo #'.$oldContractId.': '.$e->getMessage());}
+    }
     $billingModes=[];foreach($allModules as $m){$mid=(int)$m['saas_module_id'];$billingModes[$mid]=in_array($mid,$selection['selected_ids'],true)?'BILLABLE':'COURTESY';}
     saas_sub_bridge_event($pdo,'EXISTING_LINK:'.$saasCompanyId.':'.$contractId.':'.$nextDue->format('Ymd'),'EXISTING_SUBSCRIPTION_LINKED',$saasCompanyId,$linkId,$billingCompanyId,'CONTRACT',$contractId,['source'=>$source,'subscription_status'=>$subStatus,'person_id'=>$personId,'contract_id'=>$contractId,'new_contract'=>$newContractCreated,'sync_modules'=>$syncModules,'sync_result'=>$syncResult,'current_period_start'=>$periodStart->format('Y-m-d'),'current_period_end'=>$periodEnd->format('Y-m-d'),'next_due_date'=>$nextDue->format('Y-m-d'),'next_adjustment_date'=>$nextAdjustment->format('Y-m-d'),'grace_until'=>$graceUntil->format('Y-m-d'),'billing_state'=>$billingState,'billing_modes'=>$billingModes,'billing_quantities'=>array_column($allModules,'quantity','saas_module_id'),'renewal_term_months'=>$termMonths,'renewal_discount_percent'=>$termDiscount,'billing_type'=>$billingType],true,null);
     $policyPayload=['billing_modes'=>$billingModes,'billing_quantities'=>array_column($allModules,'quantity','saas_module_id'),'courtesy_notes'=>$courtesyNotes,'next_due_date'=>$nextDue->format('Y-m-d'),'next_adjustment_date'=>$nextAdjustment->format('Y-m-d'),'renewal_term_months'=>$termMonths,'renewal_discount_percent'=>$termDiscount,'billing_type'=>$billingType];$policyHash=substr(hash('sha256',json_encode($policyPayload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?:''),0,24);

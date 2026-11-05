@@ -70,6 +70,16 @@ foreach ($rows as $r) {
         $skipped++;
         continue;
     }
+    // Cliente que já tem contrato ATIVO lançado à parte: vincular pela conferência
+    // (Assinaturas Nexa > Vincular contratos), que cancela o de teste sozinho.
+    $other = $pdo->prepare("SELECT o.contract_number FROM contracts t INNER JOIN contracts o ON o.company_id=t.company_id AND o.id<>t.id AND UPPER(o.status)='ATIVO' AND (o.contracting_person_id=t.contracting_person_id OR o.billing_person_id=t.contracting_person_id) WHERE t.company_id=? AND t.id=? ORDER BY o.id DESC LIMIT 1");
+    $other->execute([$billingCompanyId, (int)$r['contract_id']]);
+    $otherNumber = $other->fetchColumn();
+    if ($otherNumber !== false) {
+        echo "[PULADO] {$label} — o cliente já tem o contrato ATIVO nº {$otherNumber}. Vincule esse contrato em Assinaturas Nexa > Vincular contratos.\n";
+        $skipped++;
+        continue;
+    }
     $billing = saas_sub_bridge_contract_billing_state($pdo, $billingCompanyId, (int)$r['contract_id']);
     if ($billing['generation_count'] > 0 || $billing['order_count'] > 0 || $billing['boleto_count'] > 0 || $billing['open_receivable_count'] > 0) {
         echo "[PULADO] {$label} — já tem cobrança gerada; confira manualmente.\n";

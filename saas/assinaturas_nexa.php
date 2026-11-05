@@ -153,7 +153,7 @@ if($ready){
 }
 
 // Painel V11.52.1 — migração controlada de cliente existente.
-$personContractCount=0;$suggestedMigContract=false;$migrateId=max(0,(int)($_GET['migrate']??0));$priceReady=saas_sub_bridge_price_ready($pdo);$activateMode=$migrateId>0 && !empty($_GET['activate']);$migrateCompany=null;$migrateSub=null;$suggestedPerson=null;$migrateModules=[];$existingMigLink=null;$existingMigContract=null;$migratePolicy=[];$migrateBillableIds=[];
+$personContractCount=0;$suggestedMigContract=false;$linkedTestContract=null;$migrateId=max(0,(int)($_GET['migrate']??0));$priceReady=saas_sub_bridge_price_ready($pdo);$activateMode=$migrateId>0 && !empty($_GET['activate']);$migrateCompany=null;$migrateSub=null;$suggestedPerson=null;$migrateModules=[];$existingMigLink=null;$existingMigContract=null;$migratePolicy=[];$migrateBillableIds=[];
 if($migrateId>0)$section='contratos';
 $defaultStart='';$defaultEnd='';$defaultDue='';$defaultAdjustment='';$defaultGrace='';$defaultLifecycle='ACTIVE';$defaultTermMonths=1;
 if($migrateId>0 && $ready && $billingCompanyId>0){
@@ -165,8 +165,12 @@ if($migrateId>0 && $ready && $billingCompanyId>0){
     if($existingMigLink && (int)($existingMigLink['contract_id']??0)>0){$stc=$pdo->prepare("SELECT c.id,c.contract_number,c.status,c.total_amount,c.validity_start,c.validity_end,(SELECT MIN(ci.next_adjustment_date) FROM contract_items ci WHERE ci.company_id=c.company_id AND ci.contract_id=c.id AND ci.status='ATIVO' AND ci.next_adjustment_date IS NOT NULL) next_adjustment_date FROM contracts c WHERE c.company_id=? AND c.id=? LIMIT 1");$stc->execute([$billingCompanyId,(int)$existingMigLink['contract_id']]);$existingMigContract=$stc->fetch(PDO::FETCH_ASSOC)?:null;$stc->closeCursor();}
     // Cliente que já tem contrato na faturadora sem vínculo: sugere o contrato da
     // Pessoa para não criar um segundo contrato por engano.
-    if(!$existingMigContract && $suggestedPerson){
-      try{$personContracts=array_values(array_filter(saas_sub_bridge_contract_search($pdo,$billingCompanyId,(int)$suggestedPerson['id'],'',30),static fn($c)=>(int)($c['linked_saas_company_id']??0)===0||(int)$c['linked_saas_company_id']===$migrateId));}catch(Throwable $e){$personContracts=[];}
+    // Também quando o vínculo atual aponta para o contrato de TESTE do cadastro e
+    // o cliente já tem um contrato ATIVO lançado à parte.
+    $linkedTestContract=($existingMigContract && strtoupper((string)($existingMigContract['status']??''))==='TESTE')?$existingMigContract:null;
+    if((!$existingMigContract || $linkedTestContract) && $suggestedPerson){
+      $skipId=(int)($linkedTestContract['id']??0);
+      try{$personContracts=array_values(array_filter(saas_sub_bridge_contract_search($pdo,$billingCompanyId,(int)$suggestedPerson['id'],'',30),static fn($c)=>(int)$c['id']!==$skipId && (!$skipId || strtoupper((string)$c['status'])==='ATIVO') && ((int)($c['linked_saas_company_id']??0)===0||(int)$c['linked_saas_company_id']===$migrateId)));}catch(Throwable $e){$personContracts=[];}
       $personContractCount=count($personContracts);
       if($personContractCount===1){$existingMigContract=$personContracts[0];$suggestedMigContract=true;}
     }
@@ -224,7 +228,7 @@ saas_layout_start($sectionTitles[$section].' • Central SaaS',$sectionTitles[$s
     <div><strong>Política padrão</strong><?= (int)($cfg['charge_lead_days']??2) ?> dia(s) antes · <?= (int)($cfg['grace_days']??3) ?> dia(s) de carência</div>
   </div>
   <?php if($activateMode):?><div class="sb-note" style="margin-bottom:10px;background:#ecfdf5;border-color:#a7f3d0;color:#065f46"><strong>Ativação da assinatura:</strong> confira a Pessoa, o contrato, os módulos faturados, as quantidades e o valor unitário/mês de cada módulo. Ao confirmar, o contrato é lançado (ou o contrato de teste vira ATIVO), a assinatura passa para <strong>ativa</strong> e o atendimento do CRM é concluído. Enquanto não confirmar, a assinatura continua como está.</div><?php endif;?>
-  <?php if($suggestedMigContract):?><div class="sb-note" style="margin-bottom:10px"><strong>Contrato encontrado:</strong> a Pessoa já tem o contrato nº <?=sb_h($existingMigContract['contract_number']??'')?> (<?=sb_h($existingMigContract['status']??'')?>) sem vínculo com o SaaS. Ele foi pré-selecionado; confira antes de confirmar.</div><?php elseif($personContractCount>1):?><div class="sb-note warn2" style="margin-bottom:10px"><strong>Atenção:</strong> a Pessoa tem <?=$personContractCount?> contratos sem vínculo com o SaaS. Use “Buscar contrato” e escolha o correto, para não criar um contrato duplicado.</div><?php endif;?>
+  <?php if($suggestedMigContract):?><div class="sb-note" style="margin-bottom:10px"><strong>Contrato encontrado:</strong> a Pessoa já tem o contrato nº <?=sb_h($existingMigContract['contract_number']??'')?> (<?=sb_h($existingMigContract['status']??'')?>) sem vínculo com o SaaS. Ele foi pré-selecionado; confira antes de confirmar.<?php if($linkedTestContract):?> O vínculo antigo com o contrato de teste nº <?=sb_h($linkedTestContract['contract_number']??'')?> será cancelado automaticamente ao confirmar (se não tiver cobrança).<?php endif;?></div><?php elseif($personContractCount>1):?><div class="sb-note warn2" style="margin-bottom:10px"><strong>Atenção:</strong> a Pessoa tem <?=$personContractCount?> contratos sem vínculo com o SaaS. Use “Buscar contrato” e escolha o correto, para não criar um contrato duplicado.</div><?php endif;?>
   <div class="sb-note warn2"><strong>Regra de segurança:</strong> a vinculação assume somente os próximos ciclos. Não cria cobrança retroativa e não apaga Pedido, título, boleto ou PIX já existente. Se o contrato tiver outros serviços que não são módulos SaaS, eles permanecem intocados.</div>
   <form method="post" id="migrationForm" style="margin-top:14px">
     <input type="hidden" name="csrf" value="<?=sb_h($csrf)?>"><input type="hidden" name="section" value="contratos"><input type="hidden" name="action" value="migrate_existing"><input type="hidden" name="saas_company_id" value="<?=$migrateId?>"><?php if($activateMode):?><input type="hidden" name="activate_subscription" value="1"><?php endif;?>
