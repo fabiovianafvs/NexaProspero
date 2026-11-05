@@ -21,6 +21,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
   function nexa_schema_updater_registry(): array {
     return [
       [
+        'id' => '20261104_saas_valor_negociado_v1',
+        'module' => 'saas_negotiated_price',
+        'version' => 20261104001,
+        'label' => 'Assinaturas SaaS - valor mensal negociado por módulo',
+        'description' => 'Guarda o valor unitário/mês combinado de cada módulo ao ativar a assinatura. Vazio usa o preço do Serviço.',
+        'file' => __DIR__ . '/../db/20261104_saas_valor_negociado_v1.sql',
+        'sha256' => '4edfdd033ff5da7db08e5d5e6b149a5a9719521bb889232e144e30eea085e06f',
+        'order' => 20261104001,
+      ],
+      [
         'id' => '20261102_senha_link_seguro_v1',
         'module' => 'password_setup',
         'version' => 20261102001,

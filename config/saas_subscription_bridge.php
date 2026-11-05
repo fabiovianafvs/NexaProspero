@@ -238,10 +238,26 @@ if (!function_exists('saas_sub_bridge_cycle_values')) {
   }
 }
 
+if (!function_exists('saas_sub_bridge_price_ready')) {
+  /** Migração 20261104: valor mensal negociado por módulo (billing_unit_price). */
+  function saas_sub_bridge_price_ready(PDO $pdo): bool {
+    static $cache=null;if($cache!==null)return $cache;
+    return $cache=saas_sub_bridge_billing_policy_ready($pdo) && saas_sub_bridge_column_exists($pdo,'saas_subscription_billing_policy','billing_unit_price');
+  }
+}
+
+if (!function_exists('saas_sub_bridge_module_monthly')) {
+  /** Valor unitário/mês do módulo: o negociado (quando informado) ou o preço atual do Serviço. */
+  function saas_sub_bridge_module_monthly(array $module,array $product): float {
+    $negotiated=(float)($module['monthly_price']??0);
+    return round($negotiated>0?$negotiated:(float)($product['preco']??0),4);
+  }
+}
+
 if (!function_exists('saas_sub_bridge_billing_policy_map')) {
   function saas_sub_bridge_billing_policy_map(PDO $pdo,int $linkId): array {
     if($linkId<=0 || !saas_sub_bridge_billing_policy_ready($pdo)) return [];
-    $qtyCol=saas_sub_bridge_commercial_policy_ready($pdo)?'COALESCE(billing_quantity,1) billing_quantity':'1 billing_quantity';$st=$pdo->prepare('SELECT saas_module_id,billing_mode,'.$qtyCol.',courtesy_note FROM saas_subscription_billing_policy WHERE link_id=?');
+    $qtyCol=saas_sub_bridge_commercial_policy_ready($pdo)?'COALESCE(billing_quantity,1) billing_quantity':'1 billing_quantity';$priceCol=saas_sub_bridge_price_ready($pdo)?',billing_unit_price':',NULL billing_unit_price';$st=$pdo->prepare('SELECT saas_module_id,billing_mode,'.$qtyCol.$priceCol.',courtesy_note FROM saas_subscription_billing_policy WHERE link_id=?');
     $st->execute([$linkId]);$out=[];
     foreach($st->fetchAll(PDO::FETCH_ASSOC)?:[] as $r){$out[(int)$r['saas_module_id']]=$r;}
     $st->closeCursor();return $out;
@@ -251,7 +267,7 @@ if (!function_exists('saas_sub_bridge_billing_policy_map')) {
 if (!function_exists('saas_sub_bridge_billing_selection')) {
   function saas_sub_bridge_billing_selection(PDO $pdo,int $linkId,array $modules,array $input=[]): array {
     $byId=[];foreach($modules as $m){$mid=(int)($m['saas_module_id']??0);if($mid>0)$byId[$mid]=$m;}
-    $explicit=!empty($input['billing_policy_present']);$selected=[];$policy=saas_sub_bridge_billing_policy_map($pdo,$linkId);$rawQty=(array)($input['billing_quantity']??[]);
+    $explicit=!empty($input['billing_policy_present']);$selected=[];$policy=saas_sub_bridge_billing_policy_map($pdo,$linkId);$rawQty=(array)($input['billing_quantity']??[]);$rawPrice=(array)($input['billing_price']??[]);$priceReady=saas_sub_bridge_price_ready($pdo);
     if($explicit){
       if(!saas_sub_bridge_commercial_policy_ready($pdo)) throw new RuntimeException('A migration V11.52.3 ainda não foi aplicada. Aplique-a antes de configurar quantidades e períodos.');
       foreach((array)($input['billable_modules']??[]) as $raw){$mid=(int)$raw;if($mid>0 && isset($byId[$mid]))$selected[$mid]=true;}
@@ -264,6 +280,16 @@ if (!function_exists('saas_sub_bridge_billing_selection')) {
       if($explicit && array_key_exists($mid,$rawQty)){$v=str_replace(',','.',trim((string)$rawQty[$mid]));$q=is_numeric($v)?(float)$v:$base;}
       elseif(isset($policy[$mid]['billing_quantity']))$q=(float)$policy[$mid]['billing_quantity'];else$q=$base;
       $q=max(1.0,min(999.0,$q));$m['quantity']=round($q,2);$m['billing_quantity']=$m['quantity'];
+      // Valor negociado: 0 = usa o preço do Serviço no momento da cobrança.
+      $price=0.0;
+      if($priceReady){
+        if($explicit && array_key_exists($mid,$rawPrice)){$v=trim((string)$rawPrice[$mid]);if(strpos($v,',')!==false){$v=str_replace('.','',$v);$v=str_replace(',','.',$v);}$price=is_numeric($v)?(float)$v:0.0;}
+        elseif(isset($policy[$mid]['billing_unit_price']))$price=(float)$policy[$mid]['billing_unit_price'];
+        $productPrice=round((float)($m['product_price']??0),4);
+        $price=max(0.0,min(999999.99,round($price,4)));
+        if($explicit && $productPrice>0 && abs($price-$productPrice)<0.00005)$price=0.0; // igual ao Serviço: não fixa
+      }
+      $m['monthly_price']=$price;
     }unset($m);
     $billable=[];$courtesy=[];
     foreach($byId as $mid=>$m){if(isset($selected[$mid]))$billable[]=$m;else$courtesy[]=$m;}
@@ -275,12 +301,14 @@ if (!function_exists('saas_sub_bridge_save_billing_policy')) {
   function saas_sub_bridge_save_billing_policy(PDO $pdo,int $linkId,array $allModules,array $selectedIds,array $courtesyNotes=[]): void {
     if($linkId<=0 || !saas_sub_bridge_billing_policy_ready($pdo)) return;
     $selected=[];foreach($selectedIds as $mid)$selected[(int)$mid]=true;
-    $hasQty=saas_sub_bridge_commercial_policy_ready($pdo);
-    $sql=$hasQty
+    $hasQty=saas_sub_bridge_commercial_policy_ready($pdo);$hasPrice=$hasQty && saas_sub_bridge_price_ready($pdo);
+    $sql=$hasPrice
+      ? "INSERT INTO saas_subscription_billing_policy(link_id,saas_module_id,billing_mode,billing_quantity,billing_unit_price,courtesy_note,created_at,updated_at) VALUES(?,?,?,?,?,?,NOW(),NOW()) ON DUPLICATE KEY UPDATE billing_mode=VALUES(billing_mode),billing_quantity=VALUES(billing_quantity),billing_unit_price=VALUES(billing_unit_price),courtesy_note=VALUES(courtesy_note),updated_at=NOW()"
+      : ($hasQty
       ? "INSERT INTO saas_subscription_billing_policy(link_id,saas_module_id,billing_mode,billing_quantity,courtesy_note,created_at,updated_at) VALUES(?,?,?,?,?,NOW(),NOW()) ON DUPLICATE KEY UPDATE billing_mode=VALUES(billing_mode),billing_quantity=VALUES(billing_quantity),courtesy_note=VALUES(courtesy_note),updated_at=NOW()"
-      : "INSERT INTO saas_subscription_billing_policy(link_id,saas_module_id,billing_mode,courtesy_note,created_at,updated_at) VALUES(?,?,?,?,NOW(),NOW()) ON DUPLICATE KEY UPDATE billing_mode=VALUES(billing_mode),courtesy_note=VALUES(courtesy_note),updated_at=NOW()";
+      : "INSERT INTO saas_subscription_billing_policy(link_id,saas_module_id,billing_mode,courtesy_note,created_at,updated_at) VALUES(?,?,?,?,NOW(),NOW()) ON DUPLICATE KEY UPDATE billing_mode=VALUES(billing_mode),courtesy_note=VALUES(courtesy_note),updated_at=NOW()");
     $st=$pdo->prepare($sql);
-    foreach($allModules as $m){$mid=(int)($m['saas_module_id']??0);if($mid<=0)continue;$billable=isset($selected[$mid]);$note=trim((string)($courtesyNotes[$mid]??''));if($billable)$note='';$safeNote=$note!==''?(function_exists('mb_substr')?mb_substr($note,0,500,'UTF-8'):substr($note,0,500)):null;$q=max(1.0,min(999.0,(float)($m['quantity']??1)));if($hasQty)$st->execute([$linkId,$mid,$billable?'BILLABLE':'COURTESY',$q,$safeNote]);else$st->execute([$linkId,$mid,$billable?'BILLABLE':'COURTESY',$safeNote]);}
+    foreach($allModules as $m){$mid=(int)($m['saas_module_id']??0);if($mid<=0)continue;$billable=isset($selected[$mid]);$note=trim((string)($courtesyNotes[$mid]??''));if($billable)$note='';$safeNote=$note!==''?(function_exists('mb_substr')?mb_substr($note,0,500,'UTF-8'):substr($note,0,500)):null;$q=max(1.0,min(999.0,(float)($m['quantity']??1)));$price=(float)($m['monthly_price']??0);if($hasPrice)$st->execute([$linkId,$mid,$billable?'BILLABLE':'COURTESY',$q,$price>0?round($price,4):null,$safeNote]);elseif($hasQty)$st->execute([$linkId,$mid,$billable?'BILLABLE':'COURTESY',$q,$safeNote]);else$st->execute([$linkId,$mid,$billable?'BILLABLE':'COURTESY',$safeNote]);}
   }
 }
 
@@ -550,7 +578,7 @@ if (!function_exists('saas_sub_bridge_sync_active_contract_items')) {
     saas_sub_bridge_assert_billing_company($pdo,$billingCompanyId);$state=saas_sub_bridge_contract_module_state($pdo,$billingCompanyId,$contractId,$modules);$wanted=$state['wanted'];$managed=$state['managed'];$billingType=saas_sub_bridge_term_billing_type($termMonths);
     $added=0;$updated=0;$removed=0;
     foreach($wanted as $mid=>$m){
-      $p=saas_sub_bridge_product_snapshot($pdo,$billingCompanyId,(int)$m['product_id']);$qty=max(1.0,(float)($m['quantity']??1));$monthly=round((float)($p['preco']??0),4);$calc=saas_sub_bridge_cycle_values($monthly,$qty,$termMonths,$discountPercent);$cycleUnit=$calc['cycle_unit'];$line=$calc['net'];$discAmount=$calc['discount'];$costV=round((float)($p['custo']??0)*$termMonths,4);$code=(string)($p['numero_cadastro']??$p['referencia']??$p['id']);$unitName=(string)($p['unidade_estoque']??'UN');$info='Módulo SaaS: '.(string)($m['module_code']??$m['code']??'').' (#'.$mid.') · Base mensal R$ '.number_format($monthly,2,',','.').' · ciclo '.$termMonths.' mês(es)';
+      $p=saas_sub_bridge_product_snapshot($pdo,$billingCompanyId,(int)$m['product_id']);$qty=max(1.0,(float)($m['quantity']??1));$monthly=saas_sub_bridge_module_monthly($m,$p);$calc=saas_sub_bridge_cycle_values($monthly,$qty,$termMonths,$discountPercent);$cycleUnit=$calc['cycle_unit'];$line=$calc['net'];$discAmount=$calc['discount'];$costV=round((float)($p['custo']??0)*$termMonths,4);$code=(string)($p['numero_cadastro']??$p['referencia']??$p['id']);$unitName=(string)($p['unidade_estoque']??'UN');$info='Módulo SaaS: '.(string)($m['module_code']??$m['code']??'').' (#'.$mid.') · Base mensal R$ '.number_format($monthly,2,',','.').' · ciclo '.$termMonths.' mês(es)';
       if(isset($managed[$mid])){
         $iid=(int)$managed[$mid]['id'];$pdo->prepare("UPDATE contract_items SET product_id=?,product_code_snapshot=?,description_snapshot=?,unit_snapshot=?,quantity=?,billing_type=?,indefinite_term=1,validity_start=?,validity_end=NULL,next_adjustment_date=?,cost=?,table_price=?,unit_price=?,discount_percent=?,discount_amount=?,addition_percent=0,addition_amount=0,total=?,complementary_info=?,updated_at=NOW() WHERE company_id=? AND contract_id=? AND id=? AND status='ATIVO'")->execute([(int)$p['id'],$code,(string)$p['nome'],$unitName,$qty,$billingType,$nextDue->format('Y-m-d'),$nextAdjustment?->format('Y-m-d'),$costV,$cycleUnit,$cycleUnit,$discountPercent,$discAmount,$line,$info,$billingCompanyId,$contractId,$iid]);$updated++;
       }else{
@@ -567,7 +595,7 @@ if (!function_exists('saas_sub_bridge_snapshot_active_items')) {
     $state=saas_sub_bridge_contract_module_state($pdo,$billingCompanyId,$contractId,$billableModules);$pdo->prepare('DELETE FROM saas_subscription_items WHERE link_id=?')->execute([$linkId]);
     $ins=$pdo->prepare("INSERT INTO saas_subscription_items(link_id,saas_module_id,product_id,quantity,unit_price,status,starts_at,ends_at,contract_item_id,created_at,updated_at) VALUES(?,?,?,?,?,'ACTIVE',?,NULL,?,NOW(),NOW())");
     $billableIds=[];foreach($billableModules as $m)$billableIds[(int)$m['saas_module_id']]=true;
-    foreach($allModules as $m){$mid=(int)$m['saas_module_id'];$p=saas_sub_bridge_product_snapshot($pdo,$billingCompanyId,(int)$m['product_id']);$ci=isset($billableIds[$mid])?(int)($state['managed'][$mid]['id']??0):0;$ins->execute([$linkId,$mid,(int)$m['product_id'],max(1.0,(float)($m['quantity']??1)),round((float)($p['preco']??0),4),$periodStart->format('Y-m-d H:i:s'),$ci?:null]);}
+    foreach($allModules as $m){$mid=(int)$m['saas_module_id'];$p=saas_sub_bridge_product_snapshot($pdo,$billingCompanyId,(int)$m['product_id']);$ci=isset($billableIds[$mid])?(int)($state['managed'][$mid]['id']??0):0;$ins->execute([$linkId,$mid,(int)$m['product_id'],max(1.0,(float)($m['quantity']??1)),saas_sub_bridge_module_monthly($m,$p),$periodStart->format('Y-m-d H:i:s'),$ci?:null]);}
     saas_sub_bridge_save_billing_policy($pdo,$linkId,$allModules,array_keys($billableIds),$courtesyNotes);
   }
 }
@@ -647,6 +675,40 @@ if (!function_exists('saas_sub_bridge_sync_company')) {
     $pdo->prepare('UPDATE saas_subscription_links SET lifecycle_status=\'TRIAL\',trial_started_at=?,trial_ends_at=?,next_due_date=?,last_sync_at=NOW(),last_error=NULL,updated_at=NOW() WHERE id=?')->execute([$trialStart->format('Y-m-d H:i:s'),$trialEnd->format('Y-m-d H:i:s'),$trialEnd->format('Y-m-d'),$linkId]);
     saas_sub_bridge_event($pdo,'TRIAL_SYNC:'.$saasCompanyId.':'.$subscription['id'],'TRIAL_SYNCED',$saasCompanyId,$linkId,$billingCompanyId,'SUBSCRIPTION',(int)$subscription['id'],['source'=>$source,'person_id'=>$personId,'contract_id'=>$contractId,'trial_ends_at'=>$trialEnd->format('Y-m-d H:i:s'),'modules'=>array_map(static fn($m)=>['module_id'=>(int)$m['saas_module_id'],'product_id'=>(int)$m['product_id'],'quantity'=>(float)$m['quantity']],$allModules),'billable_module_ids'=>$selection['selected_ids']],true,null);
     return ['ok'=>true,'saas_company_id'=>$saasCompanyId,'billing_company_id'=>$billingCompanyId,'person_id'=>$personId,'contract_id'=>$contractId,'link_id'=>$linkId,'trial_ends_at'=>$trialEnd->format('Y-m-d H:i:s'),'module_count'=>count($allModules),'billable_count'=>count($modules),'courtesy_count'=>count($selection['courtesy'])];
+  }
+}
+
+if (!function_exists('saas_sub_bridge_self_service_contract')) {
+  /**
+   * Autoatendimento: o cliente em teste abre a tela de contratação dentro da
+   * janela de cobrança (3 dias antes do fim do teste em diante). Só então o
+   * contrato TESTE é criado na empresa faturadora, com os valores padrão, para
+   * que ele escolha a periodicidade e gere o boleto/Pix. Antes da janela, nada
+   * é criado. Retorna o id do contrato (0 = nada feito).
+   */
+  function saas_sub_bridge_self_service_contract(PDO $pdo,int $saasCompanyId,int $leadDays=3): int {
+    if(!saas_sub_bridge_schema_ready($pdo) || !saas_sub_bridge_enabled($pdo)) return 0;
+    $subscription=saas_sub_bridge_latest_subscription($pdo,$saasCompanyId);
+    if(!$subscription || strtolower((string)($subscription['status']??''))!=='trial') return 0;
+    $link=saas_sub_bridge_link($pdo,$saasCompanyId);
+    if(!$link || (int)($link['contract_id']??0)>0 || (int)($link['saas_subscription_id']??0)!==(int)$subscription['id']) return 0;
+    $cfg=saas_sub_bridge_config($pdo);$billingCompanyId=(int)($cfg['billing_company_id']??0);
+    if($billingCompanyId<=0 || (int)($link['billing_company_id']??0)!==$billingCompanyId) return 0;
+    [$trialStart,$trialEnd]=saas_sub_bridge_trial_dates($subscription,$cfg);
+    if(new DateTimeImmutable('today')<$trialEnd->setTime(0,0)->modify('-'.max(0,$leadDays).' days')) return 0;
+    $company=saas_sub_bridge_company($pdo,$saasCompanyId);if(!$company) return 0;
+    $allModules=saas_sub_bridge_enabled_billable_modules($pdo,$saasCompanyId,$billingCompanyId);if(!$allModules) return 0;
+    $selection=saas_sub_bridge_billing_selection($pdo,(int)$link['id'],$allModules,[]);
+    $lock='nexa_saas_selfcontract_'.$saasCompanyId;$st=$pdo->prepare('SELECT GET_LOCK(?,10)');$st->execute([$lock]);if((int)$st->fetchColumn()!==1) return 0;
+    try{
+      $link=saas_sub_bridge_link($pdo,$saasCompanyId);if((int)($link['contract_id']??0)>0) return (int)$link['contract_id'];
+      $personId=(int)($link['person_id']??0)?:saas_sub_bridge_find_or_create_person($pdo,$billingCompanyId,$company,null);
+      $contractId=saas_sub_bridge_create_contract($pdo,$billingCompanyId,$personId,$company,$subscription,$cfg,$selection['billable']);
+      $pdo->prepare('UPDATE saas_subscription_links SET contract_id=?,person_id=?,last_sync_at=NOW(),last_error=NULL,updated_at=NOW() WHERE id=? AND contract_id IS NULL')->execute([$contractId,$personId,(int)$link['id']]);
+      saas_sub_bridge_sync_trial_items($pdo,(int)$link['id'],$billingCompanyId,$contractId,$selection['all'],$selection['billable'],$trialEnd);
+      saas_sub_bridge_event($pdo,'SELF_SERVICE_CONTRACT:'.$saasCompanyId.':'.$subscription['id'],'SELF_SERVICE_CONTRACT',$saasCompanyId,(int)$link['id'],$billingCompanyId,'CONTRACT',$contractId,['trial_ends_at'=>$trialEnd->format('Y-m-d H:i:s')],true,null);
+      return $contractId;
+    }finally{try{$pdo->prepare('SELECT RELEASE_LOCK(?)')->execute([$lock]);}catch(Throwable $e){}}
   }
 }
 

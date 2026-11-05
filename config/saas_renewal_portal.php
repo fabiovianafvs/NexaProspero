@@ -134,7 +134,7 @@ function saas_renewal_trial_options(PDO $pdo,array $ctx): array {
         $amount=0.;$gross=0.;
         foreach($billable as $module){
             $product=saas_sub_bridge_product_snapshot($pdo,$billingId,(int)$module['product_id']);
-            $calc=saas_sub_bridge_cycle_values((float)($product['preco']??0),(float)($module['quantity']??1),$months,$discount);
+            $calc=saas_sub_bridge_cycle_values(saas_sub_bridge_module_monthly($module,$product),(float)($module['quantity']??1),$months,$discount);
             $amount+=(float)$calc['net'];$gross+=(float)$calc['gross'];
         }
         $options[$months]=[

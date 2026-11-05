@@ -35,10 +35,20 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();$err=$e->getMessage();$data=array_merge($data,$_POST);}
 }
 $row=$id>0?crm_attendance($pdo,$cid,$id):$data;$moves=$id>0?crm_moves($pdo,$cid,$id):[];
+// Atendimento aberto por um cadastro no SaaS: o dono da plataforma aprova a
+// contratação daqui e confere o contrato em Assinaturas Nexa antes de ativar.
+$saasLeadCompany=null;
+if($id>0 && function_exists('auth_role') && auth_role()==='platform_admin'){
+  try{
+    require_once __DIR__.'/../config/saas_crm_lead.php';
+    $saasBillingId=(int)(saas_sub_bridge_config($pdo)['billing_company_id']??0);
+    if($saasBillingId===$cid){$saasLeadId=saas_crm_lead_company_for_attendance($pdo,$cid,$id);if($saasLeadId>0){$saasLeadCompany=saas_sub_bridge_company($pdo,$saasLeadId);$saasLeadSub=saas_sub_bridge_latest_subscription($pdo,$saasLeadId);if($saasLeadCompany)$saasLeadCompany['_sub_status']=strtolower((string)($saasLeadSub['status']??''));}}
+  }catch(Throwable $e){$saasLeadCompany=null;}
+}
 crm_page_start($id>0?'CRM - Atendimento #'.$id:'CRM - Novo Atendimento',$fromMobile?'crm_atendimento_mobile':'crm_atendimentos');
 ?>
 <style>.crm-detail-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.crm-detail-head h1{margin:0 8px;flex:1;min-width:180px}.crm-detail-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}.crm-detail-actions .crm-btn{min-width:96px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:8px 12px}@media(max-width:700px){.crm-detail-head h1{order:2;flex-basis:100%;margin:4px 0 0;font-size:19px}.crm-detail-actions{order:1;width:100%}.crm-detail-actions .crm-btn{flex:1;min-width:0}}</style>
-<div class="crm-head crm-detail-head"><div class="crm-detail-actions"><a class="crm-btn" href="<?=crm_e($returnTo)?>">← Voltar</a><?php if($view):?><a class="crm-btn" href="crm_atendimento.php?id=<?=$id?><?=$originQuery?>">Editar</a><a class="crm-btn primary" href="crm_tramitar.php?id=<?=$id?><?=$originQuery?>">Tramitar</a><?php endif;?></div><h1><?=$id>0?'Atendimento #'.$id:'Novo atendimento'?></h1></div>
+<div class="crm-head crm-detail-head"><div class="crm-detail-actions"><a class="crm-btn" href="<?=crm_e($returnTo)?>">← Voltar</a><?php if($view):?><a class="crm-btn" href="crm_atendimento.php?id=<?=$id?><?=$originQuery?>">Editar</a><a class="crm-btn primary" href="crm_tramitar.php?id=<?=$id?><?=$originQuery?>">Tramitar</a><?php endif;?><?php if($saasLeadCompany && ($saasLeadCompany['_sub_status']??'')!=='active' && ($saasLeadCompany['_sub_status']??'')!=='canceled'):?><a class="crm-btn success" href="/saas/assinaturas_nexa.php?section=contratos&amp;migrate=<?=(int)$saasLeadCompany['id']?>&amp;activate=1&amp;from_crm=<?=$id?>#migracaoExistente" title="Conferir módulos, quantidades e valores e lançar o contrato de <?=crm_e($saasLeadCompany['name']??'')?>">Aprovar contratação</a><?php elseif($saasLeadCompany):?><a class="crm-btn" href="/saas/empresa.php?id=<?=(int)$saasLeadCompany['id']?>">Empresa no SaaS</a><?php endif;?></div><h1><?=$id>0?'Atendimento #'.$id:'Novo atendimento'?></h1></div>
 <?php if($err!==''):?><div class="crm-alert error"><?=crm_e($err)?></div><?php endif;?>
 <?php if($view):$color=crm_clean_color((string)($row['status_color']??'#2563EB'));?>
 <div class="crm-card"><div class="crm-card-head">Dados do atendimento <span class="crm-badge <?=crm_e(crm_state_class((string)$row['state']))?>"><?=crm_e(crm_state_label((string)$row['state']))?></span></div><div class="crm-card-body"><div class="crm-form-grid">

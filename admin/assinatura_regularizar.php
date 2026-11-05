@@ -28,6 +28,11 @@ try {
         }
     }
 } catch (Throwable $e) {error_log('[SaaS renewal] Falha ao recuperar vinculo: '.$e->getMessage());}
+// Autoatendimento: cliente em teste contratando sozinho. O contrato só é criado
+// agora (perto do fim do teste), nunca no cadastro.
+try {
+    if ($canPay && saas_sub_bridge_enabled($pdo)) saas_sub_bridge_self_service_contract($pdo,$companyId);
+} catch (Throwable $e) {error_log('[SaaS renewal] Falha ao preparar contrato do autoatendimento: '.$e->getMessage());}
 try {$renewed=saas_renewal_reconcile($pdo,$companyId);} catch(Throwable $e){error_log('[SaaS renewal] Falha conciliação: '.$e->getMessage());$error='Não foi possível concluir a regularização. A cobrança existente foi preservada; solicite suporte.';}
 if ($renewed) {header('Location: dashboard.php?assinatura=regularizada',true,302);exit;}
 $blocked=saas_company_is_blocked($pdo,$company);
@@ -91,6 +96,9 @@ if ($qr!==''){
     elseif(preg_match('#^[a-zA-Z0-9+/=\s]+$#',$qr) && strlen($qr)<800000) $qrSource='data:image/png;base64,'.preg_replace('/\s+/','',$qr);
 }
 $elig=!empty($ctx['eligible']);$due=(string)($ctx['due_date']??'');
+// Teste ainda longe do fim: o contrato só é preparado nos 3 últimos dias.
+$trialWaiting=false;$trialWaitingDate='';
+if(!$elig){try{$wSub=saas_sub_bridge_latest_subscription($pdo,$companyId);$wLink=saas_sub_bridge_link($pdo,$companyId);if($wSub&&strtolower((string)($wSub['status']??''))==='trial'&&$wLink&&(int)($wLink['contract_id']??0)<=0){[$wStart,$wEnd]=saas_sub_bridge_trial_dates($wSub,saas_sub_bridge_config($pdo));$trialWaiting=true;$trialWaitingDate=$wEnd->setTime(0,0)->modify('-3 days')->format('d/m/Y');}}catch(Throwable $e){}}
 $hasOrder=(int)($gen['order_id']??0)>0;
 $chargeStatus=strtoupper(trim((string)($billing['status']??'')));
 $boletoCanRegister=$canPay && $elig && $hasOrder && (float)($title['open_amount']??0)>0.009
@@ -227,7 +235,8 @@ body{margin:0;background:linear-gradient(180deg,#f4f8ff 0%,#eef5ff 42%,#f9fbff 1
 <?php if($message):?><div class="sr-alert ok" role="status"><?=sr_h($message)?></div><?php endif;?></div>
 <div class="sr-layout"><div class="sr-body"><h2 class="sr-section-title">Contrato e cobrança</h2>
 <?php $cycle=(array)($blocked['cycle']??[]);if(!empty($cycle['message'])):?><div class="sr-alert featured"><div class="sr-alert-featured-icon">⚠️</div><div class="sr-alert-featured-copy"><b>Aviso importante</b><div><strong><?=sr_h($cycle['message'])?></strong></div></div></div><?php endif;?>
-<?php if(!$elig):?><div class="sr-alert err"><?=sr_h($ctx['error']??'Contrato indisponível')?></div><p class="sr-muted">Nenhum plano novo foi contratado e nenhum lançamento foi criado. Solicite à equipe de suporte que confira o vínculo do contrato automático.</p>
+<?php if(!$elig && $trialWaiting):?><div class="sr-alert"><strong>Seu período de teste está ativo.</strong> A contratação e a geração do boleto/Pix ficam disponíveis a partir de <?=sr_h($trialWaitingDate)?>, nos três últimos dias do teste. Se quiser contratar antes, fale com a nossa equipe.</div>
+<?php elseif(!$elig):?><div class="sr-alert err"><?=sr_h($ctx['error']??'Contrato indisponível')?></div><p class="sr-muted">Nenhum plano novo foi contratado e nenhum lançamento foi criado. Solicite à equipe de suporte que confira o vínculo do contrato automático.</p>
 <?php else: ?>
 <div class="sr-grid"><div class="sr-stat"><small>Contrato automático</small><strong>#<?=sr_h($ctx['contract']['contract_number']??$ctx['contract_id'])?></strong></div><div class="sr-stat"><small>Vencimento original da assinatura</small><strong><?=sr_h(sr_date($ctx['cycle_due_date']??$due))?></strong></div><div class="sr-stat"><small>Valor da competência</small><strong><?=sr_h(sr_money($amount))?></strong></div></div><p class="sr-muted" style="margin:8px 0 0">Competência de faturamento: <b><?=sr_h(sr_date($due))?></b>. Ela não muda ao regularizar o boleto.</p>
 <?php if(!empty($ctx['due_date_note'])): ?><div class="sr-alert"><?=sr_h($ctx['due_date_note'])?></div><?php endif;?>

@@ -158,6 +158,20 @@ if (!function_exists('saas_crm_lead_open')) {
   }
 }
 
+if (!function_exists('saas_crm_lead_company_for_attendance')) {
+  /** Empresa SaaS ligada a um atendimento do CRM da empresa faturadora (0 = nenhuma). */
+  function saas_crm_lead_company_for_attendance(PDO $pdo, int $billingCompanyId, int $attendanceId): int {
+    if ($billingCompanyId <= 0 || $attendanceId <= 0) return 0;
+    try {
+      $st = $pdo->prepare("SELECT saas_company_id FROM saas_billing_events WHERE event_type='CRM_LEAD_OPENED' AND billing_company_id=? AND origin_type='CRM_ATTENDANCE' AND origin_id=? ORDER BY id DESC LIMIT 1");
+      $st->execute([$billingCompanyId, $attendanceId]);
+      return (int)$st->fetchColumn();
+    } catch (Throwable $e) {
+      return 0;
+    }
+  }
+}
+
 if (!function_exists('saas_crm_lead_register_move')) {
   /** Registra um andamento no atendimento (ex.: assinatura ativada) e, se pedido, conclui. */
   function saas_crm_lead_register_move(PDO $pdo, int $saasCompanyId, string $text, bool $complete = false, ?int $userId = null): void {

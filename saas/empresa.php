@@ -8,8 +8,30 @@ require_once __DIR__ . '/_layout.php';
 require_once __DIR__ . '/../config/saas_whatsapp_service.php';
 require_once __DIR__ . '/../config/password_setup.php';
 require_once __DIR__ . '/../config/saas_modules.php';
+require_once __DIR__ . '/../config/saas_subscription_bridge.php';
 try { saas_ensure_modules_schema($pdo); } catch (Throwable $e) {}
 try { saas_whatsapp_ensure_schema($pdo); } catch (Throwable $e) {}
+
+/**
+ * Ativar uma assinatura que ainda não tem contrato ATIVO na empresa faturadora
+ * exige a conferência em Assinaturas Nexa > Vincular contratos (módulos,
+ * quantidades e valores). Sem integração configurada, segue o fluxo antigo.
+ */
+function saas_empresa_activation_needs_contract(PDO $pdo, int $companyId): bool {
+  try {
+    if (!saas_sub_bridge_schema_ready($pdo) || !saas_sub_bridge_enabled($pdo)) return false;
+    $billingCompanyId = (int)(saas_sub_bridge_config($pdo)['billing_company_id'] ?? 0);
+    if ($billingCompanyId <= 0) return false;
+    $link = saas_sub_bridge_link($pdo, $companyId);
+    $contractId = (int)($link['contract_id'] ?? 0);
+    if ($contractId <= 0) return true;
+    $st = $pdo->prepare('SELECT status FROM contracts WHERE company_id = ? AND id = ? LIMIT 1');
+    $st->execute([$billingCompanyId, $contractId]);
+    return strtoupper((string)$st->fetchColumn()) !== 'ATIVO';
+  } catch (Throwable $e) {
+    return false;
+  }
+}
 
 function money_br(float $v): string {
   return 'R$ ' . number_format($v, 2, ',', '.');
@@ -194,6 +216,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $stPlan->execute([$planId]);
       if (!$stPlan->fetchColumn()) throw new RuntimeException('Plano n&atilde;o encontrado.');
 
+      // Trial/vencida -> ativa sem contrato ATIVO: grava plano e datas, mantém o
+      // status atual e abre a conferência do contrato. A assinatura só fica ativa
+      // quando o contrato for confirmado lá.
+      $activationUrl = '';
+      $currentStatus = strtolower((string)($subscription['status'] ?? ''));
+      if ($status === 'active' && $currentStatus !== 'active' && saas_empresa_activation_needs_contract($pdo, $id)) {
+        $status = in_array($currentStatus, ['trial','active','past_due','canceled'], true) ? $currentStatus : 'trial';
+        $activationUrl = '/saas/assinaturas_nexa.php?section=contratos&migrate=' . $id . '&activate=1#migracaoExistente';
+      }
+
       $endsSql = $endsAt !== '' ? ($endsAt . ' 23:59:59') : null;
       $nextSql = $nextBillingAt !== '' ? ($nextBillingAt . ' 09:00:00') : $endsSql;
 
@@ -217,6 +249,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       if (in_array($status, ['trial','active'], true)) {
         $pdo->prepare("UPDATE companies SET status = 'active' WHERE id = ?")->execute([$id]);
+      }
+
+      if ($activationUrl !== '') {
+        header('Location: ' . $activationUrl);
+        exit;
       }
 
       $msg = 'Assinatura, plano e vencimento atualizados com sucesso.';
