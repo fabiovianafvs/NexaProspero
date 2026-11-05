@@ -118,7 +118,7 @@ try {
         throw new RuntimeException('Seu perfil não possui permissão efetiva para cancelar movimentos nesta empresa.');
       }
     } else {
-      if (in_array($action, ['save','delete','adjust_date'], true) && function_exists('access_has_permission') && !access_has_permission($pdo, $cid, 'financeiro_movimento_manual')) {
+      if (in_array($action, ['save','delete','adjust_date','transfer'], true) && function_exists('access_has_permission') && !access_has_permission($pdo, $cid, 'financeiro_movimento_manual')) {
         throw new RuntimeException('Seu usuário não possui permissão para lançar ou editar movimento manual.');
       }
       if ($action === 'cancel' && function_exists('access_has_permission') && !access_has_permission($pdo, $cid, 'financeiro_cancelar_titulos')) {
@@ -188,13 +188,66 @@ try {
       }
     }
 
+    if ($action === 'transfer') {
+      // Transferência entre contas: débito na origem e crédito no destino, ligados
+      // entre si (origin_type TRANSFERENCIA, origin_id = movimento par).
+      $fromBank = (int)($_POST['from_bank_account_id'] ?? 0);
+      $toBank = (int)($_POST['to_bank_account_id'] ?? 0);
+      $fromChart = (int)($_POST['from_chart_account_id'] ?? 0);
+      $toChart = (int)($_POST['to_chart_account_id'] ?? 0);
+      $trCost = (int)($_POST['cost_center_id'] ?? 0) ?: null;
+      $trAmount = finance_money_in($_POST['amount'] ?? 0);
+      $trDate = finance_date_or_null($_POST['movement_date'] ?? '') ?: date('Y-m-d');
+      $trDesc = trim((string)($_POST['description'] ?? ''));
+      $trNotes = trim((string)($_POST['notes'] ?? ''));
+      if ($fromBank <= 0 || $toBank <= 0) throw new RuntimeException('Informe a conta de origem e a conta de destino.');
+      if ($fromBank === $toBank) throw new RuntimeException('A conta de origem e a de destino devem ser diferentes.');
+      if ($trAmount <= 0) throw new RuntimeException('Informe o valor da transferência.');
+      $trBanks = [];
+      foreach ([$fromBank, $toBank] as $b) {
+        $row = finance_query_one($pdo, 'SELECT id, name FROM finance_bank_accounts WHERE company_id=? AND id=? AND active=1 LIMIT 1', [$cid, $b]);
+        if (!$row) throw new RuntimeException('Conta/Caixa inexistente ou inativo.');
+        if (function_exists('access_assert_cash_account')) access_assert_cash_account($pdo, $cid, $b);
+        if (function_exists('nexa_cash_assert_operator')) nexa_cash_assert_operator($pdo, $cid, $b, (int)(auth_user_id() ?? 0));
+        $trBanks[$b] = (string)$row['name'];
+      }
+      foreach ([[$fromChart, 'DEBITO', 'origem'], [$toChart, 'CREDITO', 'destino']] as [$chId, $mt, $side]) {
+        $ch = finance_query_one($pdo, 'SELECT is_analytic, movement_type FROM finance_chart_accounts WHERE company_id=? AND id=? AND active=1 LIMIT 1', [$cid, $chId]);
+        if (!$ch || (int)$ch['is_analytic'] !== 1) throw new RuntimeException('Selecione uma conta analítica no plano de contas de ' . $side . '.');
+        if (!in_array(strtoupper((string)$ch['movement_type']), [$mt, 'AMBOS'], true)) throw new RuntimeException('O plano de contas de ' . $side . ' não aceita ' . ($mt === 'DEBITO' ? 'débito' : 'crédito') . '.');
+      }
+      if (!finance_validate_analytic_cost($pdo, $cid, $trCost)) throw new RuntimeException('Selecione um centro de custo analítico.');
+      $baseDesc = $trDesc !== '' ? $trDesc : 'Transferência';
+      $pdo->beginTransaction();
+      try {
+        $ins = $pdo->prepare('INSERT INTO finance_movements (company_id, movement_date, type, person_id, chart_account_id, cost_center_id, bank_account_id, origin_type, origin_id, description, document_number, amount, notes, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$cid, $trDate, 'DEBITO', null, $fromChart, $trCost, $fromBank, 'TRANSFERENCIA', null, $baseDesc . ' para ' . $trBanks[$toBank], '', $trAmount, $trNotes !== '' ? $trNotes : null, 'ATIVO']);
+        $outId = (int)$pdo->lastInsertId();
+        $ins->execute([$cid, $trDate, 'CREDITO', null, $toChart, $trCost, $toBank, 'TRANSFERENCIA', $outId, $baseDesc . ' de ' . $trBanks[$fromBank], 'TRF-' . $outId, $trAmount, $trNotes !== '' ? $trNotes : null, 'ATIVO']);
+        $inId = (int)$pdo->lastInsertId();
+        $pdo->prepare("UPDATE finance_movements SET origin_id=?, document_number=? WHERE company_id=? AND id=?")->execute([$inId, 'TRF-' . $outId, $cid, $outId]);
+        $pdo->commit();
+      } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+      }
+      finance_redirect('financeiro_movimentos.php?ok=' . rawurlencode('Transferência TRF-' . $outId . ' lançada: R$ ' . finance_money_br($trAmount) . ' de ' . $trBanks[$fromBank] . ' para ' . $trBanks[$toBank] . '.'));
+    }
+
     if ($action === 'cancel') {
       $id = (int)($_POST['id'] ?? 0);
       $reason = trim((string)($_POST['cancel_reason'] ?? ''));
       if ($id <= 0) throw new RuntimeException('Movimento não informado.');
       if ($reason === '') throw new RuntimeException('Informe o motivo do cancelamento.');
-      $mov = finance_query_one($pdo, 'SELECT id, status FROM finance_movements WHERE company_id=? AND id=?', [$cid, $id]);
+      $mov = finance_query_one($pdo, 'SELECT id, status, origin_type, origin_id FROM finance_movements WHERE company_id=? AND id=?', [$cid, $id]);
       if (!$mov) throw new RuntimeException('Movimento não encontrado.');
+      if (strtoupper((string)($mov['origin_type'] ?? '')) === 'TRANSFERENCIA') {
+        // Cancela os dois lados da transferência juntos.
+        if ((string)($mov['status'] ?? 'ATIVO') === 'CANCELADO') throw new RuntimeException('Esta transferência já está cancelada.');
+        $pairId = (int)($mov['origin_id'] ?? 0);
+        $pdo->prepare("UPDATE finance_movements SET status='CANCELADO', canceled_at=NOW(), canceled_reason=?, updated_at=NOW() WHERE company_id=? AND origin_type='TRANSFERENCIA' AND id IN (?,?) AND COALESCE(status,'ATIVO')<>'CANCELADO'")->execute([$reason, $cid, $id, $pairId]);
+        finance_redirect('financeiro_movimentos.php?ok=' . rawurlencode('Transferência cancelada (saída e entrada).'));
+      }
       if (finance_movement_is_settlement_history($pdo,$cid,$id)) throw new RuntimeException('Movimento vinculado ao histórico de uma baixa. Faça o estorno pela própria baixa.');
       if ((string)($mov['status'] ?? 'ATIVO') === 'CANCELADO') throw new RuntimeException('Este movimento já está cancelado.');
       $pdo->prepare("UPDATE finance_movements SET status='CANCELADO', canceled_at=NOW(), canceled_reason=?, updated_at=NOW() WHERE company_id=? AND id=?")->execute([$reason, $cid, $id]);
@@ -475,7 +528,7 @@ if ($financeCrossContext) {
 }
 finance_page_header('Movimento Financeiro', 'Livro caixa/bancos. Baixas do receber/pagar entram automaticamente; ajustes de data bancaria nao alteram o titulo de origem.', $canManualMovement ? [
   ['href'=>'financeiro_movimentos.php?new=1','label'=>'+ Movimento manual','class'=>'btn btn-primary'],
-] : []);
+] + ($financeCrossContext ? [] : [1 => ['href'=>'financeiro_movimentos.php?transfer=1','label'=>'⇄ Transferência','class'=>'btn']]) : []);
 // V11.51.6: tela otimizada para priorizar a listagem; as abas gerais do Financeiro
 // continuam disponíveis nas demais telas.
 finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
@@ -487,7 +540,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div class="finance-kpi"><small>Saldo final</small><strong class="<?= $saldoFinalPeriodo>=0?'pos':'neg' ?>">R$ <?= finance_money_br($saldoFinalPeriodo) ?></strong></div>
 </div>
 
-<div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter" data-lembrar-filtros="movimentos" data-lembrar-ignorar="edit,new,cancel,adjust_date"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
+<div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter" data-lembrar-filtros="movimentos" data-lembrar-ignorar="edit,new,cancel,adjust_date,transfer"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
   <div><label>Data inicial</label><input type="date" name="ini" value="<?= finance_h($ini) ?>"></div>
   <div><label>Data final</label><input type="date" name="fim" value="<?= finance_h($fim) ?>"></div>
   <div><label>Tipo</label><select name="type"><option value="">Todos</option><option value="CREDITO" <?= $typeFilter==='CREDITO'?'selected':'' ?>>Créditos</option><option value="DEBITO" <?= $typeFilter==='DEBITO'?'selected':'' ?>>Débitos</option></select></div>
@@ -540,6 +593,31 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div class="nexa-movement-search-field"><label>Plano de contas *</label><select name="chart_account_id" id="nexaMovementChart" required><?php finance_select_options($charts, $edit['chart_account_id'] ?? '', 'Selecione conta analítica'); ?></select></div>
   <div class="nexa-movement-search-field"><label>Centro de custo</label><select name="cost_center_id" id="nexaMovementCost"><?php finance_select_options($costs, $edit['cost_center_id'] ?? '', 'Opcional'); ?></select></div>
   <div class="nexa-movement-full"><label>Histórico</label><input name="description" value="<?= finance_h($edit['description'] ?? '') ?>"></div></div></div><div class="finance-form-section"><h3>Observações</h3><textarea name="notes" rows="3"><?= finance_h($edit['notes'] ?? '') ?></textarea></div><?php if($editId && $edit): ?><div class="finance-form-section"><h3>Origem</h3><div class="finance-form-grid three"><div><label>Origem</label><input readonly value="<?= finance_h($edit['origin_type'] ?? 'MANUAL') ?>"></div><div><label>ID origem</label><input readonly value="<?= finance_h($edit['origin_id'] ?? '') ?>"></div><div><label>Status</label><input readonly value="<?= finance_h($edit['status'] ?? 'ATIVO') ?>"></div></div></div><?php endif; ?><div class="finance-form-actions"><a class="btn" href="<?= finance_h($listUrl) ?>">Cancelar</a><button class="btn btn-primary"><?= $editId ? 'Salvar alterações' : 'Lançar movimento' ?></button></div></form></div></div>
+<?php endif; ?>
+
+<?php
+$showTransfer = !$financeCrossContext && $canManualMovement && (isset($_GET['transfer']) || ($err !== '' && $postAction === 'transfer'));
+if ($showTransfer):
+  require_once __DIR__ . '/../config/cash_settings.php';
+  $trCfg = nexa_cash_settings($pdo, $cid);
+  $trPost = ($err !== '' && $postAction === 'transfer') ? $_POST : [];
+  $trChartsOut = finance_chart_options($pdo, $cid, 'DEBITO');
+  $trChartsIn = finance_chart_options($pdo, $cid, 'CREDITO');
+?>
+<div class="finance-modal" role="dialog" aria-modal="true"><div class="finance-modal-dialog finance-modal-wide"><div class="finance-modal-head"><div><h2>Transferência entre contas</h2><p class="finance-muted">Lança um débito na conta de origem e um crédito na conta de destino, ligados entre si. Cancelar um lado cancela os dois.</p></div><a class="finance-modal-close" href="<?= finance_h($listUrl) ?>">×</a></div>
+<form method="post" class="finance-form"><input type="hidden" name="action" value="transfer">
+<div class="finance-form-section"><h3>Dados da transferência</h3><div class="finance-form-grid">
+  <div><label>Data</label><input type="date" name="movement_date" value="<?= finance_h($trPost['movement_date'] ?? date('Y-m-d')) ?>"></div>
+  <div><label>Valor *</label><input name="amount" inputmode="decimal" value="<?= finance_h($trPost['amount'] ?? '') ?>" required autofocus></div>
+  <div><label>Conta de origem *</label><select name="from_bank_account_id" required><?php finance_select_options($banks, $trPost['from_bank_account_id'] ?? '', 'Selecione'); ?></select></div>
+  <div><label>Conta de destino *</label><select name="to_bank_account_id" required><?php finance_select_options($banks, $trPost['to_bank_account_id'] ?? '', 'Selecione'); ?></select></div>
+  <div><label>Plano de contas de origem (saída) *</label><select name="from_chart_account_id" required><?php finance_select_options($trChartsOut, $trPost['from_chart_account_id'] ?? ((int)$trCfg['chart_transfer_out'] ?: ''), 'Selecione conta analítica'); ?></select></div>
+  <div><label>Plano de contas de destino (entrada) *</label><select name="to_chart_account_id" required><?php finance_select_options($trChartsIn, $trPost['to_chart_account_id'] ?? ((int)$trCfg['chart_transfer_in'] ?: ''), 'Selecione conta analítica'); ?></select></div>
+  <div><label>Centro de custo</label><select name="cost_center_id"><?php finance_select_options($costs, $trPost['cost_center_id'] ?? '', 'Opcional'); ?></select></div>
+  <div><label>Histórico</label><input name="description" value="<?= finance_h($trPost['description'] ?? '') ?>" placeholder="Transferência"></div>
+</div><div class="hint" style="margin-top:8px">Planos de contas padrão: <a href="configuracoes_caixa.php">Configurações de caixa</a>.</div></div>
+<div class="finance-form-section"><h3>Observações</h3><textarea name="notes" rows="2"><?= finance_h($trPost['notes'] ?? '') ?></textarea></div>
+<div class="finance-form-actions"><a class="btn" href="<?= finance_h($listUrl) ?>">Cancelar</a><button class="btn btn-primary">Lançar transferência</button></div></form></div></div>
 <?php endif; ?>
 
 <?php if($adjustMovement && $canManualMovement): ?>

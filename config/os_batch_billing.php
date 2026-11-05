@@ -273,7 +273,7 @@ if (!function_exists('os_batch_finalize_invoice')) {
         $payments=gestao_payment_lines_from_post($pdo,$companyId,$post,$total);
         $customerId=(int)$invoice['person_id'];$c=$pdo->prepare('SELECT * FROM finance_people WHERE company_id=? AND id=? LIMIT 1');$c->execute([$companyId,$customerId]);$customer=$c->fetch(PDO::FETCH_ASSOC);if(!$customer)throw new RuntimeException('Cliente da fatura não encontrado.');
         $session=gestao_open_cash_session($pdo,$companyId,$userId);
-        foreach($payments as $line){$pm=$line['payment'];if(!empty($pm['require_open_cash'])&&!$session)throw new RuntimeException('Abra o caixa antes de faturar em '.(string)$pm['name'].'.');$chart=(int)($pm['default_chart_account_id']??0)?:gestao_default_chart_id($pdo,$companyId,'CREDITO');if($chart<=0)throw new RuntimeException('Configure o plano de contas da forma de pagamento: '.(string)$pm['name']);}
+        foreach($payments as $line){$pm=$line['payment'];if(!$session&&nexa_cash_requires_open_session($pdo,$companyId,$pm))throw new RuntimeException('Abra o caixa antes de faturar em '.(string)$pm['name'].'.');$chart=(int)($pm['default_chart_account_id']??0)?:gestao_default_chart_id($pdo,$companyId,'CREDITO');if($chart<=0)throw new RuntimeException('Configure o plano de contas da forma de pagamento: '.(string)$pm['name']);}
 
         $orderLinks=os_batch_invoice_orders($pdo,$companyId,$invoiceId);if(!$orderLinks)throw new RuntimeException('A fatura não possui O.S. vinculadas.');
         $osIds=array_map(static fn($r)=>(int)$r['os_order_id'],$orderLinks);$ph=implode(',',array_fill(0,count($osIds),'?'));

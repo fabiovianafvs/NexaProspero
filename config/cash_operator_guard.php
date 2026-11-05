@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 /** V11.61: Exclusividade de CAIXA físico por empresa/operador; BANCO/PIX/CARTAO não são exclusivos. */
+require_once __DIR__ . '/cash_settings.php';
 if (!function_exists('nexa_cash_operator_conflict')) {
   function nexa_cash_operator_conflict(PDO $pdo, int $companyId, int $bankId, int $userId): ?array {
     if ($companyId <= 0 || $bankId <= 0 || $userId === 0) return ['name'=>'Operador inválido'];
@@ -8,6 +9,8 @@ if (!function_exists('nexa_cash_operator_conflict')) {
     $st->execute([$companyId,$bankId]); $bank=$st->fetch(PDO::FETCH_ASSOC);
     if (!$bank) return ['name'=>'Caixa/Banco inexistente ou inativo'];
     if (strtoupper((string)$bank['type']) !== 'CAIXA') return null;
+    // "Desabilitar caixa usuário": o mesmo caixa pode ser usado por vários usuários.
+    if (function_exists('nexa_cash_user_control_disabled') && nexa_cash_user_control_disabled($pdo, $companyId)) return null;
     // Uma sessão ativa de outro operador sempre impede reutilização do caixa físico.
     if (!function_exists('finance_table_exists') || finance_table_exists($pdo, 'gestao_cash_sessions')) {
     $st=$pdo->prepare("SELECT s.user_id,COALESCE(u.name,'Outro operador') name FROM gestao_cash_sessions s LEFT JOIN users u ON u.id=s.user_id AND u.company_id=s.company_id WHERE s.company_id=? AND s.bank_account_id=? AND s.status='ABERTO' AND s.user_id<>? ORDER BY s.id DESC LIMIT 1");

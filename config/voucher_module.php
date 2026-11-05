@@ -184,8 +184,11 @@ if (!function_exists('voucher_settle_customer_return')) {
     }
 
     $session = gestao_open_cash_session($pdo,$companyId,(int)$userId);
-    if (!$session) throw new RuntimeException('Abra o caixa antes de devolver o valor em dinheiro.');
-    $bankId = (int)($session['bank_account_id'] ?? 0);
+    $cashFree = function_exists('nexa_cash_user_control_disabled') && nexa_cash_user_control_disabled($pdo,$companyId);
+    if (!$session && !$cashFree) throw new RuntimeException('Abra o caixa antes de devolver o valor em dinheiro.');
+    // Caixa por usuário desabilitado: sai do caixa padrão do usuário, sem sessão.
+    $bankId = $session ? (int)($session['bank_account_id'] ?? 0) : gestao_user_default_cash_account($pdo,$companyId,(int)$userId);
+    if ($bankId <= 0) throw new RuntimeException('Defina o caixa padrão do usuário para devolver o valor em dinheiro.');
     if ($bankId > 0 && function_exists('gestao_pdv_assert_cash_account')) gestao_pdv_assert_cash_account($pdo,$companyId,$bankId,'Este usuário não possui permissão para usar o caixa da devolução.');
     $chartId = gestao_default_chart_id($pdo,$companyId,'DEBITO');
     if ($chartId <= 0) throw new RuntimeException('Configure um plano de contas de débito para registrar a devolução em dinheiro.');
@@ -194,7 +197,7 @@ if (!function_exists('voucher_settle_customer_return')) {
       ->execute([$companyId,$personId,$chartId,$bankId ?: null,$documentId,$description,$docNo,$amount,$notes !== '' ? $notes : null]);
     $movementId = (int)$pdo->lastInsertId();
     $pdo->prepare("INSERT INTO gestao_cash_operations (company_id,cash_session_id,user_id,type,amount,bank_account_id,chart_account_id,cost_center_id,movement_id,order_id,description,notes) VALUES (?,?,?,'ESTORNO',?,?,?,NULL,?,NULL,?,?)")
-      ->execute([$companyId,(int)$session['id'],$userId ?: null,$amount,$bankId ?: null,$chartId,$movementId,$description,$notes !== '' ? $notes : null]);
+      ->execute([$companyId,$session ? (int)$session['id'] : null,$userId ?: null,$amount,$bankId ?: null,$chartId,$movementId,$description,$notes !== '' ? $notes : null]);
     $pdo->prepare('UPDATE fiscal_documents SET finance_generated=1,updated_at=NOW() WHERE company_id=? AND id=?')->execute([$companyId,$documentId]);
     return ['mode'=>'DINHEIRO','movement_id'=>$movementId];
   }

@@ -1095,7 +1095,7 @@ gestao_flash();
     <?php if ($pdvFiscalStatusF11 !== ''): ?><div class="msg" style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><strong>Diagnóstico fiscal F11:</strong> <?= gestao_h($pdvFiscalStatusF11) ?></div><?php endif; ?>
   <?php endif; ?>
 <?php endif; ?>
-<?php if (!$cashSession): ?>
+<?php if (!$cashSession && !nexa_cash_user_control_disabled($pdo, $companyId)): ?>
   <div class="msg err">Caixa do usuário fechado. <?= $pdvCrossContext ? 'Para usar formas que exigem caixa, <a href="' . gestao_h($pdvContextUrl('gestao_caixa.php')) . '">abra o Caixa da empresa selecionada</a>.' : 'Vendas em dinheiro exigem abertura do caixa. <a href="gestao_caixa.php">Abrir caixa</a>' ?></div>
 <?php endif; ?>
 <?php if ($saleFinalizationBlocked): ?>

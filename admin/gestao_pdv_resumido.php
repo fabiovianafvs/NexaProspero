@@ -619,7 +619,7 @@ gestao_flash();
   <div class="msg ok"><strong>V11.46.3 · PDV Resumido Multiempresa.</strong> Produtos, cliente, pagamentos, Caixa, estoque e pedido pertencem à empresa selecionada pelo F11. NFC-e e NF-e podem ser emitidas em <strong>HOMOLOGAÇÃO</strong> quando habilitadas na empresa operacional; NFS-e e produção continuam bloqueadas.</div>
   <?php if ($pdvFiscalStatusF11 !== ''): ?><div class="msg" style="margin-top:8px"><strong>Diagnóstico fiscal F11:</strong> <?= gestao_h($pdvFiscalStatusF11) ?></div><?php endif; ?>
 <?php endif; ?>
-<?php if (!$cashSession): ?>
+<?php if (!$cashSession && !nexa_cash_user_control_disabled($pdo, $companyId)): ?>
   <div class="msg err">Caixa do usuário fechado. <?= $pdvCrossContext ? 'Para usar formas que exigem caixa, <a href="' . gestao_h($pdvContextUrl('gestao_caixa.php')) . '">abra o Caixa da empresa selecionada</a>.' : 'Vendas em dinheiro exigem abertura do caixa. <a href="gestao_caixa.php">Abrir caixa</a>' ?></div>
 <?php endif; ?>
 <?php if ($saleFinalizationBlocked): ?>

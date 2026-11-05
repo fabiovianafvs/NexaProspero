@@ -397,6 +397,7 @@ function admin_topbar(string $title, string $active=''): void {
       'os_configuracoes' => ['Configurações da O.S.', 'os_configuracoes.php'],
       'producao_configuracoes' => ['Configurações de O.P.', 'producao_configuracoes.php'],
       'configuracoes_cre' => ['Configurações CRE', 'configuracoes_cre.php'],
+      'configuracoes_caixa' => ['Configurações de caixa', 'configuracoes_caixa.php'],
       'configuracoes_desempenho' => ['Desempenho e períodos', 'configuracoes_desempenho.php'],
     ]],
     'suporte'    => ['Suporte','https://wa.me/5531985732002?text=Gostaria%20de%20suporte%20para%20o%20Nexa%20Pr%C3%B3spero.'],
