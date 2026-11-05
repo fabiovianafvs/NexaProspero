@@ -634,6 +634,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $saasBridgeSync = saas_sub_bridge_sync_signup_safe($pdo, $companyId);
       }
 
+      // Atendimento comercial no CRM da empresa faturadora (Central SaaS > Assinaturas
+      // Nexa > CRM). Vale para todos os cadastros, diretos e de revendas; não duplica.
+      $saasCrmLead = ['ok'=>false,'skipped'=>true];
+      try {
+        require_once __DIR__ . '/config/saas_crm_lead.php';
+        $crmOrigin = $signupFromReseller ? ('Revenda: ' . trim((string)($reseller['name'] ?? $reseller['fantasy_name'] ?? 'não identificada'))) : 'Direto';
+        $saasCrmLead = saas_crm_lead_open($pdo, $companyId, ['origin' => $crmOrigin, 'login' => (string)($loginEmail ?? ''), 'plan' => isset($plan) && is_array($plan) ? (string)($plan['name'] ?? '') : '']);
+      } catch (Throwable $e) {
+        error_log('[Nexa][Cadastro CRM] ' . $e->getMessage());
+      }
+
       $company = saas_find_company($pdo, $companyId) ?: [
         'id' => $companyId,
         'slug' => $slug,

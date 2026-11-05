@@ -639,8 +639,11 @@ if (!function_exists('saas_sub_bridge_sync_company')) {
     $personId=saas_sub_bridge_find_or_create_person($pdo,$billingCompanyId,$company,(int)($oldLink['person_id']??0));
     $linkId=saas_sub_bridge_upsert_link($pdo,$saasCompanyId,(int)$subscription['id'],$billingCompanyId,$personId,(int)($oldLink['contract_id']??0)?:null,'TRIAL',$trialStart,$trialEnd,null);
     $link=saas_sub_bridge_link($pdo,$saasCompanyId);$contractId=(int)($link['contract_id']??0);
-    if($contractId<=0){$contractId=saas_sub_bridge_create_contract($pdo,$billingCompanyId,$personId,$company,$subscription,$cfg,$modules);$pdo->prepare('UPDATE saas_subscription_links SET contract_id=?,last_sync_at=NOW(),last_error=NULL,updated_at=NOW() WHERE id=?')->execute([$contractId,$linkId]);}
-    saas_sub_bridge_sync_trial_items($pdo,$linkId,$billingCompanyId,$contractId,$allModules,$modules,$trialEnd);
+    // Trial NÃO gera contrato na empresa faturadora: o contrato só é lançado na
+    // ativação (Central SaaS, CRM ou contratação feita pelo próprio cliente), depois
+    // da conferência de módulos, quantidades e valores. Vínculos antigos que já
+    // tenham contrato de teste continuam sendo sincronizados como antes.
+    if($contractId>0) saas_sub_bridge_sync_trial_items($pdo,$linkId,$billingCompanyId,$contractId,$allModules,$modules,$trialEnd);
     $pdo->prepare('UPDATE saas_subscription_links SET lifecycle_status=\'TRIAL\',trial_started_at=?,trial_ends_at=?,next_due_date=?,last_sync_at=NOW(),last_error=NULL,updated_at=NOW() WHERE id=?')->execute([$trialStart->format('Y-m-d H:i:s'),$trialEnd->format('Y-m-d H:i:s'),$trialEnd->format('Y-m-d'),$linkId]);
     saas_sub_bridge_event($pdo,'TRIAL_SYNC:'.$saasCompanyId.':'.$subscription['id'],'TRIAL_SYNCED',$saasCompanyId,$linkId,$billingCompanyId,'SUBSCRIPTION',(int)$subscription['id'],['source'=>$source,'person_id'=>$personId,'contract_id'=>$contractId,'trial_ends_at'=>$trialEnd->format('Y-m-d H:i:s'),'modules'=>array_map(static fn($m)=>['module_id'=>(int)$m['saas_module_id'],'product_id'=>(int)$m['product_id'],'quantity'=>(float)$m['quantity']],$allModules),'billable_module_ids'=>$selection['selected_ids']],true,null);
     return ['ok'=>true,'saas_company_id'=>$saasCompanyId,'billing_company_id'=>$billingCompanyId,'person_id'=>$personId,'contract_id'=>$contractId,'link_id'=>$linkId,'trial_ends_at'=>$trialEnd->format('Y-m-d H:i:s'),'module_count'=>count($allModules),'billable_count'=>count($modules),'courtesy_count'=>count($selection['courtesy'])];

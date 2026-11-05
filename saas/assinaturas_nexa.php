@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/_layout.php';
 require_once __DIR__ . '/../config/saas_subscription_bridge.php';
+require_once __DIR__ . '/../config/saas_crm_lead.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 if (empty($_SESSION['saas_sub_bridge_csrf'])) $_SESSION['saas_sub_bridge_csrf']=bin2hex(random_bytes(24));
@@ -46,6 +47,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     sb_csrf((string)($_POST['csrf']??''));
     if(!$ready) throw new RuntimeException('Aplique primeiro a migration V11.52 pelo Atualizador do Banco.');
     $action=(string)($_POST['action']??'');
+    if($action==='save_crm_lead'){
+      if($billingCompanyId<=0)throw new RuntimeException('Configure primeiro a empresa faturadora.');
+      saas_crm_lead_save_config($pdo,$_POST,$billingCompanyId);
+      $msg='Configuração do atendimento no CRM salva.';
+    }
     if($action==='save_config'){
       $billingCompanyId=max(0,(int)($_POST['billing_company_id']??0));
       if($billingCompanyId<=0) throw new RuntimeException('Selecione a empresa faturadora do Admin.');
@@ -91,7 +97,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     }
     if($action==='sync_company'){
       $companyId=max(0,(int)($_POST['saas_company_id']??0));if($companyId<=0)throw new RuntimeException('Empresa SaaS inválida.');$r=saas_sub_bridge_sync_company($pdo,$companyId,'central_saas');
-      $msg='Sincronização concluída: Pessoa #'.(int)$r['person_id'].' · Contrato #'.(int)$r['contract_id'].' · '.(int)$r['module_count'].' módulo(s) faturável(is).';
+      $msg='Sincronização concluída: Pessoa #'.(int)$r['person_id'].' · '.((int)$r['contract_id']>0?'Contrato #'.(int)$r['contract_id']:'sem contrato (teste)').' · '.(int)$r['module_count'].' módulo(s) faturável(is).';
     }
     if($action==='migrate_existing'){
       $r=saas_sub_bridge_migrate_existing($pdo,$_POST,'central_saas_migration');
@@ -261,9 +267,27 @@ saas_layout_start($sectionTitles[$section].' • Central SaaS',$sectionTitles[$s
     <?php endif;?>
   </section>
 
+  <?php $crmCfg=saas_crm_lead_config($pdo);$crmOpts=saas_crm_lead_options($pdo,$billingCompanyId);?>
+  <section class="panel sb-section-card">
+    <h3>Atendimento no CRM (novos cadastros)</h3>
+    <p class="muted">Cada empresa nova cadastrada no SaaS (direta ou por revenda) abre um atendimento no CRM da empresa faturadora, para acompanhar a negociação.</p>
+    <?php if(!saas_crm_lead_ready($pdo)):?><div class="sb-note">O módulo CRM ainda não está instalado na empresa faturadora.</div><?php elseif($billingCompanyId<=0):?><div class="sb-note">Configure primeiro a empresa faturadora.</div><?php else:?>
+    <form method="post"><input type="hidden" name="csrf" value="<?=sb_h($csrf)?>"><input type="hidden" name="section" value="faturamento"><input type="hidden" name="action" value="save_crm_lead">
+      <div class="sb-fields">
+        <div class="sb-field"><label>Ativação</label><label style="display:flex;gap:8px;align-items:center;height:44px"><input style="width:auto" type="checkbox" name="crm_enabled" value="1" <?=!empty($crmCfg['enabled'])?'checked':''?>> Abrir atendimento</label></div>
+        <div class="sb-field"><label>Status inicial (fase)</label><select name="crm_status_id"><option value="0">Primeiro status ativo</option><?php foreach($crmOpts['statuses'] as $r):?><option value="<?=(int)$r['id']?>" <?=(int)$crmCfg['status_id']===(int)$r['id']?'selected':''?>><?=sb_h($r['name'])?></option><?php endforeach;?></select></div>
+        <div class="sb-field"><label>Tipo de atendimento</label><select name="crm_service_type_id"><option value="0">Primeiro tipo ativo</option><?php foreach($crmOpts['types'] as $r):?><option value="<?=(int)$r['id']?>" <?=(int)$crmCfg['service_type_id']===(int)$r['id']?'selected':''?>><?=sb_h($r['name'])?></option><?php endforeach;?></select></div>
+        <div class="sb-field"><label>Responsável</label><select name="crm_responsible_user_id"><option value="0">Administrador da empresa</option><?php foreach($crmOpts['users'] as $r):?><option value="<?=(int)$r['id']?>" <?=(int)$crmCfg['responsible_user_id']===(int)$r['id']?'selected':''?>><?=sb_h($r['name'])?></option><?php endforeach;?></select></div>
+        <div class="sb-field"><label>Temperatura do lead (0 a 100)</label><input type="number" min="0" max="100" name="crm_lead_temperature" value="<?=(int)$crmCfg['lead_temperature']?>"></div>
+      </div>
+      <div style="height:14px"></div><button class="btn2 btn2-dark">Salvar atendimento no CRM</button>
+    </form>
+    <?php endif;?>
+  </section>
+
   <section class="panel sb-section-card">
     <h3>Regra operacional</h3>
-    <div class="sb-note">Novos Trials continuam no fluxo: Empresa SaaS → Pessoa → Contrato <strong>TESTE</strong>. Clientes atuais podem ser <strong>vinculados/migrados</strong> sem criar cobrança retroativa.</div>
+    <div class="sb-note">Novos Trials: Empresa SaaS → Pessoa → atendimento no CRM, <strong>sem contrato</strong>. O contrato só é lançado na ativação (Central SaaS ou CRM, com conferência de módulos, quantidades e valores) ou quando o próprio cliente contrata pela tela de renovação.</div>
     <p><strong>Empresa vinculada:</strong> <?= $billingCompany?sb_h($billingCompany['name']).' (#'.(int)$billingCompany['id'].')':'Não configurada' ?></p>
     <p><strong>Automação:</strong> <span class="sb-status <?=!empty($cfg['enabled'])?'sb-on':'sb-off'?>"><?=!empty($cfg['enabled'])?'ATIVA':'DESATIVADA'?></span></p>
     <p class="muted">A vinculação manual pode ser preparada mesmo com a automação desativada. Confirmar o vínculo não gera Pedido, cobrança, boleto, PIX ou NFS-e; apenas prepara Pessoa, Contrato, módulos e datas para os próximos ciclos.</p>
