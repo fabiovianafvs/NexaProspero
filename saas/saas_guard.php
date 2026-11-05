@@ -26,6 +26,8 @@ if (!function_exists('saas_company_is_blocked')) {
     $sub=saas_get_latest_subscription($pdo,(int)($company['id']??0));
     if (!$sub) return ['blocked'=>true,'reason'=>'Nenhuma assinatura encontrada. Contate o suporte.'];
     $status=strtolower((string)($sub['status']??''));
+    // Bonificada: uso próprio/cortesia/permuta. Sempre liberada, sem vencimento.
+    if ($status==='complimentary') return ['blocked'=>false,'reason'=>'','cycle'=>['phase'=>'none','blocked'=>false,'days_left'=>null,'due_date'=>'','message'=>'']];
     if (in_array($status,['canceled','cancelled','pending_payment'],true)) return ['blocked'=>true,'reason'=>'Assinatura não ativa. Consulte a regularização.'];
     if (in_array($status,['trial','past_due'],true) && empty($sub['ends_at'])) return ['blocked'=>true,'reason'=>'Validade da assinatura não informada.'];
     $cycle=nexa_saas_cycle_state($sub);

@@ -96,6 +96,7 @@ function tenant_access_status(PDO $pdo, array $company): array {
   $sub=tenant_latest_subscription($pdo,(int)($company['id']??0));
   if (!$sub) return ['allowed'=>false,'reason'=>'Assinatura não localizada.'];
   $status=strtolower((string)($sub['status']??''));
+  if ($status==='complimentary') return ['allowed'=>true,'reason'=>'Bonificada'];
   if (in_array($status,['pending_payment','canceled','cancelled'],true)) return ['allowed'=>false,'reason'=>'Assinatura não ativa.'];
   if (in_array($status,['trial','past_due'],true) && empty($sub['ends_at'])) return ['allowed'=>false,'reason'=>'Validade da assinatura não informada.'];
   if (in_array($status,['trial','active','past_due'],true)) {

@@ -37,6 +37,7 @@ function badge_color(?string $status): string {
     'active' => 'background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;',
     'trial' => 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;',
     'past_due' => 'background:#fff7ed;color:#c2410c;border:1px solid #fdba74;',
+    'complimentary' => 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;',
     'canceled' => 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;',
     'blocked', 'suspended' => 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;',
     default => 'background:#f3f4f6;color:#374151;border:1px solid #d1d5db;',
@@ -299,7 +300,7 @@ saas_layout_start(
             <td data-label="Empresa"><strong><?= e((string)$r['name']) ?></strong><span class="muted"><?= e((string)($r['email'] ?? '')) ?></span><?php if ($doc !== ''): ?><span class="muted">Documento: <?= e($doc) ?></span><?php endif; ?><?php if ($phone !== ''): ?><span class="muted">Telefone: <?= e($phone) ?></span><?php endif; ?><span class="muted">Status: <?= e((string)$r['company_status']) ?></span></td>
             <td data-label="Plano"><strong><?= e((string)($r['plan_name'] ?? '-')) ?></strong><?php if (!empty($r['plan_is_internal'])): ?><span class="pill" style="background:#fff7ed;color:#9a3412;border:1px solid #fdba74;margin-top:4px;">Interno</span><?php endif; ?><span class="muted"><?= money_br((float)($r['price'] ?? 0)) ?></span></td>
             <td data-label="Módulos"><div class="company-modules"><?php $codes = saas_company_module_codes($pdo, (int)$r['id']); ?><?php if ($codes): ?><?php foreach ($codes as $code): ?><span class="pill" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;"><?= e(saas_module_label($code)) ?></span><?php endforeach; ?><?php else: ?><span class="muted">Nenhum</span><?php endif; ?></div></td>
-            <td data-label="Assinatura"><span class="pill" style="<?= badge_color($r['subscription_status'] ?? null) ?>"><?= e((string)($r['subscription_status'] ?? '-')) ?></span><span class="muted">Início: <?= e(saas_date_br($r['started_at'] ?? null, '-')) ?></span></td>
+            <td data-label="Assinatura"><span class="pill" style="<?= badge_color($r['subscription_status'] ?? null) ?>"><?= e(($r['subscription_status'] ?? '') === 'complimentary' ? 'bonificada' : (string)($r['subscription_status'] ?? '-')) ?></span><span class="muted">Início: <?= e(saas_date_br($r['started_at'] ?? null, '-')) ?></span></td>
             <td data-label="Vencimento"><strong><?= e(saas_date_br($r['ends_at'] ?? null, '-')) ?></strong><span class="muted">Próx. cobrança: <?= e(saas_date_br($r['next_billing_at'] ?? null, '-')) ?></span></td>
             <td data-label="Cadastro"><strong><?= e(saas_date_br($r['created_at'] ?? null, '-')) ?></strong><span class="muted"><?= (int)($r['total_pedidos'] ?? 0) ?> pedido(s)</span></td>
             <td data-label="Subdomínio"><strong><?= e((string)$r['subdomain']) ?></strong><span class="muted"><?= e((string)$r['subdomain']) ?>.nexaprospero.com.br</span></td>

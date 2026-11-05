@@ -9,7 +9,7 @@ if (!function_exists('saas_billing_ensure_schema')) {
   function saas_billing_ensure_schema(PDO $pdo): void {
     inter_pix_ensure_schema($pdo);
     pagbank_ensure_schema($pdo);
-    try { $pdo->exec("ALTER TABLE subscriptions MODIFY COLUMN status ENUM('trial','active','past_due','canceled','cancelled','pending_payment') NOT NULL DEFAULT 'trial'"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE subscriptions MODIFY COLUMN status ENUM('trial','active','past_due','canceled','cancelled','pending_payment','complimentary') NOT NULL DEFAULT 'trial'"); } catch (Throwable $e) {}
     try { $pdo->exec("ALTER TABLE companies MODIFY COLUMN status ENUM('active','blocked','suspended') NOT NULL DEFAULT 'active'"); } catch (Throwable $e) {}
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS saas_charges (

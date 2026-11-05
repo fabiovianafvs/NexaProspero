@@ -10,7 +10,8 @@ declare(strict_types=1);
  * fim do teste. Este script limpa os contratos de teste antigos.
  *
  * Segurança:
- *  - Só mexe em contratos com status TESTE, ligados a assinatura TRIAL.
+ *  - Só mexe em contratos com status TESTE, ligados a assinatura TRIAL ou
+ *    BONIFICADA (bonificada nunca gera contrato).
  *  - Pula qualquer contrato que já tenha competência gerada, Pedido, boleto ou
  *    título em aberto (esses ficam para conferência manual).
  *  - Sem --executar apenas LISTA (simulação). Nada é apagado: o contrato fica
@@ -64,8 +65,8 @@ foreach ($rows as $r) {
     $label = sprintf('Empresa #%d %s · contrato nº %s (#%d) · R$ %s',
         (int)$r['saas_company_id'], (string)$r['company_name'], (string)$r['contract_number'],
         (int)$r['contract_id'], number_format((float)$r['total_amount'], 2, ',', '.'));
-    if (strtolower((string)($r['sub_status'] ?? '')) !== 'trial') {
-        echo "[PULADO] {$label} — assinatura não está em teste (" . ($r['sub_status'] ?: 'sem assinatura') . ").\n";
+    if (!in_array(strtolower((string)($r['sub_status'] ?? '')), ['trial', 'complimentary'], true)) {
+        echo "[PULADO] {$label} — assinatura não está em teste nem bonificada (" . ($r['sub_status'] ?: 'sem assinatura') . ").\n";
         $skipped++;
         continue;
     }

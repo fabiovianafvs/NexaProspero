@@ -62,8 +62,27 @@ function badge_color(?string $status): string {
     'trial' => 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;',
     'past_due' => 'background:#fff7ed;color:#c2410c;border:1px solid #fdba74;',
     'canceled' => 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;',
+    'complimentary' => 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;',
     default => 'background:#f3f4f6;color:#374151;border:1px solid #d1d5db;',
   };
+}
+
+function saas_sub_status_label(?string $status): string {
+  return match (strtolower((string)$status)) {
+    'trial' => 'Trial', 'active' => 'Ativa', 'past_due' => 'Em atraso', 'canceled', 'cancelled' => 'Cancelada',
+    'pending_payment' => 'Aguardando pagamento', 'complimentary' => 'Bonificada', default => (string)$status,
+  };
+}
+
+/** O status Bonificada depende da migração 20261104_saas_status_bonificada_v1. */
+function saas_empresa_complimentary_ready(PDO $pdo): bool {
+  try {
+    $st = $pdo->prepare("SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'subscriptions' AND column_name = 'status' LIMIT 1");
+    $st->execute();
+    return str_contains((string)$st->fetchColumn(), "'complimentary'");
+  } catch (Throwable $e) {
+    return false;
+  }
 }
 
 function date_input_value(?string $dt): string {
@@ -208,7 +227,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $grantReason = trim((string)($_POST['granted_reason'] ?? ''));
 
       if ($planId <= 0) throw new RuntimeException('Selecione um plano.');
-      if (!in_array($status, ['trial','active','past_due','canceled'], true)) throw new RuntimeException('Status de assinatura inv&aacute;lido.');
+      if (!in_array($status, ['trial','active','past_due','canceled','complimentary'], true)) throw new RuntimeException('Status de assinatura inv&aacute;lido.');
+      if ($status === 'complimentary' && !saas_empresa_complimentary_ready($pdo)) throw new RuntimeException('Para usar o status Bonificada, aplique antes "Assinaturas SaaS - status Bonificada" no Atualizador do Banco.');
       if ($endsAt !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $endsAt)) throw new RuntimeException('Data de vencimento inv&aacute;lida.');
       if ($nextBillingAt !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $nextBillingAt)) throw new RuntimeException('Data de pr&oacute;xima cobran&ccedil;a inv&aacute;lida.');
 
@@ -222,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $activationUrl = '';
       $currentStatus = strtolower((string)($subscription['status'] ?? ''));
       if ($status === 'active' && $currentStatus !== 'active' && saas_empresa_activation_needs_contract($pdo, $id)) {
-        $status = in_array($currentStatus, ['trial','active','past_due','canceled'], true) ? $currentStatus : 'trial';
+        $status = in_array($currentStatus, ['trial','active','past_due','canceled','complimentary'], true) ? $currentStatus : 'trial';
         $activationUrl = '/saas/assinaturas_nexa.php?section=contratos&migrate=' . $id . '&activate=1#migracaoExistente';
       }
 
@@ -247,8 +267,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('INSERT INTO subscriptions (' . implode(',', $cols) . ') VALUES (' . implode(',', array_fill(0, count($cols), '?')) . ')')->execute($vals);
       }
 
-      if (in_array($status, ['trial','active'], true)) {
+      if (in_array($status, ['trial','active','complimentary'], true)) {
         $pdo->prepare("UPDATE companies SET status = 'active' WHERE id = ?")->execute([$id]);
+      }
+
+      // Bonificada não gera contrato nem cobrança. Se já existir contrato ATIVO
+      // ou de TESTE vinculado, avisa (o cancelamento é manual, em Contratos).
+      $complimentaryWarn = '';
+      if ($status === 'complimentary') {
+        try {
+          $bLink = saas_sub_bridge_schema_ready($pdo) ? saas_sub_bridge_link($pdo, $id) : null;
+          if ($bLink && (int)($bLink['contract_id'] ?? 0) > 0) {
+            $stc = $pdo->prepare("SELECT contract_number, status FROM contracts WHERE company_id = ? AND id = ? LIMIT 1");
+            $stc->execute([(int)$bLink['billing_company_id'], (int)$bLink['contract_id']]);
+            $bc = $stc->fetch(PDO::FETCH_ASSOC);
+            if ($bc && in_array(strtoupper((string)$bc['status']), ['ATIVO','TESTE'], true)) {
+              $complimentaryWarn = ' Atenção: esta empresa ainda tem o contrato nº ' . (string)$bc['contract_number'] . ' (' . (string)$bc['status'] . ') na empresa faturadora. Se ela não deve mais ser cobrada, cancele esse contrato em Contratos.';
+            }
+          }
+        } catch (Throwable $e) {}
       }
 
       if ($activationUrl !== '') {
@@ -256,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
       }
 
-      $msg = 'Assinatura, plano e vencimento atualizados com sucesso.';
+      $msg = 'Assinatura, plano e vencimento atualizados com sucesso.' . ($complimentaryWarn ?? '');
     }
 
     if ($action === 'save_modules') {
@@ -349,7 +386,7 @@ saas_layout_start(
     <h3>Assinatura atual</h3>
     <?php if ($subscription): ?>
       <p><strong>Plano:</strong> <?= e((string)$subscription['plan_name']) ?> (<?= money_br((float)$subscription['price']) ?>)</p>
-      <p><strong>Status:</strong> <span class="pill" style="<?= badge_color($subscription['status'] ?? null) ?>"><?= e((string)$subscription['status']) ?></span></p>
+      <p><strong>Status:</strong> <span class="pill" style="<?= badge_color($subscription['status'] ?? null) ?>"><?= e(saas_sub_status_label($subscription['status'] ?? '')) ?></span></p>
       <p><strong>In&iacute;cio:</strong> <?= e(saas_date_br($subscription['started_at'] ?? null)) ?></p>
       <p><strong>Vencimento:</strong> <?= e(saas_date_br($subscription['ends_at'] ?? null)) ?></p>
       <p><strong>Pr&oacute;x. cobran&ccedil;a:</strong> <?= e(saas_date_br($subscription['next_billing_at'] ?? null)) ?></p>
@@ -377,7 +414,7 @@ saas_layout_start(
       <div style="height:12px"></div>
       <label>Status da assinatura</label>
       <select name="status" class="field" required>
-        <?php foreach (['trial'=>'Trial','active'=>'Ativa','past_due'=>'Em atraso','canceled'=>'Cancelada'] as $k=>$v): ?>
+        <?php foreach (['trial'=>'Trial','active'=>'Ativa','complimentary'=>'Bonificada (sem cobrança)','past_due'=>'Em atraso','canceled'=>'Cancelada'] as $k=>$v): ?>
           <option value="<?= e($k) ?>" <?= (($subscription['status'] ?? 'active') === $k) ? 'selected' : '' ?>><?= e($v) ?></option>
         <?php endforeach; ?>
       </select>

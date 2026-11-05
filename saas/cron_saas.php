@@ -18,7 +18,7 @@ try {
     $id=(int)$r['id']; $summary['checked']++;
     $status=strtolower((string)$r['sub_status']);
     $companyStatus=strtolower((string)$r['company_status']);
-    if ($companyStatus==='suspended'||in_array($status,['canceled','cancelled','pending_payment'],true)) continue;
+    if ($companyStatus==='suspended'||in_array($status,['canceled','cancelled','pending_payment','complimentary'],true)) continue;
     try {
       $cycle=nexa_saas_cycle_state(['status'=>$status,'ends_at'=>$r['ends_at']]);
       if (in_array($cycle['phase'],['warning','last_day','grace'],true)) $summary['notices']++;

@@ -21,6 +21,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
   function nexa_schema_updater_registry(): array {
     return [
       [
+        'id' => '20261104_saas_status_bonificada_v1',
+        'module' => 'saas_status_complimentary',
+        'version' => 20261104002,
+        'label' => 'Assinaturas SaaS - status Bonificada',
+        'description' => 'Acrescenta o status Bonificada: empresa ativa, sem vencimento, sem contrato e sem cobrança (uso próprio, cortesia ou permuta).',
+        'file' => __DIR__ . '/../db/20261104_saas_status_bonificada_v1.sql',
+        'sha256' => '034f511752fa08755a305db37e34636048339a967e5585d8583c9a38aced985f',
+        'order' => 20261104002,
+      ],
+      [
         'id' => '20261104_saas_valor_negociado_v1',
         'module' => 'saas_negotiated_price',
         'version' => 20261104001,
