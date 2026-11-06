@@ -10,6 +10,7 @@ Sistema SaaS de gestão para varejo (PDV, pedidos, comandas, estoque, financeiro
 - O histórico Git da VPS fica em `/root/git/nexa.git` (fora da pasta pública).
 - Apache só na porta 80 (HTTPS feito pela Cloudflare). Sites: `nexa-app.conf` (app.nexaprospero.com.br), `nexaprospero.conf` (domínio raiz → `/var/www/nexa-landing`; curinga `*.nexaprospero.com.br` → `/var/www/nexa`), `nexa-homolog.conf` (homologação).
 - Crons em produção: `workers/os_fiscal_queue_worker.php` e `workers/whatsapp_keepalive.php` (a cada minuto). Serviços systemd: `nexa-brain-worker`, `nexa-realtime`, `nexa-fiscal-dfe-sync`, `redis-server`, `php8.3-fpm`.
+- Agente de manutenção `nexa-ops` (`deploy/ops/`): o painel Saúde do Sistema (suporte) grava pedidos com uma palavra fixa (`resolver`/`reiniciar_vps`) em `/var/lib/nexa-ops/queue/`; o `nexa-ops.path` dispara o runner como root. Exige senha master; desligado na homologação. Nunca aceitar comandos vindos do navegador.
 
 ## Fluxo de trabalho: homologação → produção
 

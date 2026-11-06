@@ -1,0 +1,8 @@
+[Unit]
+Description=Nexa Próspero - agente de manutenção (pedidos do painel Saúde do Sistema)
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/nexa-ops-runner
+TimeoutStartSec=300

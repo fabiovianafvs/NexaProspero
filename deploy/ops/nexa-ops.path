@@ -1,0 +1,10 @@
+[Unit]
+Description=Nexa Próspero - observa pedidos de manutenção do painel Saúde do Sistema
+
+[Path]
+PathExistsGlob=/var/lib/nexa-ops/queue/*.req
+MakeDirectory=yes
+DirectoryMode=0770
+
+[Install]
+WantedBy=multi-user.target

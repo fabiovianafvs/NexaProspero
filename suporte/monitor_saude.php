@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/monitor_saude_auth.php';
+define('NEXA_HEALTH_OPS_ALLOWED', true);
+require_once __DIR__ . '/monitor_saude_acoes.php';
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('X-Content-Type-Options: nosniff');
@@ -46,6 +48,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($manualToken, (string)($_POST['nexa_health_token'] ?? ''))) {
         http_response_code(403);
         $message = 'Sessão inválida para atualizar. Reabra a página e tente novamente.';
+    } elseif (isset($_POST['nexa_ops_action'])) {
+        // Botões de manutenção: exigem a senha master do Nexa Próspero.
+        $opsAction = (string)$_POST['nexa_ops_action'];
+        $fails = array_values(array_filter((array)($_SESSION['nexa_ops_fails'] ?? []), static fn($t) => (int)$t > time() - 900));
+        if (!nexa_ops_available()) {
+            $message = nexa_ops_unavailable_reason();
+        } elseif (!isset(NEXA_OPS_ACTIONS[$opsAction])) {
+            $message = 'Ação inválida.';
+        } elseif (count($fails) >= 5) {
+            $message = 'Muitas tentativas com senha incorreta. Aguarde 15 minutos.';
+        } elseif ((time() - (int)($_SESSION['nexa_ops_last'] ?? 0)) < 60) {
+            $message = 'Aguarde 1 minuto entre ações de manutenção.';
+        } else {
+            $master = nexa_ops_check_master_password($pdo, (string)($_POST['master_password'] ?? ''));
+            if (!$master) {
+                $fails[] = time();
+                $message = 'Senha master incorreta. Nenhuma ação foi executada.';
+                error_log('[Nexa][Saúde] Senha master incorreta para "' . $opsAction . '" pelo suporte ' . (string)($user['email'] ?? ''));
+            } else {
+                try {
+                    $reqId = nexa_ops_request($opsAction, (string)($user['email'] ?? '') . ' / master ' . (string)$master['email']);
+                    $_SESSION['nexa_ops_last'] = time();
+                    $_SESSION['nexa_ops_last_id'] = $reqId;
+                    error_log('[Nexa][Saúde] Ação "' . $opsAction . '" pedida por ' . (string)($user['email'] ?? '') . ' (master ' . (string)$master['email'] . '), pedido ' . $reqId);
+                    $message = $opsAction === 'reiniciar_vps'
+                        ? 'Pedido de reinício enviado. A VPS reinicia em alguns segundos e o sistema fica fora do ar por 1 a 3 minutos. Depois, atualize esta página.'
+                        : 'Pedido enviado. Em alguns segundos o relatório aparece em "Manutenção da VPS" (atualize a página).';
+                } catch (Throwable $err) {
+                    $message = $err->getMessage();
+                }
+            }
+        }
+        $_SESSION['nexa_ops_fails'] = $fails;
     } elseif ((time() - (int)($_SESSION['nexa_health_last_request'] ?? 0)) < 15) {
         $message = 'Aguarde pelo menos 15 segundos entre consultas manuais.';
     } else {
@@ -133,5 +168,19 @@ if (!is_array($alerts)) $alerts=[];
 <section class="panel"><h2>WhatsApp — somente recursos</h2><div class="table-scroll"><table><tbody><tr><th>Processos Chrome</th><td><?= health_e($fresh ? ($health['whatsapp']['chrome_processos']??'—') : '—') ?></td></tr><tr><th>Sessões Chrome distintas detectadas</th><td><?= health_e($fresh ? ($health['whatsapp']['sessoes_detectadas']??'—') : '—') ?></td></tr><tr><th>Memória RSS somada (estimativa)</th><td><?= health_e($fresh ? ($health['whatsapp']['rss_mib_somada']??'—') : '—') ?> MiB</td></tr></tbody></table></div><p class="detail">Contagem por processos; a soma RSS pode duplicar memória compartilhada. Não substitui nem altera o <a href="/suporte/whatsapp.php">Monitor do WhatsApp</a>.</p></section>
 <section class="panel"><h2>Últimas verificações</h2><p class="detail"><?= count($history) ?> consultas manuais nesta sessão (máximo 30) · <?= $failed ?> com falhas HTTP.</p><div class="table-scroll"><table><thead><tr><th>Horário UTC</th><th>Estado</th><th>Falhas HTTP</th></tr></thead><tbody><?php foreach ($rows as $item): ?><tr><td class="nowrap"><?= health_e($item['em']??'—') ?></td><td><span class="chip <?= health_e(health_label($item['status']??'')) ?>"><?= health_e($item['status']??'—') ?></span></td><td><?= health_e($item['falhas_http']??'—') ?></td></tr><?php endforeach; ?></tbody></table></div></section>
 </div>
-<p class="notice">Consulta sob demanda, sem agendamentos, sem tarefas de fundo e sem reinícios. As amostras ficam somente na sessão autenticada e são apagadas no logout. Sem privilégios administrativos, o histórico OOM não é consultado automaticamente (indicado por —). Para detectar indisponibilidade total da VPS, seria necessário monitoramento externo, não ativado aqui.</p>
+<?php $opsOk = nexa_ops_available(); $opsResults = $opsOk ? nexa_ops_recent_results(5) : []; $opsPending = $opsOk ? nexa_ops_pending() : 0; ?>
+<section class="panel" id="manutencao" style="margin-top:18px"><h2>Manutenção da VPS</h2>
+<?php if (!$opsOk): ?><div class="alert"><?= health_e(nexa_ops_unavailable_reason()) ?></div><?php else: ?>
+<p class="detail">As duas ações pedem a <strong>senha master do Nexa Próspero</strong> (usuário administrador da plataforma). Use primeiro <strong>Resolver sem reiniciar</strong>: ele reinicia apenas os serviços que estiverem parados, recarrega o PHP e o Apache sem derrubar quem está usando e limpa logs antigos se o disco estiver acima de 90%. <strong>Reiniciar a VPS</strong> deixa todas as empresas fora do ar por 1 a 3 minutos.</p>
+<div class="two">
+ <form method="post" action="/suporte/monitor_saude.php#manutencao" onsubmit="return confirm('Executar \'Resolver sem reiniciar\' na VPS?');"><input type="hidden" name="nexa_health_token" value="<?= health_e($manualToken) ?>"><input type="hidden" name="nexa_ops_action" value="resolver"><div class="manual-form"><input type="password" name="master_password" placeholder="Senha master" autocomplete="current-password" required style="padding:10px 12px;border:1px solid #c9d6ea;border-radius:12px;min-width:200px"><button class="manual-button" type="submit">Resolver sem reiniciar</button></div></form>
+ <form method="post" action="/suporte/monitor_saude.php#manutencao" onsubmit="return confirm('ATENÇÃO: reiniciar a VPS deixa TODAS as empresas fora do ar por 1 a 3 minutos. Confirmar o reinício?');"><input type="hidden" name="nexa_health_token" value="<?= health_e($manualToken) ?>"><input type="hidden" name="nexa_ops_action" value="reiniciar_vps"><div class="manual-form"><input type="password" name="master_password" placeholder="Senha master" autocomplete="current-password" required style="padding:10px 12px;border:1px solid #c9d6ea;border-radius:12px;min-width:200px"><button class="manual-button" type="submit" style="background:#b91c1c">Reiniciar a VPS</button></div></form>
+</div>
+<?php if ($opsPending > 0): ?><div class="alert">Pedido em andamento. <a href="/suporte/monitor_saude.php#manutencao">Atualize a página</a> em alguns segundos para ver o relatório.</div><?php endif; ?>
+<h2 style="margin-top:14px">Últimas ações</h2>
+<?php if (!$opsResults): ?><p class="detail">Nenhuma ação executada ainda.</p><?php endif; ?>
+<?php foreach ($opsResults as $r): ?><details <?= ($r['id'] === ($_SESSION['nexa_ops_last_id'] ?? '')) ? 'open' : '' ?> style="margin:8px 0"><summary><strong><?= health_e($r['when']) ?></strong> (horário de Brasília)</summary><pre style="white-space:pre-wrap;background:#f4f7fb;border:1px solid #dce7f5;border-radius:12px;padding:10px;font-size:12px;margin:8px 0 0"><?= health_e($r['text']) ?></pre></details><?php endforeach; ?>
+<?php endif; ?>
+</section>
+<p class="notice">Consulta sob demanda, sem agendamentos, sem tarefas de fundo; reinícios só pelos botões de Manutenção, com senha master. As amostras ficam somente na sessão autenticada e são apagadas no logout. Sem privilégios administrativos, o histórico OOM não é consultado automaticamente (indicado por —). Para detectar indisponibilidade total da VPS, seria necessário monitoramento externo, não ativado aqui.</p>
 </div></body></html>
