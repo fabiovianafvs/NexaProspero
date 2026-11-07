@@ -342,7 +342,8 @@ if ($pedidoAntes && $status !== $statusAnterior) {
         }
       } catch (Throwable $eBiz) {}
       $msg = whatsapp_build_status_message($pedidoAntes, $status, $appWa, $waCfg);
-      whatsapp_send_message($pdo, COMPANY_ID, (string)($pedidoAntes['whatsapp'] ?? ''), $msg, 'status_customer', $id, $waCfg);
+      // Fila: a troca de status termina na hora; o envio é feito em segundo plano.
+      whatsapp_queue_message($pdo, COMPANY_ID, (string)($pedidoAntes['whatsapp'] ?? ''), $msg, 'status_customer', $id, $waCfg);
     }
   } catch (Throwable $e) {
     try {

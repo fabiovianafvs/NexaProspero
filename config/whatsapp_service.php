@@ -463,9 +463,71 @@ function whatsapp_log(PDO $pdo, int $companyId, ?int $pedidoId, string $tipo, st
   } catch (Throwable $e) {}
 }
 
+/**
+ * Disjuntor do WhatsApp: quando o serviço (Chrome/whatsapp-web.js) trava, cada
+ * envio prendia uma tela por até 25-60s e o PHP inteiro ficava lento. Depois de
+ * 3 falhas de comunicação em 5 minutos, os envios ficam pausados por 2 minutos
+ * e falham na hora, com aviso. Um envio de teste é liberado ao fim da pausa.
+ * Estado guardado num arquivo temporário (sem banco, sem DDL).
+ */
+const WHATSAPP_BREAKER_THRESHOLD = 3;
+const WHATSAPP_BREAKER_WINDOW = 300;
+const WHATSAPP_BREAKER_PAUSE = 120;
+const WHATSAPP_BREAKER_MESSAGE = 'WhatsApp com problemas no momento: os envios foram pausados por alguns minutos para não travar o sistema. Os demais recursos continuam funcionando normalmente.';
+
+function whatsapp_breaker_file(string $base): string {
+  return rtrim(sys_get_temp_dir(), '/') . '/nexa_wa_breaker_' . md5($base) . '.json';
+}
+
+function whatsapp_breaker_read(string $base): array {
+  $raw = @file_get_contents(whatsapp_breaker_file($base));
+  $data = is_string($raw) ? json_decode($raw, true) : null;
+  return is_array($data) ? $data + ['fails' => [], 'open_until' => 0] : ['fails' => [], 'open_until' => 0];
+}
+
+function whatsapp_breaker_write(string $base, array $state): void {
+  @file_put_contents(whatsapp_breaker_file($base), json_encode($state), LOCK_EX);
+}
+
+/** true = envios pausados agora. */
+function whatsapp_breaker_is_open(string $base): bool {
+  $state = whatsapp_breaker_read($base);
+  $until = (int)($state['open_until'] ?? 0);
+  if ($until <= time()) return false;
+  return true;
+}
+
+function whatsapp_breaker_status(?array $cfg = null): array {
+  $base = rtrim((string)(($cfg ?? [])['service_url'] ?? (getenv('WHATSAPP_SERVICE_URL') ?: 'http://127.0.0.1:3333')), '/');
+  $state = whatsapp_breaker_read($base);
+  $until = (int)($state['open_until'] ?? 0);
+  return ['open' => $until > time(), 'seconds_left' => max(0, $until - time())];
+}
+
+function whatsapp_breaker_record(string $base, bool $success): void {
+  $state = whatsapp_breaker_read($base);
+  if ($success) {
+    if (!empty($state['fails']) || (int)($state['open_until'] ?? 0) > 0) whatsapp_breaker_write($base, ['fails' => [], 'open_until' => 0]);
+    return;
+  }
+  $now = time();
+  $fails = array_values(array_filter((array)($state['fails'] ?? []), static fn($t) => (int)$t > $now - WHATSAPP_BREAKER_WINDOW));
+  $fails[] = $now;
+  $openUntil = (int)($state['open_until'] ?? 0);
+  // Falha no envio de teste após a pausa ou 3 falhas na janela: pausa de novo.
+  $justReopened = $openUntil > 0 && ($now - $openUntil) < WHATSAPP_BREAKER_PAUSE;
+  if (count($fails) >= WHATSAPP_BREAKER_THRESHOLD || $justReopened) {
+    $openUntil = $now + WHATSAPP_BREAKER_PAUSE;
+    error_log('[Nexa][WhatsApp] Disjuntor aberto: envios pausados por ' . WHATSAPP_BREAKER_PAUSE . 's após falhas de comunicação com ' . $base);
+  }
+  whatsapp_breaker_write($base, ['fails' => $fails, 'open_until' => $openUntil]);
+}
+
 function whatsapp_api_request(array $cfg, string $method, string $path, array $payload = []): array {
   $base = rtrim((string)($cfg['service_url'] ?? ''), '/');
   if ($base === '') throw new RuntimeException('URL do serviço de WhatsApp não configurada.');
+  $isSend = str_starts_with('/' . ltrim($path, '/'), '/send');
+  if ($isSend && whatsapp_breaker_is_open($base)) throw new RuntimeException(WHATSAPP_BREAKER_MESSAGE);
 
   $url = $base . '/' . ltrim($path, '/');
   $headers = ['Content-Type: application/json'];
@@ -489,7 +551,8 @@ function whatsapp_api_request(array $cfg, string $method, string $path, array $p
       CURLOPT_RETURNTRANSFER => true,
       CURLOPT_CUSTOMREQUEST => $method,
       CURLOPT_HTTPHEADER => $headers,
-      CURLOPT_CONNECTTIMEOUT => $timeout,
+      // Conectar no serviço local é instantâneo; se não conectar em 3s, ele caiu.
+      CURLOPT_CONNECTTIMEOUT => min(3, $timeout),
       CURLOPT_TIMEOUT => $timeout,
     ]);
     if ($method !== 'GET') curl_setopt($ch, CURLOPT_POSTFIELDS, $body ?: '{}');
@@ -497,6 +560,7 @@ function whatsapp_api_request(array $cfg, string $method, string $path, array $p
     $err = curl_error($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+    if ($isSend) whatsapp_breaker_record($base, $raw !== false && $code < 500);
     if ($raw === false) throw new RuntimeException($err ?: 'Falha ao conectar no serviço WhatsApp.');
   } else {
     $opts = [
@@ -515,6 +579,7 @@ function whatsapp_api_request(array $cfg, string $method, string $path, array $p
         if (preg_match('#^HTTP/\S+\s+(\d+)#', $h, $m)) { $code = (int)$m[1]; break; }
       }
     }
+    if ($isSend) whatsapp_breaker_record($base, $raw !== false && $code < 500);
     if ($raw === false) throw new RuntimeException('Falha ao conectar no serviço WhatsApp.');
   }
 
@@ -610,6 +675,58 @@ function whatsapp_send_message(PDO $pdo, int $companyId, string $to, string $mes
   }
 }
 
+
+/** A fila de envio existe? (migração 20261107_whatsapp_fila_envio_v1) */
+function whatsapp_outbox_ready(PDO $pdo): bool {
+  static $ready = null;
+  if ($ready !== null) return $ready;
+  try {
+    $st = $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'whatsapp_outbox'");
+    return $ready = ((int)$st->fetchColumn() > 0);
+  } catch (Throwable $e) {
+    return $ready = false;
+  }
+}
+
+/**
+ * Mensagem automática: entra na fila e o processo nexa-whatsapp-outbox envia.
+ * A tela que salvou o pedido/venda termina na hora, mesmo com o WhatsApp travado.
+ * Sem a migração aplicada, envia direto como antes (já protegido pelo disjuntor).
+ */
+function whatsapp_queue_message(PDO $pdo, int $companyId, string $to, string $message, string $tipo = 'manual', ?int $pedidoId = null, ?array $cfg = null): bool {
+  if (!whatsapp_outbox_ready($pdo)) return whatsapp_send_message($pdo, $companyId, $to, $message, $tipo, $pedidoId, $cfg);
+  $cfg = $cfg ?: whatsapp_load_config($pdo, $companyId);
+  if (empty($cfg['enabled'])) {
+    whatsapp_log($pdo, $companyId, $pedidoId, $tipo, whatsapp_digits($to), $message, 'skipped', 'Automação WhatsApp desativada.');
+    return false;
+  }
+  $destino = whatsapp_normalize_phone($to);
+  $message = trim($message);
+  if ($destino === '' || $message === '') {
+    whatsapp_log($pdo, $companyId, $pedidoId, $tipo, whatsapp_digits($to), $message, 'error', 'Destino ou mensagem vazia.');
+    return false;
+  }
+  try {
+    $st = $pdo->prepare("INSERT INTO whatsapp_outbox (company_id, pedido_id, tipo, destino, mensagem, status, next_attempt_at) VALUES (?, ?, ?, ?, ?, 'PENDENTE', NOW())");
+    $st->execute([$companyId, $pedidoId ?: null, mb_substr($tipo, 0, 40), mb_substr($destino, 0, 30), $message]);
+    return true;
+  } catch (Throwable $e) {
+    error_log('[Nexa][WhatsApp] Falha ao colocar mensagem na fila: ' . $e->getMessage());
+    return false;
+  }
+}
+
+/** Quantas mensagens da empresa estão aguardando envio na fila. */
+function whatsapp_outbox_pending_count(PDO $pdo, int $companyId): int {
+  if (!whatsapp_outbox_ready($pdo)) return 0;
+  try {
+    $st = $pdo->prepare("SELECT COUNT(*) FROM whatsapp_outbox WHERE company_id = ? AND status IN ('PENDENTE','ENVIANDO')");
+    $st->execute([$companyId]);
+    return (int)$st->fetchColumn();
+  } catch (Throwable $e) {
+    return 0;
+  }
+}
 
 /**
  * Envia um documento binário pelo serviço WhatsApp conectado.

@@ -265,6 +265,9 @@ admin_topbar('Central - WhatsApp automático', 'whatsapp');
 </style>
 
 <?php if ($waCrossContext): ?><div class="msg ok" style="margin-top:12px;"><strong>V11.22.1 · WhatsApp Multiempresa:</strong> esta tela está configurando a empresa selecionada pelo F11 (ID <?= (int)$waCompanyId ?>). QR Code, token, sessão e modelos ficam isolados desta empresa.</div><?php endif; ?>
+<?php $waBreaker = whatsapp_breaker_status($cfg); $waQueued = whatsapp_outbox_pending_count($pdo, $waCompanyId); ?>
+<?php if ($waBreaker['open']): ?><div class="msg err" style="margin-top:12px;"><strong>WhatsApp com problemas no momento.</strong> Os envios estão pausados por mais <?= (int)ceil($waBreaker['seconds_left'] / 60) ?> minuto(s) para não travar o sistema. Vendas, pedidos e notas continuam funcionando normalmente.</div><?php endif; ?>
+<?php if ($waQueued > 0): ?><div class="msg" style="margin-top:12px;background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><?= (int)$waQueued ?> mensagem(ns) automática(s) aguardando envio na fila. Elas são enviadas em segundo plano assim que o WhatsApp estiver disponível.</div><?php endif; ?>
 <?php if ($msg): ?><div class="msg ok" style="margin-top:12px;"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
 <?php if ($erro): ?><div class="msg err" style="margin-top:12px;"><?= htmlspecialchars($erro) ?></div><?php endif; ?>
 

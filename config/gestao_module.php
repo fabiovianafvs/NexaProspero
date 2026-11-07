@@ -1354,7 +1354,8 @@ if (!function_exists('gestao_try_send_pdv_whatsapp')) {
       if (empty($waCfg['enabled'])) return;
       $orderNumberDisplay = $orderNumber > 0 ? $orderNumber : $orderId;
       $msg = gestao_build_pdv_whatsapp_message($orderNumberDisplay, $customerName, $destino, $items, $subtotal, $discount, $addition, $delivery, $totalOrder, $tipoEntrega, $paymentLabel, $district, $addressText, $zipCode, $notes, $biz, $waCfg, $scheduledDeliveryDate, $scheduledDeliveryTime);
-      whatsapp_send_message($pdo, $companyId, $destino, $msg, 'pdv_order_customer_full', $orderId, $waCfg);
+      // Fila: a venda termina na hora; o envio é feito em segundo plano.
+      whatsapp_queue_message($pdo, $companyId, $destino, $msg, 'pdv_order_customer_full', $orderId, $waCfg);
     } catch (Throwable $e) {
       try { whatsapp_log($pdo, $companyId, $orderId, 'pdv_order_customer_full', $whatsapp, '', 'error', $e->getMessage()); } catch (Throwable $e2) {}
     }

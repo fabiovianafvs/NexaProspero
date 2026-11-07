@@ -11,6 +11,7 @@ Sistema SaaS de gestão para varejo (PDV, pedidos, comandas, estoque, financeiro
 - Apache só na porta 80 (HTTPS feito pela Cloudflare). Sites: `nexa-app.conf` (app.nexaprospero.com.br), `nexaprospero.conf` (domínio raiz → `/var/www/nexa-landing`; curinga `*.nexaprospero.com.br` → `/var/www/nexa`), `nexa-homolog.conf` (homologação).
 - Crons em produção: `workers/os_fiscal_queue_worker.php` e `workers/whatsapp_keepalive.php` (a cada minuto). Serviços systemd: `nexa-brain-worker`, `nexa-realtime`, `nexa-fiscal-dfe-sync`, `redis-server`, `php8.3-fpm`.
 - Agente de manutenção `nexa-ops` (`deploy/ops/`): o painel Saúde do Sistema (suporte) grava pedidos com uma palavra fixa (`resolver`/`reiniciar_vps`) em `/var/lib/nexa-ops/queue/`; o `nexa-ops.path` dispara o runner como root. Exige senha master; desligado na homologação. Nunca aceitar comandos vindos do navegador.
+- WhatsApp (serviço Node `nexa-whatsapp-service` no PM2/`pm2-root`, um Chrome por empresa): nunca enviar de forma síncrona em fluxos de venda/pedido/nota — usar `whatsapp_queue_message()` (fila `whatsapp_outbox`, processo `nexa-whatsapp-outbox`). `whatsapp_api_request` tem disjuntor (pausa envios após falhas). Limites de CPU/memória e reinício diário às 4h30: `deploy/whatsapp/proteger_whatsapp.sh`.
 
 ## Fluxo de trabalho: homologação → produção
 

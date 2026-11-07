@@ -1160,9 +1160,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($waCfg['send_order_confirmation_to_customer'])) {
               $destinoCliente = (string)$whatsapp;
 
-              // Evita bloquear o checkout quando o WhatsApp da empresa está
-              // desconectado. A checagem /sessions é leve e não cria sessão.
-              if (checkout_whatsapp_connected_quick($waCfg, (int)COMPANY_ID)) {
+              // Com a fila instalada, o pedido termina na hora e a mensagem é
+              // enviada em segundo plano (inclusive se o WhatsApp voltar depois).
+              // Sem a fila, mantém a checagem rápida para não segurar o checkout.
+              if (whatsapp_outbox_ready($pdo)) {
+                if (!whatsapp_queue_message($pdo, COMPANY_ID, $destinoCliente, $msgPedidoLoja, 'order_customer_full', (int)$pedidoId, $waCfg)) {
+                  @file_put_contents(__DIR__ . '/checkout_error.log', '[' . date('c') . '] WhatsApp: não foi possível colocar o pedido na fila. Pedido=' . (int)$pedidoId . PHP_EOL, FILE_APPEND);
+                }
+              } elseif (checkout_whatsapp_connected_quick($waCfg, (int)COMPANY_ID)) {
                 $okCliente = whatsapp_send_message($pdo, COMPANY_ID, $destinoCliente, $msgPedidoLoja, 'order_customer_full', (int)$pedidoId, $waCfg);
                 if (!$okCliente) {
                   @file_put_contents(__DIR__ . '/checkout_error.log', '[' . date('c') . '] WhatsApp auto pedido completo para cliente falhou. Pedido=' . (int)$pedidoId . ' Destino=' . $destinoCliente . PHP_EOL, FILE_APPEND);

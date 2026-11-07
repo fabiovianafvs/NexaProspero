@@ -1,0 +1,9 @@
+[Unit]
+Description=Nexa Próspero - reinicia o WhatsApp todo dia às 4h30
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

@@ -48,6 +48,19 @@ acao_resolver() {
   if service_exists apache2; then
     if apachectl configtest >/dev/null 2>&1; then systemctl reload apache2 >/dev/null 2>&1 && log "Apache recarregado (suave)."; else log "Apache: configuração com erro, recarga NÃO feita (rode: apachectl configtest)."; fi
   fi
+  # WhatsApp pesando (processamento ou memória no limite): reinicia só o WhatsApp,
+  # eliminando Chromes acumulados. As sessões continuam conectadas.
+  if [ -x /usr/local/sbin/nexa-whatsapp-restart ]; then
+    local load1 cores availpct
+    load1=$(cut -d' ' -f1 /proc/loadavg); cores=$(nproc)
+    availpct=$(awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf "%d", a*100/t}' /proc/meminfo)
+    if awk -v l="$load1" -v c="$cores" 'BEGIN{exit !(l > c*1.5)}' || [ "${availpct:-100}" -lt 15 ]; then
+      log "Sistema sobrecarregado (carga ${load1} em ${cores} núcleos, ${availpct}% de memória livre): reiniciando o WhatsApp..."
+      /usr/local/sbin/nexa-whatsapp-restart 2>&1 | tee -a "$OUT" >> "$LOG"
+    else
+      log "Carga ${load1} em ${cores} núcleos e ${availpct}% de memória livre: WhatsApp não precisou reiniciar."
+    fi
+  fi
   # Disco cheio: limpa só logs antigos do sistema e cache de pacotes.
   local used
   used=$(df --output=pcent / | tail -1 | tr -dc '0-9')

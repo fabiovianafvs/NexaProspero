@@ -1,0 +1,18 @@
+[Unit]
+Description=Nexa Próspero - fila de envio do WhatsApp (mensagens automáticas)
+After=network.target mysql.service mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/nexa
+ExecStart=/usr/bin/php /var/www/nexa/workers/whatsapp_outbox_worker.php --loop
+Restart=always
+RestartSec=5
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Nexa Próspero - reinício diário do serviço de WhatsApp (limpa Chromes acumulados)
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/nexa-whatsapp-restart
+TimeoutStartSec=180

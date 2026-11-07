@@ -21,6 +21,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
   function nexa_schema_updater_registry(): array {
     return [
       [
+        'id' => '20261107_whatsapp_fila_envio_v1',
+        'module' => 'whatsapp_outbox',
+        'version' => 20261107001,
+        'label' => 'WhatsApp - fila de envio',
+        'description' => 'Mensagens automáticas do WhatsApp passam por uma fila enviada em segundo plano; o sistema não espera mais o WhatsApp responder.',
+        'file' => __DIR__ . '/../db/20261107_whatsapp_fila_envio_v1.sql',
+        'sha256' => 'c1eec3363bc9ae75225fc4e1ccdd78f774f531a0d41013355b8afc2d12e1dda8',
+        'order' => 20261107001,
+      ],
+      [
         'id' => '20261104_saas_status_bonificada_v1',
         'module' => 'saas_status_complimentary',
         'version' => 20261104002,
