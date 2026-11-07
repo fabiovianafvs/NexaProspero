@@ -297,6 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'pdv_sea
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'finalize_pdv') {
+  if (function_exists('nexa_progress')) nexa_progress('Conferindo itens, pagamentos e cliente...');
   // Segurança adicional para a Venda Mobile: mesmo que algum script do navegador
   // não sincronize os campos visíveis com os campos ocultos, preserva os dados
   // digitados do consumidor não cadastrado antes de gravar o pedido.

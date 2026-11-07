@@ -6478,6 +6478,7 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
 
     $tools = fiscal_nfce_nfephp_tools($pdo, $companyId, $cfg, $model);
     if (!empty($cfg['contingency_status_check_enabled'])) {
+      if (function_exists('nexa_progress')) nexa_progress('Verificando se a SEFAZ está disponível...');
       $service = fiscal_nfce_service_status($tools);
       if (empty($service['available'])) {
         $serviceReason = trim((string)($service['message'] ?? '') . ' ' . (string)($service['exception'] ?? ''));
@@ -6486,6 +6487,7 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
           throw new RuntimeException('O serviço autorizador ainda não está disponível. A NFC-e permanece no lote de contingência. Retorno: ' . trim((string)($service['code'] ?? '') . ' ' . (string)($service['message'] ?? '') . ' ' . (string)($service['exception'] ?? '')));
         }
         if ($contingencyEnabled && $model === '65' && !empty($cfg['nfce_offline_contingency_enabled'])) {
+          if (function_exists('nexa_progress')) nexa_progress('SEFAZ indisponível: emitindo a NFC-e em contingência...', 'warn');
           return fiscal_nfce_prepare_offline_contingency($pdo, $companyId, $cfg, $doc, $serviceReason);
         }
         if ($contingencyEnabled && $model === '55' && !empty($cfg['nfe_svc_contingency_enabled'])) {
@@ -6503,6 +6505,7 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
     // somente a assinatura será refeita com o certificado ATIVO atual.
     $previousXml = trim((string)($doc['xml_raw'] ?? ''));
     $hadStoredSignature = $isOfflinePending && $previousXml !== '' && str_contains($previousXml, '<Signature');
+    if (function_exists('nexa_progress')) nexa_progress('Montando o XML da ' . $docLabel . '...');
     $xml = fiscal_nfce_build_draft_xml($pdo, $companyId, $docId);
     $pdo->prepare('UPDATE fiscal_documents SET xml_raw=?, xml_hash=?, updated_at=NOW() WHERE company_id=? AND id=?')
       ->execute([$xml, hash('sha256', $xml), $companyId, $docId]);
@@ -6524,11 +6527,13 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
       if ($isOfflinePending) {
         $pdo->prepare('UPDATE fiscal_documents SET contingency_transmission_attempts=contingency_transmission_attempts+1, contingency_last_attempt_at=NOW(), updated_at=NOW() WHERE company_id=? AND id=?')->execute([$companyId, $docId]);
       }
+      if (function_exists('nexa_progress')) nexa_progress('Assinando com o certificado digital...');
       $signedXml = str_contains($xml, '<Signature') ? $xml : $tools->signNFe($xml);
       $statusMessage = $isOfflinePending ? 'XML de contingência assinado. Transmitindo para a SEFAZ.' : 'XML assinado. Enviando para a SEFAZ.';
       fiscal_nfce_mark_result($pdo, $companyId, $docId, $isOfflinePending ? 'CONTINGENCIA' : 'ASSINADA', '', $statusMessage, '', $signedXml);
       $idLote = str_pad((string)max(1, $docId), 15, '0', STR_PAD_LEFT);
       $sendStarted = true;
+      if (function_exists('nexa_progress')) nexa_progress('Transmitindo para a SEFAZ e aguardando a autorização...');
       $responseXml = $tools->sefazEnviaLote([$signedXml], $idLote, 1);
       $summary = fiscal_nfce_response_summary($responseXml);
       $finalCode = (string)$summary['code'];
@@ -6547,6 +6552,7 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
         }
         $authorizedXml = \NFePHP\NFe\Complements::toAuthorize($signedXml, $responseXml);
         fiscal_nfce_mark_result($pdo, $companyId, $docId, 'AUTORIZADA', $finalCode, $finalMsg ?: 'Autorizado o uso da ' . $docLabel . '.', $protocol, $authorizedXml);
+        if (function_exists('nexa_progress')) nexa_progress($docLabel . ' autorizada! Protocolo ' . $protocol . '. Abrindo a impressão...', 'ok');
         fiscal_nfce_append_event($pdo, $companyId, $docId, $model === '55' ? 'AUTORIZACAO_NFE' : ($isOfflinePending ? 'AUTORIZACAO_NFCE_CONTINGENCIA' : 'AUTORIZACAO_NFCE'), $finalCode, $finalMsg, $protocol, $signedXml, $responseXml, $isOfflinePending ? 'NFC-e de contingência offline transmitida e autorizada.' : ($docLabel . ' autorizada pelo NFePHP.'));
         return ['ok'=>true, 'status'=>'AUTORIZADA', 'code'=>$finalCode, 'message'=>$finalMsg, 'protocol'=>$protocol, 'xml'=>$authorizedXml, 'response'=>$responseXml, 'contingency'=>$isOfflinePending, 'contingency_type'=>$isOfflinePending ? 'NFC_OFFLINE' : '', 'requires_batch'=>false];
       }
@@ -6567,6 +6573,7 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
       $status = in_array($finalCode, ['103','104','105'], true) ? 'EM_PROCESSAMENTO' : ($isOfflinePending ? 'CONTINGENCIA' : 'REJEITADA');
       fiscal_nfce_mark_result($pdo, $companyId, $docId, $status, $finalCode, $finalMsg ?: $docLabel . ' não autorizada pela SEFAZ.', $protocol, $signedXml);
       fiscal_nfce_append_event($pdo, $companyId, $docId, $model === '55' ? 'AUTORIZACAO_NFE' : ($isOfflinePending ? 'TRANSMISSAO_NFCE_CONTINGENCIA' : 'AUTORIZACAO_NFCE'), $finalCode, $finalMsg, $protocol, $signedXml, $responseXml, $isOfflinePending ? 'NFC-e permanece no lote de contingência.' : 'Retorno da SEFAZ sem autorização.');
+      if (function_exists('nexa_progress')) nexa_progress('A SEFAZ não autorizou: ' . trim($finalCode . ' ' . $finalMsg), 'warn');
       return ['ok'=>false, 'status'=>$status, 'code'=>$finalCode, 'message'=>$finalMsg, 'protocol'=>$protocol, 'xml'=>$signedXml, 'response'=>$responseXml, 'contingency'=>$isOfflinePending, 'contingency_type'=>$isOfflinePending ? 'NFC_OFFLINE' : '', 'requires_batch'=>$isOfflinePending];
     } catch (Throwable $e) {
       if ($isOfflinePending) {
@@ -7465,6 +7472,7 @@ if (!function_exists('fiscal_nfce_authorize_order')) {
         throw new RuntimeException('A NFC-e deste pedido possui retorno pendente ou inconclusivo. Use Consultar situação/Recuperar autorização antes de gerar ou transmitir novamente.');
       }
     }
+    if (function_exists('nexa_progress')) nexa_progress('Preparando a NFC-e (impostos e numeração)...');
     $doc = fiscal_nfce_create_or_update_from_order($pdo, $companyId, $orderId, '65');
     $result = fiscal_nfce_authorize_document($pdo, $companyId, (int)$doc['id']);
     $result['doc_id'] = (int)$doc['id'];
@@ -7494,6 +7502,7 @@ if (!function_exists('fiscal_nfe_authorize_order')) {
         throw new RuntimeException('A NF-e deste pedido possui retorno pendente ou inconclusivo. Use Consultar situação/Recuperar autorização antes de gerar ou transmitir novamente.');
       }
     }
+    if (function_exists('nexa_progress')) nexa_progress('Preparando a NF-e (impostos e numeração)...');
     $doc = fiscal_nfce_create_or_update_from_order($pdo, $companyId, $orderId, '55');
     $result = fiscal_nfce_authorize_document($pdo, $companyId, (int)$doc['id']);
     $result['doc_id'] = (int)$doc['id'];

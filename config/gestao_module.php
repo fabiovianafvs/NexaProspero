@@ -5,6 +5,7 @@ require_once __DIR__ . '/finance_module.php';
 require_once __DIR__ . '/saas_modules.php';
 require_once __DIR__ . '/load_config.php';
 require_once __DIR__ . '/whatsapp_service.php';
+require_once __DIR__ . '/progress.php';
 require_once __DIR__ . '/company_sequences.php';
 require_once __DIR__ . '/brain_profitability.php';
 require_once __DIR__ . '/schema_runtime.php';
@@ -1808,6 +1809,7 @@ Ref.: " . $addressReference);
       }
     }
 
+    if (function_exists('nexa_progress')) nexa_progress('Gravando a venda, baixando o estoque e lançando no financeiro...');
     $pdo->beginTransaction();
     try {
       if ($quoteConsumeReady) {
@@ -1987,6 +1989,7 @@ Ref.: " . $addressReference);
 
       // O registro bancário é feito somente depois do commit do Pedido/Contas a Receber.
       // Assim, uma indisponibilidade do Itaú nunca desfaz a venda já concluída.
+      if ($billingAutoChargeIds && function_exists('nexa_progress')) nexa_progress('Registrando o boleto no banco...');
       if ($billingAutoChargeIds) {
         foreach (array_values(array_unique($billingAutoChargeIds)) as $autoChargeId) {
           $autoResult = billing_auto_register_charge($pdo, $companyId, (int)$autoChargeId, $userId);
@@ -1997,6 +2000,7 @@ Ref.: " . $addressReference);
       }
 
       gestao_try_send_pdv_whatsapp($pdo, $companyId, $orderId, $nomeCliente, $whats, $items, $subtotal, $discount, $addition, $delivery, $totalOrder, $tipoEntrega, $paymentLabel, $districtText, $addressText, $zipCode, $notes, $scheduledDeliveryDate, $scheduledDeliveryTime, $orderNumber);
+      if (function_exists('nexa_progress')) nexa_progress('Venda nº ' . $orderNumber . ' gravada.', 'ok');
       return $orderId;
     } catch (Throwable $e) {
       if ($pdo->inTransaction()) $pdo->rollBack();

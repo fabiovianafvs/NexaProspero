@@ -31,6 +31,7 @@ if (!function_exists('nfse_quick_authorize_order')) {
     }
 
     $provider = nfse_provider_company_code($pdo, $companyId);
+    if (function_exists('nexa_progress')) nexa_progress($provider === 'PRONIM' ? 'Transmitindo a NFS-e para a prefeitura e aguardando autorização...' : 'Transmitindo a NFS-e para o Ambiente Nacional e aguardando autorização...');
     $cfg = fiscal_company_config($pdo, $companyId);
     $environment = strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO')));
 
