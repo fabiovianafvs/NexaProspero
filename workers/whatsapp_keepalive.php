@@ -85,24 +85,61 @@ foreach ((array)($list['items'] ?? []) as $item) {
   if (is_array($item) && !empty($item['company_id'])) $map[(string)$item['company_id']] = $item;
 }
 
+// Reabre as sessões aos poucos: abrir vários Chromes ao mesmo tempo (ex.: depois
+// de reiniciar a VPS ou o serviço) estourava o tempo e algumas sessões ficavam
+// paradas. No máximo 2 sessões abrindo ao mesmo tempo.
+const WA_KEEPALIVE_MAX_OPENING = 2;
+const WA_KEEPALIVE_MAX_RETRIES_DAY = 6;
+
+$opening = 0;
+foreach ($map as $item) if (!empty($item['initializing'])) $opening++;
+$budget = max(0, WA_KEEPALIVE_MAX_OPENING - $opening);
+
+// Controle de tentativas de reabertura por sessão (por dia), para não insistir
+// para sempre numa sessão com defeito.
+$retryFile = sys_get_temp_dir() . '/nexa_whatsapp_keepalive_retries.json';
+$retries = json_decode((string)@file_get_contents($retryFile), true);
+if (!is_array($retries) || ($retries['day'] ?? '') !== date('Y-m-d')) $retries = ['day' => date('Y-m-d'), 'count' => []];
+
 $started = 0;
 foreach ($desired as $sid => $label) {
+  if ($budget <= 0) break;
   $info = $map[$sid] ?? null;
   if (!$info) continue;
   $status = (string)($info['status'] ?? '');
   $stored = !empty($info['stored']);
+  if (!$stored) continue;
 
-  // Somente acorda sessões autenticadas persistidas que ficaram em repouso após
-  // reinício do PM2/VPS. Não interfere em QR, STOP manual, erro ou sessão desconectada.
-  if ($status !== 'stored' || !$stored) continue;
+  // 1) Sessão salva em repouso após reinício do PM2/VPS: acorda.
+  if ($status === 'stored') {
+    $res = wa_keepalive_request('POST', '/admin/session/start', ['company_id'=>$sid]);
+    if (!empty($res['ok'])) {
+      $started++; $budget--;
+      echo '[whatsapp-keepalive] Iniciando ' . $label . ' (company-' . $sid . ')' . PHP_EOL;
+    } else {
+      fwrite(STDERR, '[whatsapp-keepalive] Falha ' . $label . ': ' . (string)($res['error'] ?? 'erro desconhecido') . PHP_EOL);
+    }
+    continue;
+  }
 
-  $res = wa_keepalive_request('POST', '/admin/session/start', ['company_id'=>$sid]);
-  if (!empty($res['ok'])) {
-    $started++;
-    echo '[whatsapp-keepalive] Iniciando ' . $label . ' (company-' . $sid . ')' . PHP_EOL;
-  } else {
-    fwrite(STDERR, '[whatsapp-keepalive] Falha ' . $label . ': ' . (string)($res['error'] ?? 'erro desconhecido') . PHP_EOL);
+  // 2) Sessão salva que falhou ao abrir (tempo esgotado, Chrome travado): reabre
+  //    sem logout. Não mexe em QR Code, sessão conectada nem desconexão feita
+  //    pelo celular (LOGOUT) ou falha de autenticação, que exigem ler o QR.
+  if ($status !== 'disconnected') continue;
+  $err = (string)($info['last_error'] ?? '');
+  if ($err === '' || preg_match('/logout|unpaired|autentica|auth|conflict|banned/i', $err)) continue;
+  if (!preg_match('/time ?out|timed out|protocol error|target closed|session closed|execution context|navigation|net::|failed to launch|frame|browser|chromium|econn/i', $err)) continue;
+  $updated = strtotime((string)($info['updated_at'] ?? '')) ?: 0;
+  if ($updated > time() - 120) continue; // espera 2 min antes de tentar de novo
+  if ((int)($retries['count'][$sid] ?? 0) >= WA_KEEPALIVE_MAX_RETRIES_DAY) continue;
+
+  $res = wa_keepalive_request('POST', '/admin/session/restart', ['company_id'=>$sid]);
+  if (!empty($res['ok']) && !empty($res['restarted'])) {
+    $retries['count'][$sid] = (int)($retries['count'][$sid] ?? 0) + 1;
+    $started++; $budget--;
+    echo '[whatsapp-keepalive] Reabrindo ' . $label . ' (company-' . $sid . ') após falha: ' . $err . PHP_EOL;
   }
 }
+@file_put_contents($retryFile, json_encode($retries));
 
-if ($started > 0) echo '[whatsapp-keepalive] Sessões acordadas: ' . $started . PHP_EOL;
+if ($started > 0) echo '[whatsapp-keepalive] Sessões acordadas/reabertas: ' . $started . PHP_EOL;

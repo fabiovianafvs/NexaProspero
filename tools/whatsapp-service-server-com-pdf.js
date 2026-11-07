@@ -202,8 +202,12 @@ function buildClient(companyId) {
       clientId: `company-${companyId}`,
       dataPath: authPath,
     }),
+    // NEXA-R9: com a VPS carregada (vários Chromes abrindo juntos) o padrão de
+    // 30s estourava e a sessão ficava parada até alguém mexer.
+    authTimeoutMs: 120000,
     puppeteer: {
       headless: true,
+      timeout: 120000,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -530,6 +534,38 @@ app.post('/admin/session/start', async (req, res) => {
   }
 });
 
+// NEXA-R9: reabre uma sessão salva que falhou ao iniciar (timeout, Chrome
+// travado). Não faz logout e não apaga o LocalAuth. Não mexe em sessão
+// conectada, iniciando ou aguardando QR Code.
+app.post('/admin/session/restart', async (req, res) => {
+  if (!authorizeAdmin(req)) return res.status(401).json({ ok: false, error: 'Acesso administrativo não autorizado.' });
+  try {
+    const companyId = safeCompanyId(req.body?.company_id);
+    if (!storedCompanyIds().has(companyId)) return res.status(404).json({ ok: false, error: 'Sessão não salva neste servidor.' });
+    const current = sessions.get(companyId);
+    if (current && (current.ready || current.initializing || current.qr || recoveryLocks.has(companyId))) {
+      return res.json({ ...statePayload(companyId, current), restarted: false });
+    }
+    if (current?.client) {
+      try { await current.client.destroy(); } catch (_) {}
+    }
+    if (sessions.get(companyId) === current) sessions.delete(companyId);
+    const state = buildClient(companyId);
+    console.log(`[whatsapp] Empresa ${companyId}: reabrindo sessão salva após falha.`);
+    return res.json({ ...statePayload(companyId, state), restarted: true });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// NEXA-R9: fecha todos os Chromes com calma antes de reiniciar o serviço, para
+// o WhatsApp gravar a sessão e ela voltar sem pedir QR Code.
+app.post('/admin/shutdown-sessions', async (req, res) => {
+  if (!authorizeAdmin(req)) return res.status(401).json({ ok: false, error: 'Acesso administrativo não autorizado.' });
+  const total = await destroyAllSessions(30000);
+  return res.json({ ok: true, closed: total });
+});
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
@@ -674,13 +710,21 @@ const server = app.listen(port, host, () => {
   console.log(`[whatsapp] Envio de documentos habilitado. Limite: ${maxDocumentBytes} bytes.`);
 });
 
+// NEXA-R9: fecha os Chromes em paralelo (antes era um por vez, com limite de
+// 8s no total: com várias empresas, parte deles era morta no meio da gravação).
+async function destroyAllSessions(timeoutMs) {
+  const states = [...sessions.values()];
+  sessions.clear();
+  const all = Promise.allSettled(states.map((state) => (state?.client ? state.client.destroy() : null)));
+  await Promise.race([all, new Promise((resolve) => setTimeout(resolve, timeoutMs))]);
+  return states.length;
+}
+
 async function shutdown(signal) {
   console.log(`[whatsapp] Encerrando por ${signal}...`);
-  for (const state of sessions.values()) {
-    try { await state.client.destroy(); } catch (_) {}
-  }
+  setTimeout(() => process.exit(0), 25000).unref();
+  await destroyAllSessions(20000);
   server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 8000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
