@@ -786,7 +786,7 @@ if (!function_exists('saas_admin_page_required_modules')) {
       'pedidos.php', 'pedido.php', 'pedido_editar.php', 'pedido_regularizacao.php', 'pedido_status.php', 'pedido_print.php', 'pedido_print_conferencia.php', 'pedido_print_producao.php', 'pedido_relatorio_produtos.php', 'pedido_whatsapp.php' => ['delivery','gestao','fiscal','financeiro'],
       'produtos.php', 'produto_form.php', 'estoque_consulta.php' => ['*'],
       'utilitarios_manutencao_produtos.php' => ['*'],
-      'whatsapp.php', 'whatsapp_api.php', 'whatsapp_modelos.php' => ['*'],
+      'whatsapp.php', 'whatsapp_api.php', 'whatsapp_modelos.php', 'whatsapp_fila.php' => ['*'],
       'gestao_clientes.php', 'gestao_clientes_importar.php' => ['delivery', 'gestao', 'financeiro'],
       'financeiro_pessoas.php' => ['delivery', 'gestao', 'financeiro', 'orcamento'],
       'exportacao.php', 'firebird.php', 'firebird_run.php' => ['exportacao'],
@@ -842,7 +842,7 @@ if (!function_exists('saas_company_is_delivery_only')) {
 if (!function_exists('saas_delivery_only_nav_allowed')) {
   function saas_delivery_only_nav_allowed(string $key): bool {
     return in_array(strtolower(trim($key)), [
-      'dashboard', 'relatorios', 'relatorio_analise_dashboard', 'brain', 'pedidos', 'produtos', 'clientes', 'whatsapp', 'whatsapp_modelos', 'utilitarios', 'manutencao_produtos', 'usuarios', 'usuarios_perfis', 'params', 'suporte'
+      'dashboard', 'relatorios', 'relatorio_analise_dashboard', 'brain', 'pedidos', 'produtos', 'clientes', 'whatsapp', 'whatsapp_modelos', 'whatsapp_fila', 'utilitarios', 'manutencao_produtos', 'usuarios', 'usuarios_perfis', 'params', 'suporte'
     ], true);
   }
 }
@@ -906,7 +906,7 @@ if (!function_exists('saas_admin_nav_allowed')) {
       'pedidos' => (saas_company_has_module($pdo, $companyId, 'delivery') || saas_company_has_module($pdo, $companyId, 'gestao') || saas_company_has_module($pdo, $companyId, 'fiscal') || saas_company_has_module($pdo, $companyId, 'financeiro')),
       'produtos' => saas_company_has_any_module($pdo, $companyId),
       'utilitarios', 'manutencao_produtos' => saas_company_has_any_module($pdo, $companyId),
-      'whatsapp', 'whatsapp_modelos' => saas_company_has_any_module($pdo, $companyId),
+      'whatsapp', 'whatsapp_modelos', 'whatsapp_fila' => saas_company_has_any_module($pdo, $companyId),
       'clientes' => saas_company_has_module($pdo, $companyId, 'delivery'),
       'export' => saas_company_has_module($pdo, $companyId, 'exportacao'),
       'importacao' => saas_company_has_module($pdo, $companyId, 'importacao_produtos'),

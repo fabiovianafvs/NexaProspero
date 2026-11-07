@@ -65,6 +65,7 @@ if (!function_exists('access_permissions_catalog')) {
       // WhatsApp
       'whatsapp' => ['label' => 'WhatsApp', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp.php','whatsapp_api.php'], 'nav' => ['whatsapp']],
       'whatsapp_modelos' => ['label' => 'Modelo de Mensagens', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp_modelos.php'], 'nav' => ['whatsapp_modelos']],
+      'whatsapp_fila' => ['label' => 'Fila de Envio', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp_fila.php'], 'nav' => ['whatsapp_fila']],
 
       // Compras: autorização individual por submenu e URL (sem liberação implícita).
       'compras_assistente' => ['label' => 'Assistente de Compras', 'group' => 'Compras', 'module' => 'compras', 'pages' => ['compras_assistente.php'], 'nav' => ['compras_assistente']],
@@ -459,7 +460,7 @@ if (!function_exists('access_admin_nav_allowed')) {
     if ($navKey === 'os_mobile' && !access_user_os_mobile_enabled($pdo, $companyId)) return false;
 
     $parentPermissions = [
-      'whatsapp' => ['whatsapp','whatsapp_modelos'],
+      'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila'],
       'orcamento' => ['orcamentos','orcamento_novo'],
       'contratos' => ['contratos','contratos_gerar'],
       'compras' => ['compras_assistente','compras_listas','compras_cotacoes','compras_pedidos','compras_painel','compras_alertas','compras_fornecedores_avaliacao','compras_fornecedores_ranking','compras_fornecedores_ranking_config','compras_historico_precos'],
