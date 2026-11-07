@@ -726,7 +726,7 @@ function whatsapp_queue_message(PDO $pdo, int $companyId, string $to, string $me
     return false;
   }
   try {
-    $st = $pdo->prepare("INSERT INTO whatsapp_outbox (company_id, pedido_id, tipo, destino, mensagem, status, next_attempt_at, created_at) VALUES (?, ?, ?, ?, ?, 'PENDENTE', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+    $st = $pdo->prepare("INSERT INTO whatsapp_outbox (company_id, pedido_id, tipo, destino, mensagem, status, next_attempt_at) VALUES (?, ?, ?, ?, ?, 'PENDENTE', NOW())");
     $st->execute([$companyId, $pedidoId ?: null, mb_substr($tipo, 0, 40), mb_substr($destino, 0, 30), $message]);
     whatsapp_outbox_signal();
     return true;

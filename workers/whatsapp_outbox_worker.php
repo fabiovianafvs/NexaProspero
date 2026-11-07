@@ -25,12 +25,12 @@ if (PHP_SAPI !== 'cli') {
     exit("Execução permitida somente por linha de comando.\n");
 }
 
-// Horários da fila sempre em UTC (UTC_TIMESTAMP), igual em todas as telas e
-// neste processo, independente do fuso de cada empresa.
 $root = dirname(__DIR__);
 require_once $root . '/config/nexa_env.php';
 require $root . '/config/pdo.php';
 require_once $root . '/config/whatsapp_service.php';
+// Mesmo horário do site (Brasília) nos campos da fila: criada, próxima tentativa e enviada.
+app_apply_company_timezone($pdo, 'America/Sao_Paulo');
 
 $lock = fopen(sys_get_temp_dir() . '/nexa_whatsapp_outbox.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) exit(0);
@@ -48,12 +48,12 @@ const WA_OUTBOX_MAX_RUNTIME = 7 * 3600;
 /** Envia as mensagens vencidas. Retorna segundos até a próxima tentativa (null = fila vazia). */
 function wa_outbox_cycle(PDO $pdo): ?int {
     // Descarta mensagens velhas demais e recupera as presas em ENVIANDO.
-    $pdo->exec("UPDATE whatsapp_outbox SET status='FALHOU', last_error=COALESCE(last_error,'Expirou sem conseguir enviar.') WHERE status='PENDENTE' AND created_at < (UTC_TIMESTAMP() - INTERVAL " . (int)WA_OUTBOX_MAX_AGE_HOURS . " HOUR)");
-    $pdo->exec("UPDATE whatsapp_outbox SET status='PENDENTE' WHERE status='ENVIANDO' AND next_attempt_at < (UTC_TIMESTAMP() - INTERVAL 10 MINUTE)");
+    $pdo->exec("UPDATE whatsapp_outbox SET status='FALHOU', last_error=COALESCE(last_error,'Expirou sem conseguir enviar.') WHERE status='PENDENTE' AND created_at < (NOW() - INTERVAL " . (int)WA_OUTBOX_MAX_AGE_HOURS . " HOUR)");
+    $pdo->exec("UPDATE whatsapp_outbox SET status='PENDENTE' WHERE status='ENVIANDO' AND next_attempt_at < (NOW() - INTERVAL 10 MINUTE)");
 
     $cfgCache = [];
     while (true) {
-        $rows = $pdo->query("SELECT id, company_id, pedido_id, tipo, destino, mensagem, attempts FROM whatsapp_outbox WHERE status='PENDENTE' AND next_attempt_at <= UTC_TIMESTAMP() ORDER BY id LIMIT 20")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $rows = $pdo->query("SELECT id, company_id, pedido_id, tipo, destino, mensagem, attempts FROM whatsapp_outbox WHERE status='PENDENTE' AND next_attempt_at <= NOW() ORDER BY id LIMIT 20")->fetchAll(PDO::FETCH_ASSOC) ?: [];
         if (!$rows) break;
         foreach ($rows as $r) {
             $cid = (int)$r['company_id'];
@@ -62,13 +62,13 @@ function wa_outbox_cycle(PDO $pdo): ?int {
             $breaker = whatsapp_breaker_status($cfg);
             if ($breaker['open']) return max(5, (int)$breaker['seconds_left']); // WhatsApp com problemas: espera a pausa.
 
-            $claim = $pdo->prepare("UPDATE whatsapp_outbox SET status='ENVIANDO', attempts=attempts+1, next_attempt_at=UTC_TIMESTAMP() WHERE id=? AND status='PENDENTE'");
+            $claim = $pdo->prepare("UPDATE whatsapp_outbox SET status='ENVIANDO', attempts=attempts+1, next_attempt_at=NOW() WHERE id=? AND status='PENDENTE'");
             $claim->execute([(int)$r['id']]);
             if ($claim->rowCount() !== 1) continue;
             $attempt = (int)$r['attempts'] + 1;
 
             if (whatsapp_send_message($pdo, $cid, (string)$r['destino'], (string)$r['mensagem'], (string)$r['tipo'], (int)$r['pedido_id'] ?: null, $cfg)) {
-                $pdo->prepare("UPDATE whatsapp_outbox SET status='ENVIADO', sent_at=UTC_TIMESTAMP(), last_error=NULL WHERE id=?")->execute([(int)$r['id']]);
+                $pdo->prepare("UPDATE whatsapp_outbox SET status='ENVIADO', sent_at=NOW(), last_error=NULL WHERE id=?")->execute([(int)$r['id']]);
                 continue;
             }
             $err = 'Falha no envio (ver Logs do WhatsApp).';
@@ -81,11 +81,11 @@ function wa_outbox_cycle(PDO $pdo): ?int {
                 $pdo->prepare("UPDATE whatsapp_outbox SET status='FALHOU', last_error=? WHERE id=?")->execute([mb_substr($err, 0, 255), (int)$r['id']]);
             } else {
                 $wait = WA_OUTBOX_BACKOFF_MIN[$attempt] ?? 15;
-                $pdo->prepare("UPDATE whatsapp_outbox SET status='PENDENTE', last_error=?, next_attempt_at=(UTC_TIMESTAMP() + INTERVAL " . (int)$wait . " MINUTE) WHERE id=?")->execute([mb_substr($err, 0, 255), (int)$r['id']]);
+                $pdo->prepare("UPDATE whatsapp_outbox SET status='PENDENTE', last_error=?, next_attempt_at=(NOW() + INTERVAL " . (int)$wait . " MINUTE) WHERE id=?")->execute([mb_substr($err, 0, 255), (int)$r['id']]);
             }
         }
     }
-    $next = $pdo->query("SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), MIN(next_attempt_at)) FROM whatsapp_outbox WHERE status='PENDENTE'")->fetchColumn();
+    $next = $pdo->query("SELECT TIMESTAMPDIFF(SECOND, NOW(), MIN(next_attempt_at)) FROM whatsapp_outbox WHERE status='PENDENTE'")->fetchColumn();
     return $next === null || $next === false ? null : max(1, (int)$next);
 }
 
@@ -114,7 +114,7 @@ try {
         while (time() < $until && !wa_outbox_has_signal()) sleep(1);
     }
     // Limpeza ocasional: guarda 30 dias de histórico da fila.
-    if (random_int(1, 50) === 1) $pdo->exec("DELETE FROM whatsapp_outbox WHERE status IN ('ENVIADO','FALHOU') AND created_at < (UTC_TIMESTAMP() - INTERVAL 30 DAY)");
+    if (random_int(1, 50) === 1) $pdo->exec("DELETE FROM whatsapp_outbox WHERE status IN ('ENVIADO','FALHOU') AND created_at < (NOW() - INTERVAL 30 DAY)");
 } catch (Throwable $e) {
     fwrite(STDERR, '[' . date('c') . '] ' . $e->getMessage() . "\n");
     exit(1);
