@@ -1163,7 +1163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               // Com a fila instalada, o pedido termina na hora e a mensagem é
               // enviada em segundo plano (inclusive se o WhatsApp voltar depois).
               // Sem a fila, mantém a checagem rápida para não segurar o checkout.
-              if (whatsapp_outbox_ready($pdo)) {
+              if (whatsapp_outbox_active($pdo)) {
                 if (!whatsapp_queue_message($pdo, COMPANY_ID, $destinoCliente, $msgPedidoLoja, 'order_customer_full', (int)$pedidoId, $waCfg)) {
                   @file_put_contents(__DIR__ . '/checkout_error.log', '[' . date('c') . '] WhatsApp: não foi possível colocar o pedido na fila. Pedido=' . (int)$pedidoId . PHP_EOL, FILE_APPEND);
                 }

@@ -1,15 +1,18 @@
 [Unit]
-Description=Nexa Próspero - fila de envio do WhatsApp (mensagens automáticas)
+Description=Nexa Próspero - envio da fila do WhatsApp (só roda quando há mensagem)
 After=network.target mysql.service mariadb.service
 
 [Service]
-Type=simple
+# Iniciado pelo nexa-whatsapp-outbox.path quando chega mensagem; termina sozinho
+# quando a fila esvazia. Também roda uma vez no boot (mensagens pendentes).
+Type=oneshot
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/nexa
-ExecStart=/usr/bin/php /var/www/nexa/workers/whatsapp_outbox_worker.php --loop
-Restart=always
-RestartSec=5
+ExecStart=/usr/bin/php /var/www/nexa/workers/whatsapp_outbox_worker.php
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=8h
 Nice=5
 NoNewPrivileges=true
 PrivateTmp=true

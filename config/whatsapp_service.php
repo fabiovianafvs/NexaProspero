@@ -688,13 +688,32 @@ function whatsapp_outbox_ready(PDO $pdo): bool {
   }
 }
 
+/** Pasta de avisos da fila (criada por deploy/whatsapp/proteger_whatsapp.sh). */
+function whatsapp_outbox_signal_dir(): string {
+  return '/var/lib/nexa-whatsapp/sinais';
+}
+
+/**
+ * A fila só é usada quando o processo de envio está instalado (pasta de avisos
+ * gravável) e fora da homologação. Caso contrário, envia direto como antes.
+ */
+function whatsapp_outbox_active(PDO $pdo): bool {
+  if (function_exists('nexa_is_homologacao') && nexa_is_homologacao()) return false;
+  return whatsapp_outbox_ready($pdo) && is_dir(whatsapp_outbox_signal_dir()) && is_writable(whatsapp_outbox_signal_dir());
+}
+
+/** Avisa o systemd que há mensagem nova (ele inicia o envio na hora). */
+function whatsapp_outbox_signal(): void {
+  @file_put_contents(whatsapp_outbox_signal_dir() . '/' . gmdate('YmdHis') . '-' . bin2hex(random_bytes(4)) . '.sinal', '1');
+}
+
 /**
  * Mensagem automática: entra na fila e o processo nexa-whatsapp-outbox envia.
  * A tela que salvou o pedido/venda termina na hora, mesmo com o WhatsApp travado.
  * Sem a migração aplicada, envia direto como antes (já protegido pelo disjuntor).
  */
 function whatsapp_queue_message(PDO $pdo, int $companyId, string $to, string $message, string $tipo = 'manual', ?int $pedidoId = null, ?array $cfg = null): bool {
-  if (!whatsapp_outbox_ready($pdo)) return whatsapp_send_message($pdo, $companyId, $to, $message, $tipo, $pedidoId, $cfg);
+  if (!whatsapp_outbox_active($pdo)) return whatsapp_send_message($pdo, $companyId, $to, $message, $tipo, $pedidoId, $cfg);
   $cfg = $cfg ?: whatsapp_load_config($pdo, $companyId);
   if (empty($cfg['enabled'])) {
     whatsapp_log($pdo, $companyId, $pedidoId, $tipo, whatsapp_digits($to), $message, 'skipped', 'Automação WhatsApp desativada.');
@@ -709,6 +728,7 @@ function whatsapp_queue_message(PDO $pdo, int $companyId, string $to, string $me
   try {
     $st = $pdo->prepare("INSERT INTO whatsapp_outbox (company_id, pedido_id, tipo, destino, mensagem, status, next_attempt_at) VALUES (?, ?, ?, ?, ?, 'PENDENTE', NOW())");
     $st->execute([$companyId, $pedidoId ?: null, mb_substr($tipo, 0, 40), mb_substr($destino, 0, 30), $message]);
+    whatsapp_outbox_signal();
     return true;
   } catch (Throwable $e) {
     error_log('[Nexa][WhatsApp] Falha ao colocar mensagem na fila: ' . $e->getMessage());

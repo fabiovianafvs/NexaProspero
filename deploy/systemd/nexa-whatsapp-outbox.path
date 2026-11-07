@@ -1,0 +1,9 @@
+[Unit]
+Description=Nexa Próspero - inicia o envio do WhatsApp quando chega mensagem na fila
+
+[Path]
+# Reação imediata ao aviso gravado pelo sistema (sem verificação periódica).
+DirectoryNotEmpty=/var/lib/nexa-whatsapp/sinais
+
+[Install]
+WantedBy=multi-user.target

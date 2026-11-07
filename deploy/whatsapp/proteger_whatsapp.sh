@@ -44,17 +44,19 @@ install -o root -g root -m 0750 "$DIR/nexa-whatsapp-restart.sh" /usr/local/sbin/
 install -o root -g root -m 0644 "$DIR/nexa-whatsapp-restart.service" /etc/systemd/system/nexa-whatsapp-restart.service
 install -o root -g root -m 0644 "$DIR/nexa-whatsapp-restart.timer" /etc/systemd/system/nexa-whatsapp-restart.timer
 
-echo "== Fila de envio do WhatsApp =="
-sed "s#/var/www/nexa#${REPO}#g" "$REPO/deploy/systemd/nexa-whatsapp-outbox.service" > /etc/systemd/system/nexa-whatsapp-outbox.service
-chmod 0644 /etc/systemd/system/nexa-whatsapp-outbox.service
+echo "== Fila de envio do WhatsApp (só roda quando chega mensagem) =="
+install -d -o root -g www-data -m 0750 /var/lib/nexa-whatsapp
+install -d -o root -g www-data -m 0770 /var/lib/nexa-whatsapp/sinais
+install -o root -g root -m 0644 "$REPO/deploy/systemd/nexa-whatsapp-outbox.service" /etc/systemd/system/nexa-whatsapp-outbox.service
+install -o root -g root -m 0644 "$REPO/deploy/systemd/nexa-whatsapp-outbox.path" /etc/systemd/system/nexa-whatsapp-outbox.path
 
 systemctl daemon-reload
 systemctl enable --now nexa-whatsapp-restart.timer
 systemctl enable nexa-whatsapp-outbox.service
-systemctl restart nexa-whatsapp-outbox.service
+systemctl enable --now nexa-whatsapp-outbox.path
 
 echo
 echo "Pronto:"
 echo "  Limites do WhatsApp: $(systemctl show -p CPUQuotaPerSecUSec --value $UNIT) CPU/s · MemoryMax $(systemctl show -p MemoryMax --value $UNIT | awk '{printf "%d MB", $1/1048576}')"
 echo "  Próximo reinício diário: $(systemctl list-timers nexa-whatsapp-restart.timer --no-legend | awk '{print $1, $2, $3}')"
-echo "  Fila de envio: $(systemctl is-active nexa-whatsapp-outbox.service)"
+echo "  Fila de envio (aguardando mensagens): $(systemctl is-active nexa-whatsapp-outbox.path)"
