@@ -208,9 +208,9 @@
     });
   }
   function width(col){const n=Number(widths[col]);return Number.isFinite(n)&&n>=40&&n<=650 ? Math.round(n) : (defaults[col]||140);}
-  // Sobra de espaço vai só para a coluna Cliente (ou a última visível); assim
-  // estreitar "Número" deixa a coluna realmente estreita, sem redistribuir.
-  function applyWidths(){let sum=250;for(const col of movable){if(visible.includes(col))sum+=width(col);}const extra=Math.max(0,(wrap.clientWidth||0)-sum);const flexCol=visible.includes('cliente')?'cliente':visible[visible.length-1];for(const col of movable){const px=width(col)+(col===flexCol?extra:0); table.querySelectorAll('[data-col="'+col+'"]:not(.orders-grid-hidden)').forEach(el=>{el.style.width=px+'px';el.style.minWidth=px+'px';el.style.maxWidth=px+'px';});}table.style.width=(sum+extra)+'px';}
+  // Cada coluna tem exatamente a largura escolhida pelo usuário (independente
+  // das outras). Larguras com !important porque o CSS do grid força width:auto.
+  function applyWidths(){let sum=250;for(const col of movable){if(visible.includes(col))sum+=width(col);}const extra=0;for(const col of movable){const px=width(col); table.querySelectorAll('[data-col="'+col+'"]:not(.orders-grid-hidden)').forEach(el=>{el.style.setProperty('width',px+'px','important');el.style.setProperty('min-width',px+'px','important');el.style.setProperty('max-width',px+'px','important');});}table.style.setProperty('width',(sum+extra)+'px','important');table.style.setProperty('min-width','0','important');}
   function applyVisibility(){for(const col of movable){table.querySelectorAll('[data-col="'+col+'"]').forEach(el=>el.classList.toggle('orders-grid-hidden',!visible.includes(col)));}applyWidths();}
   function serialize(){return {visible:[...visible],order:[...order],widths:{...widths}};}
   function save(){
