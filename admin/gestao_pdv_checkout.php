@@ -3425,7 +3425,7 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
     if(card){
       card.hidden = false;
       card.className = 'pdv-customer-card found';
-      card.innerHTML = `<div class="pdv-customer-icon">OK</div><div><strong>${escapeHtml(c.name)}</strong><small>${c.document?('Documento: '+escapeHtml(c.document)+' • '):''}${c.whatsapp||c.phone?('Contato: '+escapeHtml(c.whatsapp||c.phone)):'Cliente cadastrado'}</small></div>`;
+      card.innerHTML = `<div class="pdv-customer-icon">OK</div><div><strong>${escapeHtml(c.name)}</strong><small>${c.document?('Documento: '+escapeHtml((window.nexaMaskDoc||String)(c.document))+' • '):''}${c.whatsapp||c.phone?('Contato: '+escapeHtml(c.whatsapp||c.phone)):'Cliente cadastrado'}</small></div>`;
     }
     renderAddressSelect();
     syncAddressHidden(true);
@@ -3527,7 +3527,7 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
       return;
     }
     box.innerHTML = modalCustomers.map((c, index) => {
-      const doc = c.document ? 'Documento: ' + escapeHtml(c.document) : '';
+      const doc = c.document ? 'Documento: ' + escapeHtml((window.nexaMaskDoc||String)(c.document)) : '';
       const phone = (c.whatsapp || c.phone) ? 'Contato: ' + escapeHtml(c.whatsapp || c.phone) : '';
       const city = (c.city || c.state) ? escapeHtml([c.city || '', c.state || ''].filter(Boolean).join('/')) : '';
       const activeClass = index === modalCustomerActiveIndex ? ' is-active' : '';
@@ -3572,7 +3572,7 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
       return;
     }
     box.innerHTML = rows.map(c => {
-      const doc = c.document ? 'CPF/CNPJ: ' + escapeHtml(c.document) : '';
+      const doc = c.document ? 'CPF/CNPJ: ' + escapeHtml((window.nexaMaskDoc||String)(c.document)) : '';
       const phone = (c.whatsapp || c.phone) ? 'Contato: ' + escapeHtml(c.whatsapp || c.phone) : '';
       const district = c.district ? 'Bairro: ' + escapeHtml(c.district) : '';
       return `<button type="button" class="pdv-mobile-client-card" data-customer-id="${Number(c.id)}"><span><strong>${escapeHtml(c.name || 'Cliente')}</strong><small>${[doc, phone, district].filter(Boolean).join(' • ') || 'Cliente cadastrado'}</small></span><em>Selecionar</em></button>`;

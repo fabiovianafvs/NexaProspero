@@ -398,6 +398,7 @@ function admin_topbar(string $title, string $active=''): void {
       'os_configuracoes' => ['Configurações da O.S.', 'os_configuracoes.php'],
       'producao_configuracoes' => ['Configurações de O.P.', 'producao_configuracoes.php'],
       'configuracoes_cre' => ['Configurações CRE', 'configuracoes_cre.php'],
+      'configuracoes_cpa' => ['Configurações CPA', 'configuracoes_cpa.php'],
       'configuracoes_caixa' => ['Configurações de caixa', 'configuracoes_caixa.php'],
       'configuracoes_desempenho' => ['Desempenho e períodos', 'configuracoes_desempenho.php'],
     ]],
@@ -735,6 +736,8 @@ function admin_topbar(string $title, string $active=''): void {
 <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title>
 <link rel="stylesheet" href="/assets/admin.css?v=27">
 <script defer src="/assets/admin.js?v=16"></script>
+<!-- LGPD: nas buscas, CPF/CNPJ aparece só com os 3 primeiros e os 3 últimos dígitos. -->
+<script>window.nexaMaskDoc=function(v){v=String(v==null?'':v);var d=v.replace(/\D/g,'');if(d.length<7)return v;var i=0,n=d.length;return v.replace(/\d/g,function(c){var k=i++;return(k<3||k>=n-3)?c:'*'});};</script>
 <!-- Nexa: desabilita o historico de entradas em campos de digitacao, inclusive campos criados por modais. -->
 <script defer src="/assets/nexa-no-form-history.js?v=20261028-1"></script>
 <!-- Ícones Nexa: recursos isolados, sem alterar os scripts do PDV ou a navegação existente. -->

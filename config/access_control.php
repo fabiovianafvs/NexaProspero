@@ -139,6 +139,7 @@ if (!function_exists('access_permissions_catalog')) {
       'financeiro_centro' => ['label' => 'Centro de Custo', 'group' => 'Financeiro - Tabelas Auxiliares', 'module' => 'financeiro', 'pages' => ['financeiro_centros_custo.php'], 'nav' => ['fin_centro']],
       'financeiro_caixas' => ['label' => 'Caixas e Bancos', 'group' => 'Financeiro - Tabelas Auxiliares', 'module' => 'financeiro', 'pages' => ['financeiro_caixas_bancos.php','financeiro_itau.php'], 'nav' => ['fin_caixas']],
       'configuracoes_cre' => ['label' => 'Configurações CRE', 'group' => 'Configurações', 'module' => 'financeiro', 'pages' => ['configuracoes_cre.php'], 'nav' => ['configuracoes_cre']],
+      'configuracoes_cpa' => ['label' => 'Configurações CPA', 'group' => 'Configurações', 'module' => 'financeiro', 'pages' => ['configuracoes_cpa.php'], 'nav' => ['configuracoes_cpa']],
       'configuracoes_caixa' => ['label' => 'Configurações de caixa', 'group' => 'Configurações', 'module' => 'financeiro', 'pages' => ['configuracoes_caixa.php'], 'nav' => ['configuracoes_caixa']],
 
       // Entradas
@@ -468,7 +469,7 @@ if (!function_exists('access_admin_nav_allowed')) {
       'producao' => ['producao_ficha','producao_monitor'],
       'controle_entregas' => ['delivery_control','delivery_orders','delivery_manifest','delivery_vehicles','delivery_fiscal_queue'],
       'gestao' => ['gestao_dashboard','gestao_pdv_resumido','gestao_pdv','gestao_pdv_checkout','gestao_pdv_mobile','gestao_comandas','gestao_comandas_checkout','gestao_comandas_mobile','gestao_pedido_detalhado','gestao_pedidos','pedidos','gestao_caixa'],
-      'financeiro' => ['financeiro_dashboard','financeiro_pessoas','financeiro_receber','financeiro_pagar','financeiro_despesas_fixas','financeiro_vales','financeiro_movimentos','financeiro_boletos','financeiro_conciliacao','financeiro_resultado','financeiro_plano','financeiro_centro','financeiro_caixas','configuracoes_cre','configuracoes_caixa'],
+      'financeiro' => ['financeiro_dashboard','financeiro_pessoas','financeiro_receber','financeiro_pagar','financeiro_despesas_fixas','financeiro_vales','financeiro_movimentos','financeiro_boletos','financeiro_conciliacao','financeiro_resultado','financeiro_plano','financeiro_centro','financeiro_caixas','configuracoes_cre','configuracoes_cpa','configuracoes_caixa'],
       'entradas' => ['fiscal_radar','fiscal_entrada_notas','fiscal_devolucoes','fiscal_devolucao_cliente','fiscal_importar_xml','fiscal_nota_manual','conferencia_estoque'],
       'fiscal' => ['fiscal_documentos','os_fiscal_documentos','fiscal_inutilizacao','fiscal_saidas','fiscal_contadores','fiscal_configuracoes','fiscal_conversoes'],
       'relatorios' => ['relatorio_analise_dashboard','relatorio_comissao_vendedores','relatorio_etiquetas_produtos','relatorio_movimentos_caixa'],

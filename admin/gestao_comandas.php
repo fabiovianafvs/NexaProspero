@@ -2990,7 +2990,7 @@ body:has(.cmd-checkout-products-step){overflow:hidden!important}
   function cmdRenderSellerRows(){
     if(!cmdSellerModalResults) return;
     if(!cmdSellerFiltered.length){ cmdSellerModalResults.innerHTML='<div class="cmd-empty">Nenhum vendedor localizado.</div>'; return; }
-    cmdSellerModalResults.innerHTML=cmdSellerFiltered.map((s,index)=>`<button type="button" class="cmd-seller-row${index===cmdSellerActiveIndex?' is-active':''}" data-cmd-seller-index="${index}"><code>${escapeHtml(String(s.code||s.id||''))}</code><strong>${escapeHtml(String(s.name||''))}</strong><small>${escapeHtml(String(s.document||''))}</small></button>`).join('');
+    cmdSellerModalResults.innerHTML=cmdSellerFiltered.map((s,index)=>`<button type="button" class="cmd-seller-row${index===cmdSellerActiveIndex?' is-active':''}" data-cmd-seller-index="${index}"><code>${escapeHtml(String(s.code||s.id||''))}</code><strong>${escapeHtml(String(s.name||''))}</strong><small>${escapeHtml((window.nexaMaskDoc||String)(String(s.document||'')))}</small></button>`).join('');
     const active=cmdSellerModalResults.querySelector('.cmd-seller-row.is-active');
     active?.scrollIntoView?.({block:'nearest'});
   }
@@ -3458,7 +3458,7 @@ body:has(.cmd-checkout-products-step){overflow:hidden!important}
   const modal = document.getElementById('cmdCustomerModal');
   const modalSearch = document.getElementById('cmdCustomerModalSearch');
   const modalList = document.getElementById('cmdCustomerModalList');
-  function customerSubtitle(c){ return c ? (c.document || c.phone || c.whatsapp || 'Cliente cadastrado') : 'Nenhum cliente cadastrado selecionado'; }
+  function customerSubtitle(c){ return c ? ((window.nexaMaskDoc||String)(c.document || '') || c.phone || c.whatsapp || 'Cliente cadastrado') : 'Nenhum cliente cadastrado selecionado'; }
   function setCustomer(c){
     selectedCustomerId = c ? Number(c.id || 0) : 0;
     if(clienteId) clienteId.value = c ? String(c.id) : '0';

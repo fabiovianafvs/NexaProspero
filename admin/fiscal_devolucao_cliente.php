@@ -625,7 +625,7 @@ if ($sourceOrder) {
     if(!rows.length){ clientResults.innerHTML = '<div class="fiscal-empty">Nenhum cliente encontrado.</div>'; return; }
     clientResults.innerHTML = rows.map(c => {
       const contact = c.whatsapp || c.phone || '';
-      const detail = [c.document ? 'CPF/CNPJ: ' + c.document : '', contact ? 'Contato: ' + contact : '', [c.city || '', c.state || ''].filter(Boolean).join('/')].filter(Boolean).join(' • ');
+      const detail = [c.document ? 'CPF/CNPJ: ' + (window.nexaMaskDoc||String)(c.document) : '', contact ? 'Contato: ' + contact : '', [c.city || '', c.state || ''].filter(Boolean).join('/')].filter(Boolean).join(' • ');
       return `<button type="button" class="devolucao-client-result" data-client-id="${Number(c.id || 0)}"><span><strong>${escapeHtml(c.name || 'Cliente')}</strong><small>${escapeHtml(detail || 'Cliente cadastrado')}</small></span><b>Selecionar</b></button>`;
     }).join('');
   }
@@ -640,7 +640,7 @@ if ($sourceOrder) {
   function selectClient(c){
     if(!c) return;
     const district = c.district || '';
-    fill('clientPick', (c.name || 'Cliente') + (c.document ? ' · ' + c.document : ''));
+    fill('clientPick', (c.name || 'Cliente') + (c.document ? ' · ' + (window.nexaMaskDoc||String)(c.document) : ''));
     fill('person_id', c.id || '');
     fill('person_name', c.name || '');
     fill('person_document', c.document || '');

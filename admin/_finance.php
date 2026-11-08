@@ -689,11 +689,18 @@ function finance_select_options(array $rows, $selected = null, string $empty = '
     elseif ($code !== '') $labelParts[] = $code;
     $labelParts[] = (string)($r['name'] ?? '');
     if ($classification !== '' && $code !== '' && $classification !== $code) $labelParts[] = '[' . $code . ']';
-    if (isset($r['document']) && trim((string)$r['document']) !== '') $labelParts[] = '(' . (string)$r['document'] . ')';
+    // LGPD: na lista/busca (F8) o CPF/CNPJ aparece mascarado; a busca pelo número
+    // completo continua funcionando pelo data-document.
+    $docAttr = '';
+    if (isset($r['document']) && trim((string)$r['document']) !== '') {
+      require_once __DIR__ . '/../config/lgpd.php';
+      $labelParts[] = '(' . nexa_lgpd_mask_document((string)$r['document']) . ')';
+      $docAttr = ' data-document="' . finance_h(preg_replace('/\D+/', '', (string)$r['document'])) . '"';
+    }
     $label = implode(' - ', array_filter($labelParts));
     $disabled = ($disableSynthetic && isset($r['is_analytic']) && (int)$r['is_analytic'] !== 1) ? ' disabled' : '';
     $sel = ((string)$selected === (string)$id) ? ' selected' : '';
-    echo '<option value="' . $id . '"' . $sel . $disabled . '>' . str_repeat('— ', max(0, (int)($r['level'] ?? 1) - 1)) . finance_h($label) . '</option>';
+    echo '<option value="' . $id . '"' . $sel . $disabled . $docAttr . '>' . str_repeat('— ', max(0, (int)($r['level'] ?? 1) - 1)) . finance_h($label) . '</option>';
   }
 }
 

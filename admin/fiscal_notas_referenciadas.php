@@ -254,7 +254,7 @@ if ($err !== '') echo '<div class="msg err">' . ref_h($err) . '</div>';
     const box=document.getElementById('recipientCustomerSearchResults'); if(!box) return;
     const rows=clients.filter(c=>customerMatches(c,term)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR')).slice(0,100);
     if(!rows.length){ box.innerHTML='<div class="fiscal-empty-state">Nenhum cliente encontrado. Use “Novo cliente” para cadastrar.</div>'; return; }
-    box.innerHTML=rows.map(c=>{ const contact=c.whatsapp||c.phone||''; const detail=[c.document?'CPF/CNPJ: '+c.document:'',contact?'Contato: '+contact:'',[c.city||'',c.state||''].filter(Boolean).join('/')].filter(Boolean).join(' • '); return `<button type="button" class="ref-client-result" data-client-id="${Number(c.id||0)}"><span><strong>${escapeHtml(c.name||'Cliente')}</strong><small>${escapeHtml(detail||'Cliente cadastrado')}</small></span><b>Selecionar</b></button>`; }).join('');
+    box.innerHTML=rows.map(c=>{ const contact=c.whatsapp||c.phone||''; const detail=[c.document?'CPF/CNPJ: '+(window.nexaMaskDoc||String)(c.document):'',contact?'Contato: '+contact:'',[c.city||'',c.state||''].filter(Boolean).join('/')].filter(Boolean).join(' • '); return `<button type="button" class="ref-client-result" data-client-id="${Number(c.id||0)}"><span><strong>${escapeHtml(c.name||'Cliente')}</strong><small>${escapeHtml(detail||'Cliente cadastrado')}</small></span><b>Selecionar</b></button>`; }).join('');
   }
   function selectCustomer(c){
     if(!c) return;
@@ -273,7 +273,7 @@ if ($err !== '') echo '<div class="msg err">' . ref_h($err) . '</div>';
     setValue('destination_city',c.city||c.cidade||'');
     setValue('destination_city_ibge',c.city_ibge||c.codigo_ibge||'');
     setValue('destination_state',c.state||c.uf||'');
-    setValue('recipientCustomerPick',(c.name||'Cliente')+(c.document?' · '+c.document:''));
+    setValue('recipientCustomerPick',(c.name||'Cliente')+(c.document?' · '+(window.nexaMaskDoc||String)(c.document):''));
     clientSearchModal?.classList.remove('open');
     clientCreateModal?.classList.remove('open');
   }

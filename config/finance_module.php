@@ -1256,6 +1256,11 @@ if (!function_exists('finance_settle_titles_bulk')) {
     // A baixa não deve criar/configurar finance_settings implicitamente. Usa defaults se ausente.
     $settings = finance_settings($pdo, $companyId, false);
     $separate = !empty($settings['settle_titles_individually']);
+    if ($originType === 'PAGAR') {
+      // Contas a Pagar tem configuração própria (Configurações CPA).
+      require_once __DIR__ . '/cpa_settings.php';
+      $separate = !empty(nexa_cpa_settings($pdo, $companyId)['settle_individually']);
+    }
     $settlementDate = finance_date_or_null($data['settlement_date'] ?? '') ?: date('Y-m-d');
     $userNotes = trim((string)($data['notes'] ?? ''));
 

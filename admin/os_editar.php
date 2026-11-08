@@ -469,7 +469,7 @@ if($order && $step===5){
 
  setupSearch({
    input:'searchPessoa',list:'listPessoa',run:'runPessoa',modal:'modalPessoa',action:'search_people',
-   html:function(r){return '<b>'+esc(r.name)+'</b><small>'+esc(r.document||'')+' '+esc(r.whatsapp||r.phone||'')+'</small>'},
+   html:function(r){return '<b>'+esc(r.name)+'</b><small>'+esc((window.nexaMaskDoc||String)(r.document||''))+' '+esc(r.whatsapp||r.phone||'')+'</small>'},
    select:applyPerson
  });
 

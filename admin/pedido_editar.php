@@ -1367,7 +1367,7 @@ admin_topbar('Editar pedido #' . $pedidoNumero, 'pedidos');
   }
   function renderCustomerRows(){
     const box=document.getElementById('customerPickerResults'); if(!box) return;
-    box.innerHTML = customerRows.map((r,i)=>'<button type="button" class="edit-customer-result '+(i===customerActiveIndex?'is-active':'')+'" data-customer-index="'+i+'"><strong>'+escapeHtml(r.name||'Cliente')+'</strong><small>'+escapeHtml([r.document,r.whatsapp||r.phone,r.email,r.city].filter(Boolean).join(' · '))+'</small></button>').join('') || '<div class="edit-empty-state">Nenhum cliente encontrado.</div>';
+    box.innerHTML = customerRows.map((r,i)=>'<button type="button" class="edit-customer-result '+(i===customerActiveIndex?'is-active':'')+'" data-customer-index="'+i+'"><strong>'+escapeHtml(r.name||'Cliente')+'</strong><small>'+escapeHtml([(window.nexaMaskDoc||String)(r.document||''),r.whatsapp||r.phone,r.email,r.city].filter(Boolean).join(' · '))+'</small></button>').join('') || '<div class="edit-empty-state">Nenhum cliente encontrado.</div>';
     box.querySelector('.is-active')?.scrollIntoView({block:'nearest'});
   }
   async function searchCustomers(){

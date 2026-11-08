@@ -88,7 +88,7 @@ if ($err !== '') echo '<div class="msg err">' . finance_h($err) . '</div>';
   </div>
 
   <div class="finance-card">
-    <div class="finance-card-head"><div><h2 class="finance-subtitle">Configurações de baixa</h2><div class="finance-muted">Esta opção foi movida do Dashboard Financeiro para cá.</div></div></div>
+    <div class="finance-card-head"><div><h2 class="finance-subtitle">Configurações de baixa</h2><div class="finance-muted">Vale para “Baixar selecionados” no Contas a Receber. O Contas a Pagar tem a sua própria opção em <a href="configuracoes_cpa.php">Configurações CPA</a>.</div></div></div>
     <label class="finance-check"><input type="checkbox" name="settle_titles_individually" value="1" <?= !empty($settings['settle_titles_individually']) ? 'checked' : '' ?>><span><strong>Mostrar/lançar parcelas quitadas separadamente no movimento financeiro</strong><br><small>Desmarcado: a baixa múltipla gera um único movimento com o valor total e identifica as parcelas nas observações.</small></span></label>
   </div>
 
