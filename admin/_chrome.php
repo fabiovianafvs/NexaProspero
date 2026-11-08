@@ -373,6 +373,7 @@ function admin_topbar(string $title, string $active=''): void {
       'relatorio_etiquetas_produtos' => ['Etiqueta de produtos', 'relatorio_etiquetas_produtos.php'],
       'relatorio_clientes' => ['Clientes', 'relatorio_clientes.php'],
       'relatorio_movimentos_caixa' => ['Movimentações de caixa', 'relatorio_movimentos_caixa.php'],
+      'relatorio_inadimplencia' => ['Análise de inadimplência', 'relatorio_inadimplencia.php'],
     ]],
     'fiscal_relatorios' => ['Relatórios Fiscais','fiscal_relatorio_documentos.php', [
       'fiscal_relatorios' => ['Visão Geral', 'fiscal_relatorios.php'],
@@ -556,6 +557,7 @@ function admin_topbar(string $title, string $active=''): void {
               // V11.45.2: novas telas reaproveitam permissões já existentes,
               // sem criar novos tokens nem exigir migração de perfis.
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_movimentos_caixa' && $isCrossV11_25) continue;
+              if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_inadimplencia' && $isCrossV11_25) continue;
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_clientes') {
                 if (function_exists('nexa_people_permission_allowed') && nexa_people_permission_allowed($pdoAdmin, (int)COMPANY_ID)) $children[$childKey] = $child;
                 continue;
