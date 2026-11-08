@@ -734,7 +734,7 @@ function admin_topbar(string $title, string $active=''): void {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title>
 <link rel="stylesheet" href="/assets/admin.css?v=27">
-<script defer src="/assets/admin.js?v=15"></script>
+<script defer src="/assets/admin.js?v=16"></script>
 <!-- Nexa: desabilita o historico de entradas em campos de digitacao, inclusive campos criados por modais. -->
 <script defer src="/assets/nexa-no-form-history.js?v=20261028-1"></script>
 <!-- Ícones Nexa: recursos isolados, sem alterar os scripts do PDV ou a navegação existente. -->

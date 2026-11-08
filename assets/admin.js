@@ -251,15 +251,10 @@
     style.textContent = `
       .admin-processing-overlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(248,251,255,.76);backdrop-filter:blur(3px)}
       .admin-processing-overlay.is-visible{display:flex}
-      .admin-processing-box{width:min(380px,calc(100vw - 40px));border:1px solid #dbe4f0;border-radius:24px;background:#fff;box-shadow:0 22px 66px rgba(15,23,42,.20);padding:22px 18px 20px;text-align:center;color:#0f172a}
+      .admin-processing-box{width:min(330px,calc(100vw - 40px));border:1px solid #dbe4f0;border-radius:24px;background:#fff;box-shadow:0 22px 66px rgba(15,23,42,.20);padding:22px 18px 20px;text-align:center;color:#0f172a}
       .admin-processing-logo{display:block;width:auto;max-width:190px;max-height:82px;object-fit:contain;margin:0 auto 13px}
       .admin-processing-spinner{width:42px;height:42px;margin:0 auto;border-radius:999px;border:4px solid #e5edf6;border-top-color:var(--admin-secondary,#2454D6);animation:adminSpin .78s linear infinite}
       .admin-processing-text{display:block;margin-top:11px;color:#64748b;font-size:10.5px;line-height:1.35;font-weight:750;letter-spacing:.01em;min-height:28px}
-      .admin-processing-log{list-style:none;margin:10px 0 0;padding:0;text-align:left;font-size:11px;line-height:1.35;color:#64748b;max-height:150px;overflow:auto}
-      .admin-processing-log li{padding:2px 0 2px 18px;position:relative}
-      .admin-processing-log li:before{content:'\\2713';position:absolute;left:2px;color:#16a34a;font-weight:900}
-      .admin-processing-log li.warn{color:#b45309}.admin-processing-log li.warn:before{content:'!';color:#d97706}
-      .admin-processing-elapsed{display:block;margin-top:6px;color:#94a3b8;font-size:10px;font-weight:700}
       .admin-is-processing{cursor:progress!important}
       .admin-is-processing button[type="submit"],.admin-is-processing input[type="submit"]{pointer-events:none;opacity:.72}
       @keyframes adminSpin{to{transform:rotate(360deg)}}
@@ -269,7 +264,7 @@
     overlay.className = 'admin-processing-overlay';
     overlay.setAttribute('role','status');
     overlay.setAttribute('aria-live','polite');
-    overlay.innerHTML = '<div class="admin-processing-box"><img class="admin-processing-logo" alt="Nexa Próspero"><div class="admin-processing-spinner"></div><span class="admin-processing-text">Processando solicitação...</span><ul class="admin-processing-log"></ul><span class="admin-processing-elapsed"></span></div>';
+    overlay.innerHTML = '<div class="admin-processing-box"><img class="admin-processing-logo" alt="Nexa Próspero"><div class="admin-processing-spinner"></div><span class="admin-processing-text">Processando solicitação...</span></div>';
     const logo = overlay.querySelector('.admin-processing-logo');
     if(logo){
       const candidates = [
@@ -353,14 +348,8 @@
     window.clearInterval(progressTimer);
     progressStartedAt = Date.now();
     progressHasReal = false;
-    const box = ensureOverlay();
-    const log = box.querySelector('.admin-processing-log');
-    if(log) log.innerHTML = '';
     let busy = false;
     progressTimer = window.setInterval(function(){
-      const elapsed = Math.round((Date.now() - progressStartedAt) / 1000);
-      const el = box.querySelector('.admin-processing-elapsed');
-      if(el) el.textContent = elapsed >= 3 ? ('Aguardando h\u00e1 ' + elapsed + 's') : '';
       if(busy || !token) return;
       busy = true;
       fetch('/api/progresso.php?t=' + encodeURIComponent(token), {cache: 'no-store', credentials: 'omit'})
