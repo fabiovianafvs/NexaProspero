@@ -184,7 +184,9 @@ if (!function_exists('itau_webhook_payment_data')) {
         $paymentDate=itau_webhook_date(itau_webhook_pick($item,['dataInclusaoPagamento','dataPagamento','data_pagamento']));
         $creditDate=itau_webhook_date(itau_webhook_pick($item,['dataCredito','data_credito']));
         $notificationDate=itau_webhook_date(itau_webhook_pick($item,['dataNotificacao','data_notificacao']));
-        $settlementDate=$paymentDate?:$creditDate?:$notificationDate?:date('Y-m-d');
+        // Baixa e movimento na data em que o valor entrou no extrato (igual ao Sicoob).
+        // Sem data de crédito (webhook no momento do pagamento), usa a data do pagamento.
+        $settlementDate=$creditDate?:$paymentDate?:$notificationDate?:date('Y-m-d');
         $movementDate=$creditDate?:$paymentDate?:$notificationDate?:date('Y-m-d');
         return [
             'paid_amount'=>$paid,
@@ -315,6 +317,50 @@ if (!function_exists('itau_webhook_reconcile_existing_bank_fee')) {
     }
 }
 
+if (!function_exists('itau_webhook_align_settlement_dates')) {
+    /**
+     * Baixa Itaú já feita (ex.: pelo webhook no dia do pagamento) com data diferente
+     * da data em que o valor entrou no extrato (Francesinha): acerta a data da baixa,
+     * do movimento financeiro e da tarifa. Só mexe em baixas automáticas do Itaú
+     * desta cobrança, ativas e NÃO conciliadas. Deve rodar dentro da transação.
+     */
+    function itau_webhook_align_settlement_dates(PDO $pdo,array $cfg,array $charge,string $creditDate): int {
+        $companyId=(int)($cfg['company_id']??0);$chargeId=(int)($charge['id']??0);$receivableId=(int)($charge['receivable_id']??0);
+        if($companyId<=0||$chargeId<=0||itau_webhook_date($creditDate)!==$creditDate)return 0;
+        $changed=0;
+        if($receivableId>0){
+            $statusSql=finance_column_exists($pdo,'finance_settlements','status')?" AND COALESCE(status,'ATIVO')='ATIVO'":'';
+            $st=$pdo->prepare("SELECT id,settlement_date,movement_id FROM finance_settlements WHERE company_id=? AND origin_type='RECEBER' AND origin_id=? AND notes LIKE ?".$statusSql.' FOR UPDATE');
+            $st->execute([$companyId,$receivableId,'Baixa automática via Webhook Itaú. Cobrança #'.$chargeId.' %']);
+            $hasRec=finance_table_exists($pdo,'finance_bank_reconciliation_items');
+            $recSettlement=$hasRec&&finance_column_exists($pdo,'finance_bank_reconciliation_items','settlement_id');
+            $recMovement=$hasRec&&finance_column_exists($pdo,'finance_bank_reconciliation_items','movement_id');
+            foreach($st->fetchAll(PDO::FETCH_ASSOC)?:[] as $row){
+                $settlementId=(int)$row['id'];$movementId=(int)($row['movement_id']??0);
+                if($recSettlement||$recMovement){
+                    $parts=[];$params=[$companyId];
+                    if($recSettlement){$parts[]='settlement_id=?';$params[]=$settlementId;}
+                    if($recMovement&&$movementId>0){$parts[]='movement_id=?';$params[]=$movementId;}
+                    $q=$pdo->prepare("SELECT COUNT(*) FROM finance_bank_reconciliation_items WHERE company_id=? AND status='CONCILIADO' AND (".implode(' OR ',$parts).')');
+                    $q->execute($params);if((int)$q->fetchColumn()>0)continue; // conciliado: não altera
+                }
+                if((string)$row['settlement_date']!==$creditDate){
+                    $pdo->prepare('UPDATE finance_settlements SET settlement_date=? WHERE company_id=? AND id=?')->execute([$creditDate,$companyId,$settlementId]);
+                    $changed++;
+                }
+                if($movementId>0){
+                    $up=$pdo->prepare("UPDATE finance_movements SET movement_date=? WHERE company_id=? AND id=? AND origin_type='RECEBER' AND movement_date<>?");
+                    $up->execute([$creditDate,$companyId,$movementId,$creditDate]);$changed+=$up->rowCount();
+                }
+            }
+        }
+        $fee=$pdo->prepare("UPDATE finance_movements SET movement_date=? WHERE company_id=? AND origin_type='BOLETO_TARIFA' AND origin_id=? AND status='ATIVO' AND movement_date<>?");
+        $fee->execute([$creditDate,$companyId,$chargeId,$creditDate]);$changed+=$fee->rowCount();
+        $pdo->prepare('UPDATE finance_boleto_charges SET credit_date=?,updated_at=NOW() WHERE company_id=? AND id=?')->execute([$creditDate,$companyId,$chargeId]);
+        return $changed;
+    }
+}
+
 if (!function_exists('itau_webhook_auto_settle_charge')) {
     function itau_webhook_auto_settle_charge(PDO $pdo,array $cfg,int $chargeId,array $item): array {
         if (empty($cfg['_nexa_skip_schema_ensure'])) {
@@ -339,8 +385,9 @@ if (!function_exists('itau_webhook_auto_settle_charge')) {
             $paymentDate=(string)($payment['payment_date']?:$settlementDate);
             $isFrancesinha=(string)($item['_nexa_source']??'')==='API_BOLETOS_V3_MOVIMENTACOES';
             $creditDate=($payment['credit_date']??null) ?: ($isFrancesinha ? null : $movementDate);
-            // Na Francesinha, sem campo bancário explícito: crédito desconhecido (NULL).
-            // Para webhooks legados, preserva o fallback anterior, sem mudar seu fluxo em produção.
+            // Francesinha: crédito = data em que o valor foi lançado na conta (dataCredito
+            // montado em itau_webhook_event_from_movement). Webhook sem dataCredito mantém
+            // o fallback anterior; a próxima sincronização da Francesinha acerta a data.
             $credited=round((float)($payment['credited_amount']?:$paid),2);
             $paidAt=$paymentDate.' 00:00:00';
 
@@ -348,8 +395,11 @@ if (!function_exists('itau_webhook_auto_settle_charge')) {
                 $feeMovementId=itau_webhook_reconcile_existing_bank_fee($pdo,$cfg,$charge,$bankFee,$movementDate,$bankFeeDescription);
                 $pdo->prepare('UPDATE finance_boleto_charges SET paid_amount=COALESCE(paid_amount,?),payment_date=COALESCE(payment_date,?),credit_date=COALESCE(credit_date,?),credited_amount=COALESCE(credited_amount,?),paid_at=COALESCE(paid_at,?),last_webhook_at=NOW(),updated_at=NOW() WHERE company_id=? AND id=?')
                     ->execute([$paid,$paymentDate,$creditDate,$credited,$paidAt,$companyId,$chargeId]);
+                $aligned=($isFrancesinha&&$creditDate)?itau_webhook_align_settlement_dates($pdo,$cfg,$charge,(string)$creditDate):0;
                 $pdo->commit();
-                return ['processed'=>true,'status'=>'JA_PAGO','message'=>$feeMovementId>0?'Cobrança já estava paga; tarifa bancária conferida/conciliada sem gerar nova baixa.':'Cobrança já estava marcada como paga; evento mantido apenas para auditoria.','receivable_id'=>$receivableId,'bank_fee_movement_id'=>$feeMovementId,'bank_fee_amount'=>$bankFee];
+                $msg=$feeMovementId>0?'Cobrança já estava paga; tarifa bancária conferida/conciliada sem gerar nova baixa.':'Cobrança já estava marcada como paga; evento mantido apenas para auditoria.';
+                if($aligned>0)$msg.=' Data da baixa/movimento ajustada para '.date('d/m/Y',strtotime((string)$creditDate)).' (entrada no extrato Itaú).';
+                return ['processed'=>true,'status'=>'JA_PAGO','message'=>$msg,'receivable_id'=>$receivableId,'bank_fee_movement_id'=>$feeMovementId,'bank_fee_amount'=>$bankFee,'dates_aligned'=>$aligned];
             }
 
             if($receivableId<=0){
@@ -367,6 +417,7 @@ if (!function_exists('itau_webhook_auto_settle_charge')) {
                 $feeMovementId=$bankFee>0.009?itau_webhook_create_bank_fee_movement($pdo,$cfg,$charge,$title,$bankFee,$movementDate,$bankFeeDescription):0;
                 $pdo->prepare("UPDATE finance_boleto_charges SET status='PAGO',paid_at=?,paid_amount=?,payment_date=?,credit_date=?,credited_amount=?,last_webhook_at=NOW(),error_message=NULL,updated_at=NOW() WHERE company_id=? AND id=?")
                     ->execute([$paidAt,$paid,$paymentDate,$creditDate,$credited,$companyId,$chargeId]);
+                if($isFrancesinha&&$creditDate)itau_webhook_align_settlement_dates($pdo,$cfg,$charge,(string)$creditDate);
                 $pdo->commit();
                 return ['processed'=>true,'status'=>'RECEBER_JA_BAIXADO','message'=>$feeMovementId>0?'Conta a Receber já estava baixada; boleto atualizado para PAGO e tarifa bancária conferida/conciliada sem gerar nova baixa.':'Conta a Receber já estava baixada; boleto atualizado para PAGO sem gerar nova movimentação.','receivable_id'=>$receivableId,'bank_fee_movement_id'=>$feeMovementId,'bank_fee_amount'=>$bankFee];
             }
@@ -409,7 +460,7 @@ if (!function_exists('itau_webhook_auto_settle_charge')) {
                 .($credited>0?' · Crédito líquido R$ '.number_format($credited,2,',','.'):'')
                 .($bankFee>0?' · Tarifa bancária R$ '.number_format($bankFee,2,',','.'):'')
                 .' · Pagamento '.$paymentDate
-                .' · Crédito '.($creditDate ?: 'não informado pelo banco (conferir extrato)').'.';
+                .' · Crédito '.($creditDate ? $creditDate.((string)($item['_nexa_credit_source']??'')==='FRANCESINHA'?' (lançamento na Francesinha Itaú)':'') : 'não informado pelo banco (conferir extrato)').'.';
 
             $st=$pdo->prepare('INSERT INTO finance_settlements (company_id, origin_type, origin_id, settlement_date, payment_method, bank_account_id, amount, fine_amount, interest_amount, discount_amount, waived_fine_amount, waived_interest_amount, waiver_user_id, notes, movement_id) VALUES (?,\'RECEBER\',?,?,?,?,?,?,?,?,0,0,NULL,?,NULL)');
             $st->execute([$companyId,$receivableId,$settlementDate,$methodLabel,$bankId,$principal,$fine,$interest,$discount,$notes]);
@@ -534,7 +585,8 @@ if (!function_exists('itau_webhook_movement_diagnostic')) {
         $payer=trim((string)itau_webhook_pick($movement,['pagador','nome_pagador','nomePagador','nomePagadorSacado']));
         $movementDate=itau_webhook_date(itau_webhook_pick($movement,['data_movimentacao','dataMovimentacao'])) ?: ($queryDate?:'');
         $bankPaymentDate=itau_webhook_date(itau_webhook_pick($movement,['dataPagamento','data_pagamento','dataInclusaoPagamento','data_liquidacao'])) ?: $movementDate;
-        $bankCreditDate=itau_webhook_date(itau_webhook_pick($movement,['dataCredito','data_credito','data_efetiva_credito','dataEfetivaCredito']));
+        $explicitCreditDate=itau_webhook_date(itau_webhook_pick($movement,['dataCredito','data_credito','data_efetiva_credito','dataEfetivaCredito']));
+        $bankCreditDate=$explicitCreditDate?:($movementDate!==''?$movementDate:null);
         $title=abs(itau_webhook_money(itau_webhook_pick($movement,['valor_titulo','valorTitulo'])));
         $net=abs(itau_webhook_money(itau_webhook_pick($movement,['valor_liquido_lancado','valorLiquidoLancado','valor_creditado','valorCreditado'])));
         $fee=itau_webhook_movement_fee_data($movement);$feeAmount=round(max(0.0,(float)($fee['amount']??0)),2);
@@ -555,7 +607,7 @@ if (!function_exists('itau_webhook_movement_diagnostic')) {
             'date'=>$movementDate,
             'payment_date'=>$bankPaymentDate,
             'credit_date'=>$bankCreditDate,
-            'credit_date_confirmed'=>$bankCreditDate!==null,
+            'credit_date_confirmed'=>$explicitCreditDate!==null,
             'nosso_numero'=>$nosso,
             'seu_numero'=>$seu,
             'payer'=>$payer,
@@ -575,19 +627,22 @@ if (!function_exists('itau_webhook_movement_diagnostic')) {
 }
 
 if (!function_exists('itau_webhook_event_from_movement')) {
-    function itau_webhook_event_from_movement(array $movement): array {
+    function itau_webhook_event_from_movement(array $movement, string $queryDate = ''): array {
         $net=itau_webhook_money($movement['valor_liquido_lancado']??0);
         $fee=itau_webhook_movement_fee_data($movement);
         $gross=round($net+(float)$fee['amount'],2);
         $title=itau_webhook_money($movement['valor_titulo']??0);
         if($gross<=0&&$title>0)$gross=$title;
-        $movementDate=itau_webhook_date(itau_webhook_pick($movement,['data_movimentacao','dataMovimentacao']))?:date('Y-m-d');
+        $movementDate=itau_webhook_date(itau_webhook_pick($movement,['data_movimentacao','dataMovimentacao']))?:(itau_webhook_date($queryDate)?:date('Y-m-d'));
         $paymentDate=itau_webhook_date(itau_webhook_pick($movement,['dataPagamento','data_pagamento','dataInclusaoPagamento','data_liquidacao']))?:$movementDate;
-        $creditDate=itau_webhook_date(itau_webhook_pick($movement,['dataCredito','data_credito','data_efetiva_credito','dataEfetivaCredito']));
+        $explicitCredit=itau_webhook_date(itau_webhook_pick($movement,['dataCredito','data_credito','data_efetiva_credito','dataEfetivaCredito']));
+        // A Francesinha do dia D lista as liquidações cujo valor líquido foi LANÇADO
+        // na conta no dia D (valor_liquido_lancado). É a data que aparece no extrato,
+        // e não a data em que o pagador pagou (que costuma ser 1 dia útil antes).
+        $creditDate=$explicitCredit?:$movementDate;
         $event=['numeroNossoNumero'=>(string)($movement['nosso_numero']??''),'dacTitulo'=>(string)($movement['dac_titulo']??''),'tipoCobranca'=>(string)($movement['tipo_cobranca']??''),'nomePagador'=>(string)($movement['pagador']??''),'valorTitulo'=>$title,'valorPagoTotalCobranca'=>$gross,'valorCreditado'=>$net,'dataInclusaoPagamento'=>$paymentDate,'dataNotificacao'=>$movementDate,'bankFeeAmount'=>(float)$fee['amount'],'bankFeeDescription'=>(string)$fee['description'],'tipoLiquidacao'=>'CONSULTA_MOVIMENTACOES','_nexa_source'=>'API_BOLETOS_V3_MOVIMENTACOES','_itau_movement'=>$movement];
-        // data_movimentacao é a data da Francesinha, NÃO a data comprovada de crédito no extrato.
-        // Apenas informamos dataCredito quando ela veio expressamente do banco.
-        if($creditDate!==null)$event['dataCredito']=$creditDate;
+        $event['dataCredito']=$creditDate;
+        $event['_nexa_credit_source']=$explicitCredit!==null?'ITAU':'FRANCESINHA';
         return $event;
     }
 }
@@ -726,7 +781,7 @@ if (!function_exists('itau_webhook_sync_liquidations')) {
                 $details[]=['nosso_numero'=>$nosso,'status'=>(string)($diag['local_status']??'LOCALIZADO'),'message'=>'Consulta diagnóstica: nenhuma baixa ou movimento foi gerado.','bank_fee_amount'=>$movementFee];
                 continue;
             }
-            $event=itau_webhook_event_from_movement($movement);
+            $event=itau_webhook_event_from_movement($movement,$date);
             $raw=json_encode(['boletos'=>[$event]],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?:'{}';
             try{
                 $stored=itau_webhook_store_event($pdo,$cfg,$event,$raw);
