@@ -879,10 +879,19 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
   </form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script>
 </div>
 
+<?php
+  require_once __DIR__ . '/../config/grid_preferences.php';
+  $recGridPrefs = nexa_grid_prefs_load($pdo, (int)COMPANY_ID, 'fin_receber');
+  $recGridToday = $creTodayDate->format('Y-m-d');
+?>
+<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_1">
+<style id="ntgFirstPaint">.ntg-wrap:not(.is-ready){visibility:hidden}</style>
+<script>setTimeout(function(){var s=document.getElementById('ntgFirstPaint');if(s&&!document.documentElement.classList.contains('ntg-ready'))s.remove();},4000);</script>
 <div class="finance-card">
   <div class="finance-card-head receivable-list-head">
     <div><h2 class="finance-subtitle">Títulos cadastrados</h2><span class="finance-muted"><?= count($rows) ?> título(s)</span></div>
     <div class="receivable-head-actions">
+      <span class="ntg-legend"><span><i class="lg-overdue"></i>Vencida</span><span><i class="lg-today"></i>Vence hoje</span></span>
       <?php if($canSettleTitles): ?>
         <div class="receivable-selected-summary" id="bulkSelectedSummary" hidden>
           <div class="receivable-selected-count"><b id="bulkSelectedHeaderCount">0</b> parcela(s)</div>
@@ -895,11 +904,33 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         <?php if($canOpenBankSync): ?><button class="btn" type="button" id="openItauLiquidationSyncBtn">Sincronizar liquidações</button><?php endif; ?>
         <button class="btn btn-primary" type="button" id="openBulkSettleBtn" disabled>Baixar selecionados</button>
       <?php endif; ?>
+      <div class="ntg-toolbar">
+        <details class="ntg-picker"><summary class="btn btn-sm">☷ Colunas</summary><div class="ntg-picker-panel"><strong>Colunas visíveis</strong><div data-ntg-columns="fin_receber"></div><button type="button" class="btn ntg-reset" data-ntg-reset="fin_receber">Restaurar padrão</button><small>Clique no título para ordenar · arraste ⠿ para mudar de lugar · ajuste a largura pela borda do cabeçalho.</small></div></details>
+        <span class="ntg-pref-state" data-ntg-state="fin_receber" role="status" aria-live="polite"></span>
+      </div>
     </div>
   </div>
-  <p class="finance-muted receivable-help">Marque todas as parcelas desejadas e somente depois clique em <strong>Baixar selecionados</strong>. A seleção não abrirá a tela automaticamente.</p>
-  <div class="receivable-list">
-    <?php if(!$rows): ?><div class="finance-empty">Nenhum título encontrado.</div><?php endif; ?>
+  <?php if(!$rows): ?><div class="finance-empty">Nenhum título encontrado.</div><?php else: ?>
+  <div class="ntg-wrap">
+    <table class="ntg-table" data-ntg="fin_receber" data-scope="<?= (int)COMPANY_ID ?>" data-save-url="grid_preferencias.php" data-csrf="<?= finance_h(nexa_grid_csrf()) ?>"
+      data-prefs="<?= finance_h(json_encode($recGridPrefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) ?>"
+      data-defaults='{"id":70,"cliente":230,"doc":130,"historico":200,"atraso":78,"emissao":92,"vencimento":108,"situacao":100,"original":110,"aberto":115,"plano":200}'>
+      <thead><tr>
+        <th class="ntg-sel"></th>
+        <th data-col="id" data-type="num">ID</th>
+        <th data-col="cliente">Cliente</th>
+        <th data-col="doc">Documento</th>
+        <th data-col="historico">Histórico</th>
+        <th data-col="atraso" data-type="num">Atraso</th>
+        <th data-col="emissao">Emissão</th>
+        <th data-col="vencimento">Vencimento</th>
+        <th data-col="situacao">Situação</th>
+        <th data-col="original" data-type="num" class="ntg-num">Original</th>
+        <th data-col="aberto" data-type="num" class="ntg-num">Em aberto</th>
+        <th data-col="plano">Plano</th>
+        <th class="ntg-actions">Ações</th>
+      </tr></thead>
+      <tbody>
     <?php foreach($rows as $r):
       $canSelectRow = $canSettleTitles && in_array((string)$r['status'], ['ABERTO','PARCIAL'], true);
       $rowOriginal = (float)($r['amount'] ?? 0);
@@ -938,10 +969,14 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
       $rowChargeReady = is_array($rowCharge) && trim((string)($rowCharge['linha_digitavel'] ?? '')) !== '' && trim((string)($rowCharge['barcode'] ?? '')) !== '';
       $rowChargeActive = is_array($rowCharge) && strtoupper(trim((string)($rowCharge['status'] ?? ''))) !== 'CANCELADO';
       if ($financeCrossContext && $rowChargeActive) $canSelectRow = false;
+      $rowDueIso = substr((string)($r['due_date'] ?? ''), 0, 10);
+      $rowClass = $rowIsOverdue ? 'ntg-overdue' : (($rowIsOpen && $rowDueIso === $recGridToday) ? 'ntg-today' : '');
+      $rowDocText = trim((string)($r['document_number'] ?? '') . (!empty($r['installment']) ? ' · Parcela ' . (string)$r['installment'] : ''), ' ·');
+      $rowPlanText = trim((string)($r['code'] ?? '') . ' ' . (string)($r['account_name'] ?? ''));
+      $rowOpenTip = 'Saldo base: R$ ' . finance_money_br($rowOpen) . ' | Multa: R$ ' . finance_money_br($rowFineToday) . ' | Juros: R$ ' . finance_money_br($rowInterestToday) . ($rowDiscountToday > 0.0001 ? ' | Desconto CRE: R$ ' . finance_money_br($rowDiscountToday) : '');
     ?>
-      <article class="receivable-title-card<?= $rowIsOverdue ? ' is-overdue' : '' ?>">
-        <div class="receivable-title-main">
-          <div class="receivable-select-cell"><?php if($canSelectRow): ?><input class="bulk-title-check" type="checkbox" value="<?= (int)$r['id'] ?>"
+      <tr class="<?= $rowClass ?>">
+        <td class="ntg-sel"><?php if($canSelectRow): ?><input class="bulk-title-check" type="checkbox" value="<?= (int)$r['id'] ?>"
             data-person="<?= finance_h($r['person_name'] ?? '') ?>"
             data-desc="<?= finance_h($r['description'] ?? '') ?>"
             data-doc="<?= finance_h($r['document_number'] ?? '') ?>"
@@ -951,28 +986,24 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
             data-original="<?= number_format($rowOriginal, 2, '.', '') ?>"
             data-open="<?= number_format($rowOpen, 2, '.', '') ?>"
             data-payment="<?= finance_h($r['expected_payment_method'] ?? '') ?>"
-            data-fine-charged="<?= ((float)($r['fine_amount'] ?? 0) > 0.0001) ? '1' : '0' ?>"><?php endif; ?></div>
-          <div class="receivable-title-id"><span>ID</span><strong>#<?= (int)$r['id'] ?></strong></div>
-          <div class="receivable-title-client"><span>Cliente</span><strong><?= finance_h($r['person_name'] ?? '') ?></strong><small><?= finance_h($r['document_number'] ?? '') ?><?= !empty($r['installment']) ? ' · Parcela ' . finance_h($r['installment']) : '' ?></small></div>
-          <div class="receivable-title-history"><span>Histórico</span><strong><?= finance_h($r['description'] ?? '') ?: '—' ?></strong></div>
-          <div class="receivable-title-delay"><span>Atraso</span><strong><?= $rowIsOverdue ? ($rowLateDays . ' dia' . ($rowLateDays === 1 ? '' : 's')) : '—' ?></strong></div>
-          <div><span>Emissão</span><strong><?= finance_date_br($r['issue_date'] ?? '') ?></strong></div>
-          <div><span>Vencimento</span><strong><?= finance_date_br($r['due_date'] ?? '') ?></strong></div>
-          <div><span>Situação</span><?= finance_status_badge((string)$r['status']) ?></div>
-          <div><span>Original</span><strong>R$ <?= finance_money_br($rowOriginal) ?></strong></div>
-          <div class="receivable-title-open"><span>Em aberto</span><strong class="receivable-open-updated" title="Saldo base: R$ <?= finance_money_br($rowOpen) ?> | Multa: R$ <?= finance_money_br($rowFineToday) ?> | Juros: R$ <?= finance_money_br($rowInterestToday) ?><?= $rowDiscountToday > 0.0001 ? ' | Desconto CRE: R$ ' . finance_money_br($rowDiscountToday) : '' ?>">R$ <?= finance_money_br($rowUpdatedOpen) ?></strong></div>
-          <div class="receivable-title-plan"><span>Plano</span><strong><span class="code"><?= finance_h($r['code'] ?? '') ?></span> <?= finance_h($r['account_name'] ?? '') ?></strong></div>
-        </div>
-        <div class="receivable-title-actions">
-          <div class="receivable-title-actions-left">
-            <span>Ações do título</span>
-            <button type="button" class="btn receivable-view-products" data-view-products data-title-id="<?= (int)$r['id'] ?>" title="Visualizar os produtos do pedido que originou este título">Ver Produtos</button>
-          </div>
-          <div class="receivable-title-actions-buttons">
+            data-fine-charged="<?= ((float)($r['fine_amount'] ?? 0) > 0.0001) ? '1' : '0' ?>"><?php endif; ?></td>
+        <td data-col="id" data-sort="<?= (int)$r['id'] ?>">#<?= (int)$r['id'] ?></td>
+        <td data-col="cliente" title="<?= finance_h($r['person_name'] ?? '') ?>"><strong><?= finance_h($r['person_name'] ?? '') ?></strong></td>
+        <td data-col="doc" title="<?= finance_h($rowDocText) ?>"><?= $rowDocText !== '' ? finance_h($rowDocText) : '<span class="ntg-muted">—</span>' ?></td>
+        <td data-col="historico" title="<?= finance_h($r['description'] ?? '') ?>"><?= finance_h($r['description'] ?? '') ?: '<span class="ntg-muted">—</span>' ?></td>
+        <td data-col="atraso" data-sort="<?= $rowIsOverdue ? (int)$rowLateDays : 0 ?>"><?= $rowIsOverdue ? ($rowLateDays . ' dia' . ($rowLateDays === 1 ? '' : 's')) : '<span class="ntg-muted">—</span>' ?></td>
+        <td data-col="emissao" data-sort="<?= finance_h(substr((string)($r['issue_date'] ?? ''), 0, 10)) ?>"><?= finance_date_br($r['issue_date'] ?? '') ?></td>
+        <td data-col="vencimento" data-sort="<?= finance_h($rowDueIso) ?>"><?= finance_date_br($r['due_date'] ?? '') ?></td>
+        <td data-col="situacao" data-sort="<?= finance_h((string)$r['status']) ?>"><?= finance_status_badge((string)$r['status']) ?></td>
+        <td data-col="original" class="ntg-num" data-sort="<?= number_format($rowOriginal, 2, '.', '') ?>">R$ <?= finance_money_br($rowOriginal) ?></td>
+        <td data-col="aberto" class="ntg-num" data-sort="<?= number_format($rowUpdatedOpen, 2, '.', '') ?>" title="<?= finance_h($rowOpenTip) ?>"><strong>R$ <?= finance_money_br($rowUpdatedOpen) ?></strong></td>
+        <td data-col="plano" title="<?= finance_h($rowPlanText) ?>"><span class="code"><?= finance_h($r['code'] ?? '') ?></span> <?= finance_h($r['account_name'] ?? '') ?></td>
+        <td class="ntg-actions"><div class="ntg-icons">
+            <button type="button" class="ntg-icon" data-view-products data-title-id="<?= (int)$r['id'] ?>" title="Ver produtos do pedido que originou este título" aria-label="Ver produtos"><?= nexa_grid_icon('products') ?></button>
             <?php if($rowChargeReady && !$financeCrossContext): ?>
-              <a class="btn" href="financeiro_boleto_imprimir.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" target="_blank" title="Imprimir ou visualizar o boleto">Boleto</a>
-              <a class="btn receivable-boleto-whatsapp" href="financeiro_boleto_whatsapp.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" title="Enviar boleto em PDF pelo WhatsApp">WhatsApp</a>
-              <a class="btn" href="email_documento.php?type=boleto&receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" title="Enviar boleto em PDF por e-mail">✉ E-mail</a>
+              <a class="ntg-icon" href="financeiro_boleto_imprimir.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" target="_blank" title="Imprimir ou visualizar o boleto" aria-label="Boleto"><?= nexa_grid_icon('boleto') ?></a>
+              <a class="ntg-icon ntg-wa" href="financeiro_boleto_whatsapp.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" title="Enviar boleto em PDF pelo WhatsApp" aria-label="WhatsApp"><?= nexa_grid_icon('whatsapp') ?></a>
+              <a class="ntg-icon" href="email_documento.php?type=boleto&receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" title="Enviar boleto em PDF por e-mail" aria-label="E-mail"><?= nexa_grid_icon('mail') ?></a>
             <?php elseif($rowChargeReady && $financeCrossContext && $canViewBilling): ?>
               <?php
                 $boletoReturn='financeiro_contas_receber.php';
@@ -980,26 +1011,28 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
                 $boletoWaHref=function_exists('multi_company_context_url')?multi_company_context_url('financeiro_boleto_whatsapp.php?receivable_id='.(int)$r['id'].'&return_to='.rawurlencode($boletoReturn)):'financeiro_boleto_whatsapp.php?receivable_id='.(int)$r['id'];
                 $boletoEmailHref=function_exists('multi_company_context_url')?multi_company_context_url('email_documento.php?type=boleto&receivable_id='.(int)$r['id'].'&return_to='.rawurlencode($boletoReturn)):'email_documento.php?type=boleto&receivable_id='.(int)$r['id'];
               ?>
-              <a class="btn" href="<?= finance_h($boletoHref) ?>" target="_blank" title="Visualizar ou imprimir boleto em modo protegido">Boleto</a>
-              <?php if($financeCrossBillingSend): ?><a class="btn receivable-boleto-whatsapp" href="<?= finance_h($boletoWaHref) ?>" title="Enviar boleto em PDF pelo WhatsApp da empresa selecionada">WhatsApp</a><a class="btn" href="<?= finance_h($boletoEmailHref) ?>" title="Enviar boleto em PDF por e-mail usando a empresa selecionada">✉ E-mail</a><?php endif; ?>
+              <a class="ntg-icon" href="<?= finance_h($boletoHref) ?>" target="_blank" title="Visualizar ou imprimir boleto em modo protegido" aria-label="Boleto"><?= nexa_grid_icon('boleto') ?></a>
+              <?php if($financeCrossBillingSend): ?><a class="ntg-icon ntg-wa" href="<?= finance_h($boletoWaHref) ?>" title="Enviar boleto em PDF pelo WhatsApp da empresa selecionada" aria-label="WhatsApp"><?= nexa_grid_icon('whatsapp') ?></a><a class="ntg-icon" href="<?= finance_h($boletoEmailHref) ?>" title="Enviar boleto em PDF por e-mail usando a empresa selecionada" aria-label="E-mail"><?= nexa_grid_icon('mail') ?></a><?php endif; ?>
             <?php endif; ?>
             <?php
               $canEditCrossTitle = !$financeCrossContext || ($financeCrossTitleWrite && strtoupper((string)($r['status'] ?? '')) === 'ABERTO' && (float)($r['paid_amount'] ?? 0) <= 0.009 && empty($receivableSettlementHistoryMap[(int)($r['id'] ?? 0)]) && !$rowChargeActive);
               if ($canEditCrossTitle):
-            ?><a class="btn" href="?edit=<?= (int)$r['id'] ?>">Editar</a><?php elseif($financeCrossContext): ?><a class="btn" href="?edit=<?= (int)$r['id'] ?>">Detalhes</a><?php endif; ?>
+            ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Editar título" aria-label="Editar título"><?= nexa_grid_icon('edit') ?></a><?php elseif($financeCrossContext): ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Detalhes do título" aria-label="Detalhes do título"><?= nexa_grid_icon('view') ?></a><?php endif; ?>
             <?php if(in_array((string)$r['status'], ['ABERTO','PARCIAL'], true)): ?>
-              <?php if($canSettleTitles && (!$financeCrossContext || !$rowChargeActive)): ?><a class="btn btn-primary" href="?settle=<?= (int)$r['id'] ?>">Baixar</a><?php endif; ?>
               <?php
                 $rowChargeCanCancelCross = !$rowChargeActive || ($financeCrossBillingCancel && is_array($rowCharge) && in_array(strtoupper(trim((string)($rowCharge['status'] ?? ''))), billing_charge_local_cancel_statuses(), true) && !billing_charge_has_bank_identity($rowCharge));
               ?>
-              <?php if($canCancelTitles && (!$financeCrossContext || $rowChargeCanCancelCross)): ?><form method="post" data-confirm-cancel-title><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><?php if($financeCrossContext): ?><input type="hidden" name="mc_csrf" value="<?= finance_h($billingCancelMcCsrf) ?>"><?php endif; ?><button class="btn btn-danger">Cancelar</button></form><?php endif; ?>
+              <?php if($canCancelTitles && (!$financeCrossContext || $rowChargeCanCancelCross)): ?><form method="post" data-confirm-cancel-title><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><?php if($financeCrossContext): ?><input type="hidden" name="mc_csrf" value="<?= finance_h($billingCancelMcCsrf) ?>"><?php endif; ?><button class="ntg-icon ntg-danger" title="Cancelar título" aria-label="Cancelar título"><?= nexa_grid_icon('cancel') ?></button></form><?php endif; ?>
             <?php endif; ?>
-          </div>
-        </div>
-      </article>
+        </div></td>
+      </tr>
     <?php endforeach; ?>
+      </tbody>
+    </table>
   </div>
+  <?php endif; ?>
 </div>
+<script src="assets/nexa_titles_grid.js?v=20261108_1" defer></script>
 
 <style>
 .receivable-boleto-whatsapp{background:#25D366!important;border-color:#1ebe57!important;color:#fff!important}.receivable-boleto-whatsapp:hover{background:#1fbd5a!important;border-color:#18a94c!important;color:#fff!important}.finance-filter-card{padding-top:10px!important;padding-bottom:10px!important}.receivable-filter-form label,.receivable-person-picker>label{display:block;font-size:12px;font-weight:850;color:#475569;margin-bottom:3px}.receivable-filter-grid{display:grid;grid-template-columns:repeat(6,minmax(118px,.78fr)) minmax(145px,.9fr);gap:8px 10px;align-items:end}.receivable-filter-grid input,.receivable-filter-grid select{min-height:39px}.receivable-filter-second{display:grid;grid-template-columns:minmax(300px,420px) minmax(260px,1fr) auto;align-items:end;gap:10px;margin-top:4px}.receivable-person-picker,.receivable-history-second{min-width:0}.receivable-person-picker .finance-field-inline{display:grid;grid-template-columns:minmax(145px,1fr) auto auto;gap:8px}.receivable-person-picker .finance-field-inline .btn{white-space:nowrap}.receivable-filter-actions{display:flex;gap:8px;margin-left:0;white-space:nowrap}.receivable-filter-actions .btn{min-height:39px}.receivable-list-head{align-items:center}.receivable-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.receivable-selected-summary{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid #86efac;border-radius:12px;background:#f0fdf4;color:#166534;font-size:12px;white-space:nowrap}.receivable-selected-summary[hidden]{display:none}.receivable-selected-summary span{font-weight:800}.receivable-selected-summary strong{font-weight:950}.receivable-check-all{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #dbe4f0;border-radius:12px;background:#f8fbff;font-size:12px;font-weight:850;color:#475569}.receivable-help{margin:-5px 0 13px}.receivable-list{display:grid;gap:12px}.receivable-title-card{border:1px solid #dbe4f0;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 22px rgba(15,23,42,.035)}.receivable-title-card.is-overdue{border-color:#fca5a5;border-left:5px solid #dc2626;background:#fff7f7;box-shadow:0 8px 22px rgba(185,28,28,.07)}.receivable-title-card.is-overdue .receivable-title-main{background:#fff7f7}.receivable-title-card.is-overdue .receivable-title-actions{background:#fff1f2;border-top-color:#fecaca}.receivable-title-main{display:grid;grid-template-columns:34px 58px minmax(170px,1.18fr) minmax(125px,.82fr) 72px 86px 94px 96px 98px 112px minmax(135px,.86fr);gap:9px;align-items:center;padding:13px 14px}.receivable-title-main>div{min-width:0}.receivable-title-main span{display:block;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.025em;color:#64748b;margin-bottom:4px}.receivable-title-main strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:13px}.receivable-title-client small{display:block;margin-top:4px;color:#64748b;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.receivable-title-history strong{font-size:12px}.receivable-title-delay{text-align:center}.receivable-title-delay strong{color:#64748b;font-size:12px}.receivable-title-card.is-overdue .receivable-title-delay strong,.receivable-title-card.is-overdue .receivable-open-updated{color:#b91c1c;font-weight:950}.receivable-title-open .receivable-open-updated{color:#047857}.receivable-title-card.is-overdue .receivable-title-open .receivable-open-updated{color:#b91c1c}.receivable-select-cell{text-align:center}.receivable-select-cell input{width:18px;height:18px}.receivable-title-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#f8fbff;border-top:1px solid #e5eaf2}.receivable-title-actions>div{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.receivable-title-actions-left>span{font-size:11px;text-transform:uppercase;font-weight:900;color:#64748b;margin-right:3px}.receivable-title-actions-left .receivable-view-products{font-weight:850;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.receivable-title-actions-left .receivable-view-products:hover{background:#dbeafe;border-color:#93c5fd;color:#1e40af}.receivable-title-actions form{margin:0}.receivable-title-actions .btn{min-height:34px;height:34px;padding:0 11px;border-radius:10px;font-size:12px}.finance-bulk-modal .finance-modal-dialog{width:min(1220px,100%)}.finance-bulk-common{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}.finance-bulk-common .wide{grid-column:span 4}.bulk-mode-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px;border:1px solid #dbe4f0;border-radius:15px;background:#f8fbff}.bulk-mode-box label{display:flex;align-items:center;gap:6px;font-weight:850}.bulk-partial-controls{display:flex;align-items:end;gap:8px;flex:1 1 350px}.bulk-partial-controls>div{flex:1}.bulk-partial-controls input{min-height:42px}.finance-bulk-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.finance-bulk-total{border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;padding:9px 12px;font-weight:950;color:#0b1f5b}.bulk-settle-list{display:grid;gap:10px}.bulk-settle-row{border:1px solid #dbe4f0;border-radius:16px;padding:12px;background:#fff}.bulk-settle-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}.bulk-settle-head strong{display:block;color:#0b1f5b}.bulk-settle-head small{display:block;color:#64748b;margin-top:3px}.bulk-settle-fields{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:9px;align-items:end}.bulk-settle-fields label{font-size:10px;text-transform:uppercase;font-weight:850;color:#64748b}.bulk-settle-fields input{min-height:39px;padding:7px 8px}.bulk-readonly{min-height:39px;border:1px solid #dbe4f0;border-radius:12px;padding:9px;background:#f8fbff;font-weight:850;white-space:nowrap}.bulk-balance.partial{color:#b45309}.bulk-balance.paid{color:#047857}.person-lookup-list{display:grid;gap:8px;max-height:55vh;overflow:auto}.person-lookup-item{width:100%;text-align:left;border:1px solid #dbe4f0;background:#fff;border-radius:14px;padding:11px;cursor:pointer}.person-lookup-item:hover{border-color:#60a5fa;background:#eff6ff}.person-lookup-item strong{display:block;color:#0b1f5b}.person-lookup-item small{display:block;color:#64748b;margin-top:3px}

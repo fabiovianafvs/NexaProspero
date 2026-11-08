@@ -321,10 +321,19 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
 <?php if ($fixedExpenseId > 0): ?>
 <div class="msg ok">Mostrando somente as contas provisionadas pela despesa fixa #<?= $fixedExpenseId ?>. <a href="financeiro_contas_pagar.php">Remover este filtro</a></div>
 <?php endif; ?>
+<?php
+  require_once __DIR__ . '/../config/grid_preferences.php';
+  $payGridPrefs = nexa_grid_prefs_load($pdo, (int)COMPANY_ID, 'fin_pagar');
+  $payGridToday = date('Y-m-d');
+?>
+<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_1">
+<style id="ntgFirstPaint">.ntg-wrap:not(.is-ready){visibility:hidden}</style>
+<script>setTimeout(function(){var s=document.getElementById('ntgFirstPaint');if(s&&!document.documentElement.classList.contains('ntg-ready'))s.remove();},4000);</script>
 <div class="finance-card">
   <div class="finance-card-head payable-list-head">
     <div><h2 class="finance-subtitle">Títulos cadastrados</h2><span class="finance-muted"><?= count($rows) ?> título(s)</span></div>
     <div class="payable-head-actions">
+      <span class="ntg-legend"><span><i class="lg-overdue"></i>Vencida</span><span><i class="lg-today"></i>Vence hoje</span></span>
       <?php if($canSettleTitles): ?>
         <div class="payable-selected-summary" id="bulkSelectedSummary" hidden>
           <span><b id="bulkSelectedHeaderCount">0</b> parcela(s) selecionada(s)</span>
@@ -333,11 +342,32 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         <label class="payable-check-all"><input type="checkbox" id="bulkCheckAll"> Selecionar todos em aberto</label>
         <button class="btn btn-primary" type="button" id="openBulkSettleBtn" disabled>Baixar selecionados</button>
       <?php endif; ?>
+      <div class="ntg-toolbar">
+        <details class="ntg-picker"><summary class="btn btn-sm">☷ Colunas</summary><div class="ntg-picker-panel"><strong>Colunas visíveis</strong><div data-ntg-columns="fin_pagar"></div><button type="button" class="btn ntg-reset" data-ntg-reset="fin_pagar">Restaurar padrão</button><small>Clique no título para ordenar · arraste ⠿ para mudar de lugar · ajuste a largura pela borda do cabeçalho.</small></div></details>
+        <span class="ntg-pref-state" data-ntg-state="fin_pagar" role="status" aria-live="polite"></span>
+      </div>
     </div>
   </div>
-  <p class="finance-muted payable-help">Marque todas as parcelas desejadas e somente depois clique em <strong>Baixar selecionados</strong>. A seleção não abrirá a tela automaticamente.</p>
-  <div class="payable-list">
-    <?php if(!$rows): ?><div class="finance-empty">Nenhum título encontrado.</div><?php endif; ?>
+  <?php if(!$rows): ?><div class="finance-empty">Nenhum título encontrado.</div><?php else: ?>
+  <div class="ntg-wrap">
+    <table class="ntg-table" data-ntg="fin_pagar" data-scope="<?= (int)COMPANY_ID ?>" data-save-url="grid_preferencias.php" data-csrf="<?= finance_h(nexa_grid_csrf()) ?>"
+      data-prefs="<?= finance_h(json_encode($payGridPrefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) ?>"
+      data-defaults='{"id":70,"fornecedor":230,"doc":130,"historico":230,"emissao":92,"vencimento":108,"situacao":100,"original":110,"aberto":110,"plano":210}'>
+      <thead><tr>
+        <th class="ntg-sel"></th>
+        <th data-col="id" data-type="num">ID</th>
+        <th data-col="fornecedor">Fornecedor</th>
+        <th data-col="doc">Documento</th>
+        <th data-col="historico">Histórico</th>
+        <th data-col="emissao">Emissão</th>
+        <th data-col="vencimento">Vencimento</th>
+        <th data-col="situacao">Situação</th>
+        <th data-col="original" data-type="num" class="ntg-num">Original</th>
+        <th data-col="aberto" data-type="num" class="ntg-num">Em aberto</th>
+        <th data-col="plano">Plano</th>
+        <th class="ntg-actions">Ações</th>
+      </tr></thead>
+      <tbody>
     <?php foreach($rows as $r):
       $rowIsFixedExpense = (int)($r['fixed_expense_id'] ?? 0) > 0;
       $rowFixedExpenseAllowed = !$financeCrossContext || !$rowIsFixedExpense || $canManageFixedExpenses;
@@ -345,10 +375,14 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         && $rowFixedExpenseAllowed;
       $rowOriginal = (float)($r['amount'] ?? 0);
       $rowOpen = (float)($r['open_amount'] ?? 0);
+      $rowIsOpen = in_array((string)$r['status'], ['ABERTO','PARCIAL'], true) && $rowOpen > 0.009;
+      $rowDueIso = substr((string)($r['due_date'] ?? ''), 0, 10);
+      $rowClass = !$rowIsOpen || $rowDueIso === '' ? '' : ($rowDueIso < $payGridToday ? 'ntg-overdue' : ($rowDueIso === $payGridToday ? 'ntg-today' : ''));
+      $rowDocText = trim((string)($r['document_number'] ?? '') . (!empty($r['installment']) ? ' · Parcela ' . (string)$r['installment'] : ''), ' ·');
+      $rowPlanText = trim((string)($r['code'] ?? '') . ' ' . (string)($r['account_name'] ?? ''));
     ?>
-      <article class="payable-title-card">
-        <div class="payable-title-main">
-          <div class="payable-select-cell"><?php if($canSelectRow): ?><input class="bulk-title-check" type="checkbox" value="<?= (int)$r['id'] ?>"
+      <tr class="<?= $rowClass ?>">
+        <td class="ntg-sel"><?php if($canSelectRow): ?><input class="bulk-title-check" type="checkbox" value="<?= (int)$r['id'] ?>"
             data-person="<?= finance_h($r['person_name'] ?? '') ?>"
             data-desc="<?= finance_h($r['description'] ?? '') ?>"
             data-doc="<?= finance_h($r['document_number'] ?? '') ?>"
@@ -356,34 +390,32 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
             data-due="<?= finance_h(finance_date_br($r['due_date'] ?? '')) ?>"
             data-due-iso="<?= finance_h($r['due_date'] ?? '') ?>"
             data-original="<?= number_format($rowOriginal, 2, '.', '') ?>"
-            data-open="<?= number_format($rowOpen, 2, '.', '') ?>"><?php endif; ?></div>
-          <div class="payable-title-id"><span>ID</span><strong>#<?= (int)$r['id'] ?></strong></div>
-          <div class="payable-title-client"><span>Fornecedor</span><strong><?= finance_h($r['person_name'] ?? '') ?></strong><small><?= finance_h($r['document_number'] ?? '') ?><?= !empty($r['installment']) ? ' · Parcela ' . finance_h($r['installment']) : '' ?></small></div>
-          <div class="payable-title-history"><span>Histórico</span><strong><?= finance_h($r['description'] ?? '') ?: '—' ?></strong><?php if (!empty($r['fixed_expense_id'])): ?><small class="fixed-expense-badge">Despesa fixa #<?= (int)$r['fixed_expense_id'] ?></small><?php endif; ?></div>
-          <div><span>Emissão</span><strong><?= finance_date_br($r['issue_date'] ?? '') ?></strong></div>
-          <div><span>Vencimento</span><strong><?= finance_date_br($r['due_date'] ?? '') ?></strong></div>
-          <div><span>Situação</span><?= finance_status_badge((string)$r['status']) ?></div>
-          <div><span>Original</span><strong>R$ <?= finance_money_br($rowOriginal) ?></strong></div>
-          <div><span>Em aberto</span><strong class="finance-ok">R$ <?= finance_money_br($rowOpen) ?></strong></div>
-          <div class="payable-title-plan"><span>Plano</span><strong><span class="code"><?= finance_h($r['code'] ?? '') ?></span> <?= finance_h($r['account_name'] ?? '') ?></strong></div>
-        </div>
-        <div class="payable-title-actions">
-          <span>Ações do título</span>
-          <div>
+            data-open="<?= number_format($rowOpen, 2, '.', '') ?>"><?php endif; ?></td>
+        <td data-col="id" data-sort="<?= (int)$r['id'] ?>">#<?= (int)$r['id'] ?></td>
+        <td data-col="fornecedor" title="<?= finance_h($r['person_name'] ?? '') ?>"><strong><?= finance_h($r['person_name'] ?? '') ?></strong></td>
+        <td data-col="doc" title="<?= finance_h($rowDocText) ?>"><?= $rowDocText !== '' ? finance_h($rowDocText) : '<span class="ntg-muted">—</span>' ?></td>
+        <td data-col="historico" title="<?= finance_h($r['description'] ?? '') ?>"><?= finance_h($r['description'] ?? '') ?: '<span class="ntg-muted">—</span>' ?><?php if ($rowIsFixedExpense): ?><span class="ntg-badge-fixed">Despesa fixa #<?= (int)$r['fixed_expense_id'] ?></span><?php endif; ?></td>
+        <td data-col="emissao" data-sort="<?= finance_h(substr((string)($r['issue_date'] ?? ''), 0, 10)) ?>"><?= finance_date_br($r['issue_date'] ?? '') ?></td>
+        <td data-col="vencimento" data-sort="<?= finance_h($rowDueIso) ?>"><?= finance_date_br($r['due_date'] ?? '') ?></td>
+        <td data-col="situacao" data-sort="<?= finance_h((string)$r['status']) ?>"><?= finance_status_badge((string)$r['status']) ?></td>
+        <td data-col="original" class="ntg-num" data-sort="<?= number_format($rowOriginal, 2, '.', '') ?>">R$ <?= finance_money_br($rowOriginal) ?></td>
+        <td data-col="aberto" class="ntg-num" data-sort="<?= number_format($rowOpen, 2, '.', '') ?>"><strong>R$ <?= finance_money_br($rowOpen) ?></strong></td>
+        <td data-col="plano" title="<?= finance_h($rowPlanText) ?>"><span class="code"><?= finance_h($r['code'] ?? '') ?></span> <?= finance_h($r['account_name'] ?? '') ?></td>
+        <td class="ntg-actions"><div class="ntg-icons">
             <?php
               $canEditCrossTitle = !$financeCrossContext || ($financeCrossTitleWrite && strtoupper((string)($r['status'] ?? '')) === 'ABERTO' && (float)($r['paid_amount'] ?? 0) <= 0.009 && !$rowIsFixedExpense);
               if ($canEditCrossTitle):
-            ?><a class="btn" href="?edit=<?= (int)$r['id'] ?>">Editar</a><?php elseif($financeCrossContext && $rowIsFixedExpense && $rowFixedExpenseAllowed): ?><a class="btn" href="?edit=<?= (int)$r['id'] ?>">Detalhes</a><?php endif; ?>
-            <?php if(in_array((string)$r['status'], ['ABERTO','PARCIAL'], true)): ?>
-              <?php if($canSettleTitles && $rowFixedExpenseAllowed): ?><a class="btn btn-primary" href="?settle=<?= (int)$r['id'] ?>">Baixar</a><?php endif; ?>
-              <?php if($canCancelTitles && $rowFixedExpenseAllowed): ?><form method="post" onsubmit="return confirm('Cancelar este título?')"><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-danger">Cancelar</button></form><?php endif; ?>
-            <?php endif; ?>
-          </div>
-        </div>
-      </article>
+            ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Editar título" aria-label="Editar título"><?= nexa_grid_icon('edit') ?></a><?php elseif($financeCrossContext && $rowIsFixedExpense && $rowFixedExpenseAllowed): ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Detalhes do título" aria-label="Detalhes do título"><?= nexa_grid_icon('view') ?></a><?php endif; ?>
+            <?php if(in_array((string)$r['status'], ['ABERTO','PARCIAL'], true) && $canCancelTitles && $rowFixedExpenseAllowed): ?><form method="post" onsubmit="return confirm('Cancelar este título?')"><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="ntg-icon ntg-danger" title="Cancelar título" aria-label="Cancelar título"><?= nexa_grid_icon('cancel') ?></button></form><?php endif; ?>
+        </div></td>
+      </tr>
     <?php endforeach; ?>
+      </tbody>
+    </table>
   </div>
+  <?php endif; ?>
 </div>
+<script src="assets/nexa_titles_grid.js?v=20261108_1" defer></script>
 
 <style>
 .finance-filter-card{padding-top:10px!important;padding-bottom:10px!important}.payable-filter-form label,.payable-person-picker>label{display:block;font-size:12px;font-weight:850;color:#475569;margin-bottom:3px}.payable-filter-grid{display:grid;grid-template-columns:repeat(6,minmax(118px,.78fr)) minmax(145px,.9fr);gap:8px 10px;align-items:end}.payable-filter-grid input,.payable-filter-grid select{min-height:39px}.payable-filter-second{display:grid;grid-template-columns:minmax(300px,420px) minmax(260px,1fr) auto;align-items:end;gap:10px;margin-top:4px}.payable-person-picker,.payable-history-second{min-width:0}.payable-person-picker .finance-field-inline{display:grid;grid-template-columns:minmax(145px,1fr) auto auto;gap:8px}.payable-person-picker .finance-field-inline .btn{white-space:nowrap}.payable-filter-actions{display:flex;gap:8px;margin-left:0;white-space:nowrap}.payable-filter-actions .btn{min-height:39px}.payable-list-head{align-items:center}.payable-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.payable-selected-summary{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid #86efac;border-radius:12px;background:#f0fdf4;color:#166534;font-size:12px;white-space:nowrap}.payable-selected-summary[hidden]{display:none}.payable-selected-summary span{font-weight:800}.payable-selected-summary strong{font-weight:950}.payable-check-all{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #dbe4f0;border-radius:12px;background:#f8fbff;font-size:12px;font-weight:850;color:#475569}.payable-help{margin:-5px 0 13px}.payable-list{display:grid;gap:12px}.payable-title-card{border:1px solid #dbe4f0;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 22px rgba(15,23,42,.035)}.payable-title-main{display:grid;grid-template-columns:34px 62px minmax(175px,1.15fr) minmax(180px,1.25fr) 92px 100px 100px 105px 110px minmax(145px,.9fr);gap:10px;align-items:center;padding:13px 14px}.payable-title-main>div{min-width:0}.payable-title-main span{display:block;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.025em;color:#64748b;margin-bottom:4px}.payable-title-main strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:13px}.payable-title-client small{display:block;margin-top:4px;color:#64748b;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fixed-expense-badge{display:inline-flex!important;width:max-content;margin-top:5px!important;padding:3px 7px;border-radius:999px;background:#eff6ff;color:#1d4ed8!important;border:1px solid #bfdbfe;font-size:10px!important;font-weight:900}.payable-select-cell{text-align:center}.payable-select-cell input{width:18px;height:18px}.payable-title-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#f8fbff;border-top:1px solid #e5eaf2}.payable-title-actions>span{font-size:11px;text-transform:uppercase;font-weight:900;color:#64748b}.payable-title-actions>div{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.payable-title-actions form{margin:0}.payable-title-actions .btn{min-height:34px;height:34px;padding:0 11px;border-radius:10px;font-size:12px}.finance-bulk-modal .finance-modal-dialog{width:min(1220px,100%)}.finance-bulk-common{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}.finance-bulk-common .wide{grid-column:span 4}.bulk-mode-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px;border:1px solid #dbe4f0;border-radius:15px;background:#f8fbff}.bulk-mode-box label{display:flex;align-items:center;gap:6px;font-weight:850}.bulk-partial-controls{display:flex;align-items:end;gap:8px;flex:1 1 350px}.bulk-partial-controls>div{flex:1}.bulk-partial-controls input{min-height:42px}.finance-bulk-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.finance-bulk-total{border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;padding:9px 12px;font-weight:950;color:#0b1f5b}.bulk-settle-list{display:grid;gap:10px}.bulk-settle-row{border:1px solid #dbe4f0;border-radius:16px;padding:12px;background:#fff}.bulk-settle-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}.bulk-settle-head strong{display:block;color:#0b1f5b}.bulk-settle-head small{display:block;color:#64748b;margin-top:3px}.bulk-settle-fields{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:9px;align-items:end}.bulk-settle-fields label{font-size:10px;text-transform:uppercase;font-weight:850;color:#64748b}.bulk-settle-fields input{min-height:39px;padding:7px 8px}.bulk-readonly{min-height:39px;border:1px solid #dbe4f0;border-radius:12px;padding:9px;background:#f8fbff;font-weight:850;white-space:nowrap}.bulk-balance.partial{color:#b45309}.bulk-balance.paid{color:#047857}.person-lookup-list{display:grid;gap:8px;max-height:55vh;overflow:auto}.person-lookup-item{width:100%;text-align:left;border:1px solid #dbe4f0;background:#fff;border-radius:14px;padding:11px;cursor:pointer}.person-lookup-item:hover{border-color:#60a5fa;background:#eff6ff}.person-lookup-item strong{display:block;color:#0b1f5b}.person-lookup-item small{display:block;color:#64748b;margin-top:3px}

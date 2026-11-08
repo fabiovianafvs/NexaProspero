@@ -1,0 +1,58 @@
+/* Nexa Próspero · Grid de títulos (Contas a Receber / Contas a Pagar).
+ * Mesmo modelo do grid da Consulta de Pedidos: ordenar, redimensionar, mover e
+ * escolher colunas; ações em ícones fixas à direita. Isolado pelo prefixo ntg-. */
+.ntg-toolbar{display:flex;align-items:center;gap:8px}
+.ntg-picker{position:relative}.ntg-picker>summary{list-style:none;cursor:pointer;white-space:nowrap}.ntg-picker>summary::-webkit-details-marker{display:none}
+.ntg-picker-panel{position:absolute;z-index:60;right:0;top:calc(100% + 5px);width:250px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 14px 38px #0f172a2b;padding:12px}
+.ntg-picker-panel strong{display:block;margin-bottom:8px;color:#0f172a}.ntg-picker-panel label{display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;font-weight:700;color:#334155;cursor:pointer}
+.ntg-picker-panel small{display:block;border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;color:#64748b;line-height:1.35}
+.ntg-picker-panel .ntg-reset{margin-top:8px;width:100%;min-height:30px;font-size:12px}
+.ntg-pref-state{font-size:10px;font-weight:700;color:#64748b;white-space:nowrap}.ntg-pref-state:empty{display:none}
+
+.ntg-wrap{overflow-x:auto;overflow-y:hidden;position:relative;border:1px solid #dbe4f0;border-radius:14px;background:#fff}
+.ntg-table{width:max-content;min-width:100%;max-width:none!important;margin:0;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.ntg-table th,.ntg-table td{box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.ntg-table thead th{position:sticky;top:0;z-index:8;background:#eff5ff;padding:8px 6px;border-bottom:1px solid #cbd5e1;user-select:none;color:#102856;font-size:12px;font-weight:800}
+.ntg-table .ntg-head{display:flex;gap:4px;align-items:center;min-width:0}
+.ntg-table .ntg-head-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;background:transparent;border:0;font:inherit;font-weight:800;text-align:left;color:#102856;cursor:pointer;padding:0}
+.ntg-table .ntg-head-label:hover{color:#1d4ed8}
+.ntg-table .ntg-sort{font-size:10px;color:#1d4ed8;flex:0 0 auto}
+.ntg-table .ntg-drag{cursor:grab;font-size:13px;color:#9aa9c0;flex:0 0 auto}.ntg-table .ntg-drag:active{cursor:grabbing}
+.ntg-table .ntg-resizer{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:col-resize;touch-action:none}.ntg-table .ntg-resizer:hover{background:#a5b4fc}
+.ntg-table tbody td{padding:7px 8px;border-bottom:1px solid #e5edf6;background:#fff;color:#0f172a;vertical-align:middle}
+.ntg-table tbody tr:hover td{background:#e8f0fc}
+.ntg-table td.ntg-num,.ntg-table th.ntg-num .ntg-head-label{text-align:right}
+.ntg-table td.ntg-center{text-align:center}
+.ntg-table td .ntg-muted{color:#64748b}
+.ntg-table td .code{color:#64748b;font-weight:700}
+.ntg-table td .finance-badge,.ntg-table td .badge{font-size:10.5px;padding:3px 7px}
+.ntg-table .ntg-badge-fixed{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:999px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:10px;font-weight:900;vertical-align:middle}
+.ntg-table [data-col].ntg-hidden{display:none!important}
+
+/* Seleção fixa à esquerda e ações fixas à direita (nunca escondidas). */
+.ntg-table .ntg-sel{position:sticky;left:0;z-index:6;width:34px;min-width:34px;max-width:34px;text-align:center;padding-left:4px!important;padding-right:4px!important}
+.ntg-table thead .ntg-sel{z-index:11}
+.ntg-table .ntg-sel input{width:16px!important;height:16px!important;min-height:0!important;padding:0!important;margin:0;vertical-align:middle;cursor:pointer}
+.ntg-table .ntg-actions{position:sticky;right:0;z-index:6;border-left:1px solid #dbe4f0;box-shadow:-6px 0 12px #0f172a12;text-align:right;padding:4px 6px!important}
+.ntg-table thead .ntg-actions{z-index:11;background:#e7effc;text-align:center}
+.ntg-icons{display:flex;justify-content:flex-end;align-items:center;gap:4px}
+.ntg-icons form{margin:0;display:inline-flex}
+.ntg-icon{width:30px;height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d5e0f0;border-radius:8px;background:#fff;color:#1e40af;padding:0;cursor:pointer;text-decoration:none;transition:background .12s}
+.ntg-icon:hover,.ntg-icon:focus-visible{background:#dce9fe;border-color:#93b4ec}
+.ntg-icon svg{width:16px;height:16px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ntg-icon.ntg-wa{color:#15803d;border-color:#bbf7d0}.ntg-icon.ntg-wa:hover{background:#dcfce7;border-color:#86efac}
+.ntg-icon.ntg-danger{color:#b91c1c;border-color:#fecaca}.ntg-icon.ntg-danger:hover{background:#fee2e2;border-color:#fca5a5}
+
+/* Vencida = vermelho · vence hoje = azul. */
+.ntg-table tbody tr.ntg-overdue td{background:#fff5f5}
+.ntg-table tbody tr.ntg-overdue td:first-child{box-shadow:inset 4px 0 0 #dc2626}
+.ntg-table tbody tr.ntg-overdue td[data-col="vencimento"],.ntg-table tbody tr.ntg-overdue td[data-col="atraso"],.ntg-table tbody tr.ntg-overdue td[data-col="aberto"]{color:#b91c1c;font-weight:900}
+.ntg-table tbody tr.ntg-today td{background:#eff6ff}
+.ntg-table tbody tr.ntg-today td:first-child{box-shadow:inset 4px 0 0 #2563eb}
+.ntg-table tbody tr.ntg-today td[data-col="vencimento"],.ntg-table tbody tr.ntg-today td[data-col="aberto"]{color:#1d4ed8;font-weight:900}
+.ntg-table tbody tr.ntg-overdue:hover td{background:#fee2e2}
+.ntg-table tbody tr.ntg-today:hover td{background:#dbeafe}
+.ntg-legend{display:flex;gap:12px;align-items:center;font-size:11px;font-weight:750;color:#64748b;white-space:nowrap}
+.ntg-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.ntg-legend .lg-overdue{background:#fecaca;box-shadow:inset 3px 0 0 #dc2626}.ntg-legend .lg-today{background:#bfdbfe;box-shadow:inset 3px 0 0 #2563eb}
+.ntg-empty{padding:18px;color:#64748b;text-align:center}

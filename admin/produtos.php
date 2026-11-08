@@ -570,10 +570,6 @@ $totalRows = count($rows);
 <div class="page-head-products">
   <div>
     <h1>Produtos</h1>
-    <p>Gerencie os itens do catálogo, preços, categorias, imagens e adicionais.</p>
-    <?php if ($hasCodigoFirebird || $hasCodigoFirebirdMap): ?>
-      <p class="muted">O código do Próspero aparece na listagem e pode ser pesquisado ou editado no cadastro do produto.</p>
-    <?php endif; ?>
   </div>
   <div class="actions page-actions-products">
     <?php if ($hasStockControl && $productsMultiCompanyEnabled): ?><a class="btn" href="<?= hstr(function_exists('multi_company_context_url') ? multi_company_context_url('estoque_consulta.php') : 'estoque_consulta.php') ?>">Consulta de estoque</a><?php endif; ?>
