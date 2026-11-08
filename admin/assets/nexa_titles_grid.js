@@ -23,10 +23,19 @@
     try { local = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch (e) {}
     const server = parse(table.dataset.prefs, {});
     const from = Object.keys(server).length ? server : local;
+    // Colunas novas (que não existiam quando a preferência foi salva) entram visíveis,
+    // na posição natural, logo depois da coluna que as antecede no padrão.
+    const savedOrder = Array.isArray(from.order) ? [...new Set(from.order.filter(c => movable.includes(c)))] : [];
+    const isNew = c => savedOrder.length > 0 && !savedOrder.includes(c);
     let visible = Array.isArray(from.visible) ? from.visible.filter(c => movable.includes(c)) : [...movable];
+    movable.forEach(c => { if (isNew(c) && !visible.includes(c)) visible.push(c); });
     if (!visible.length) visible = [...movable];
-    let order = Array.isArray(from.order) ? from.order.filter(c => movable.includes(c)) : [];
-    order = [...new Set(order)].concat(movable.filter(c => !order.includes(c)));
+    let order = savedOrder.length ? [...savedOrder] : [...movable];
+    movable.forEach((c, i) => {
+      if (order.includes(c)) return;
+      const prev = movable.slice(0, i).reverse().find(x => order.includes(x));
+      order.splice(prev ? order.indexOf(prev) + 1 : 0, 0, c);
+    });
     let widths = from.widths && typeof from.widths === 'object' ? { ...from.widths } : {};
     const prefState = document.querySelector('[data-ntg-state="' + grid + '"]');
     const picker = document.querySelector('[data-ntg-columns="' + grid + '"]');

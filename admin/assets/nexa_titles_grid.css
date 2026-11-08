@@ -52,6 +52,7 @@
 .ntg-table tbody tr.ntg-today td[data-col="vencimento"],.ntg-table tbody tr.ntg-today td[data-col="aberto"]{color:#1d4ed8;font-weight:900}
 .ntg-table tbody tr.ntg-overdue:hover td{background:#fee2e2}
 .ntg-table tbody tr.ntg-today:hover td{background:#dbeafe}
+.ntg-subline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:2px}
 .ntg-legend{display:flex;gap:12px;align-items:center;font-size:11px;font-weight:750;color:#64748b;white-space:nowrap}
 .ntg-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 .ntg-legend .lg-overdue{background:#fecaca;box-shadow:inset 3px 0 0 #dc2626}.ntg-legend .lg-today{background:#bfdbfe;box-shadow:inset 3px 0 0 #2563eb}
