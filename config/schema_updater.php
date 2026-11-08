@@ -21,6 +21,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
   function nexa_schema_updater_registry(): array {
     return [
       [
+        'id' => '20261107_indices_grandes_volumes_v1',
+        'module' => 'desempenho_indices',
+        'version' => 20261107002,
+        'label' => 'Desempenho - índices para grandes volumes',
+        'description' => 'Cria, sem parar o sistema, índices em contas a receber/pagar, movimento financeiro, boletos, pedidos, documentos fiscais e produtos. Só cria o que ainda não existe.',
+        'file' => __DIR__ . '/../db/20261107_indices_grandes_volumes_v1.sql',
+        'sha256' => '6fba65807fac0647a4c2269e6a48e9ed1c608aa003c819685b6d356ff42e91f4',
+        'order' => 20261107002,
+      ],
+      [
         'id' => '20261107_whatsapp_fila_envio_v1',
         'module' => 'whatsapp_outbox',
         'version' => 20261107001,

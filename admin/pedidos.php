@@ -356,10 +356,22 @@ if ($ordersNewGrid) {
 $ordersSqlLimit = $ordersNewGrid
   ? 'LIMIT ' . (int)$ordersGridPerPage . ' OFFSET ' . (int)$ordersGridOffset
   : 'LIMIT 300';
+// Desempenho: COALESCE(numero_pedido, id) obrigava o MySQL a ordenar todos os
+// pedidos da empresa a cada abertura. Quando todos os pedidos têm número (caso
+// normal), ordena direto pelo índice (company_id, numero_pedido).
+$ordersOrderExpr = 'id';
+if ($hasNumeroPedido) {
+  $ordersOrderExpr = 'COALESCE(numero_pedido, id)';
+  try {
+    $stNullNum = $pdo->prepare('SELECT 1 FROM pedidos WHERE company_id = ? AND numero_pedido IS NULL LIMIT 1');
+    $stNullNum->execute([$ordersCompanyId]);
+    if (!$stNullNum->fetchColumn()) $ordersOrderExpr = 'numero_pedido';
+  } catch (Throwable $e) {}
+}
 $sql = "SELECT *
         FROM pedidos
         $sqlWhere
-        ORDER BY " . ($hasNumeroPedido ? "COALESCE(numero_pedido, id)" : "id") . " DESC, id DESC
+        ORDER BY " . $ordersOrderExpr . " DESC, id DESC
         $ordersSqlLimit";
 
 $st = $pdo->prepare($sql);

@@ -123,7 +123,17 @@ if (!function_exists('fisc_doc_search_documents')) {
       $params = array_merge($params, $searchParams);
     }
 
-    $sql = "SELECT fd.*, nfd.nfse_number, nfd.dps_number, nfd.dps_series, nfd.provider_code, nfd.authorized_at AS nfse_authorized_at, nfd.api_error_message AS nfse_error_message, " . $orderNumberExpr . " AS order_company_number, "
+    // Desempenho: a lista não traz o XML (em média 12 KB por nota); só informa se
+    // ele existe. O XML é lido à parte apenas quando precisa completar a data de autorização.
+    static $fdListCols = null;
+    if ($fdListCols === null) {
+      $fdListCols = [];
+      foreach ($pdo->query('SHOW COLUMNS FROM fiscal_documents')->fetchAll(PDO::FETCH_COLUMN) as $col) {
+        if (in_array(strtolower((string)$col), ['xml_raw'], true)) continue;
+        $fdListCols[] = 'fd.`' . str_replace('`', '', (string)$col) . '`';
+      }
+    }
+    $sql = "SELECT " . implode(', ', $fdListCols) . ", CASE WHEN fd.xml_raw IS NULL OR fd.xml_raw = '' THEN '' ELSE '1' END AS xml_raw, nfd.nfse_number, nfd.dps_number, nfd.dps_series, nfd.provider_code, nfd.authorized_at AS nfse_authorized_at, nfd.api_error_message AS nfse_error_message, " . $orderNumberExpr . " AS order_company_number, "
          . "(SELECT fp.name FROM fiscal_document_participants fp "
          . " WHERE fp.fiscal_document_id = fd.id AND fp.company_id = fd.company_id "
          . " ORDER BY CASE WHEN fp.role IN ('DESTINATARIO','CLIENTE','TOMADOR') THEN 0 ELSE 1 END, fp.id ASC LIMIT 1) AS person_name "
@@ -139,7 +149,9 @@ if (!function_exists('fisc_doc_search_documents')) {
     // Backfill leve da data de autorização para documentos antigos exibidos nesta tela.
     foreach ($rows as &$row) {
       if (in_array((string)($row['model'] ?? ''), ['55','65'], true) && strtoupper((string)($row['status'] ?? '')) === 'AUTORIZADA' && empty($row['authorization_datetime']) && !empty($row['xml_raw']) && function_exists('fiscal_nfce_authorization_datetime_from_xml')) {
-        $authDt = fiscal_nfce_authorization_datetime_from_xml((string)$row['xml_raw']);
+        $stXml = $pdo->prepare('SELECT xml_raw FROM fiscal_documents WHERE company_id=? AND id=? LIMIT 1');
+        $stXml->execute([$companyId, (int)$row['id']]);
+        $authDt = fiscal_nfce_authorization_datetime_from_xml((string)$stXml->fetchColumn());
         if ($authDt) {
           $row['authorization_datetime'] = $authDt;
           if (empty($GLOBALS['NEXA_MULTI_COMPANY_NO_RUNTIME_DDL'])) { try { $pdo->prepare('UPDATE fiscal_documents SET authorization_datetime=? WHERE company_id=? AND id=? AND authorization_datetime IS NULL')->execute([$authDt,$companyId,(int)$row['id']]); } catch (Throwable $e) {} }
