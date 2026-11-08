@@ -46,6 +46,7 @@ if (!function_exists('access_permissions_catalog')) {
       // Menus gerais
       'dashboard' => ['label' => 'Dashboard', 'group' => 'Geral', 'module' => '*', 'pages' => ['dashboard.php'], 'nav' => ['dashboard']],
       'relatorio_movimentos_caixa' => ['label' => 'Movimentações de Caixa (todos os operadores)', 'group' => 'Relatórios', 'module' => 'gestao', 'pages' => ['relatorio_movimentos_caixa.php'], 'nav' => ['relatorio_movimentos_caixa']],
+      'relatorio_fluxo_caixa' => ['label' => 'Fluxo de Caixa', 'group' => 'Relatórios', 'module' => 'financeiro', 'pages' => ['relatorio_fluxo_caixa.php'], 'nav' => ['relatorio_fluxo_caixa']],
       'relatorio_inadimplencia' => ['label' => 'Análise de inadimplência', 'group' => 'Relatórios', 'module' => 'financeiro', 'pages' => ['relatorio_inadimplencia.php'], 'nav' => ['relatorio_inadimplencia']],
       'relatorio_analise_dashboard' => ['label' => 'Análise Dashboard por período', 'group' => 'Relatórios', 'module' => '*', 'pages' => ['relatorio_analise_dashboard.php'], 'nav' => ['relatorio_analise_dashboard'], 'description' => 'Disponível para todos os módulos. Desmarque para bloquear este relatório neste perfil.'],
       'brain' => ['label' => 'Nexa Brain', 'group' => 'Geral', 'module' => '*', 'pages' => ['brain.php','brain_alertas.php','brain_alert_action.php','brain_api.php','brain_live_api.php'], 'nav' => ['brain']],
@@ -473,7 +474,7 @@ if (!function_exists('access_admin_nav_allowed')) {
       'financeiro' => ['financeiro_dashboard','financeiro_pessoas','financeiro_receber','financeiro_pagar','financeiro_despesas_fixas','financeiro_vales','financeiro_movimentos','financeiro_boletos','financeiro_conciliacao','financeiro_resultado','financeiro_plano','financeiro_centro','financeiro_caixas','configuracoes_cre','configuracoes_cpa','configuracoes_caixa'],
       'entradas' => ['fiscal_radar','fiscal_entrada_notas','fiscal_devolucoes','fiscal_devolucao_cliente','fiscal_importar_xml','fiscal_nota_manual','conferencia_estoque'],
       'fiscal' => ['fiscal_documentos','os_fiscal_documentos','fiscal_inutilizacao','fiscal_saidas','fiscal_contadores','fiscal_configuracoes','fiscal_conversoes'],
-      'relatorios' => ['relatorio_analise_dashboard','relatorio_comissao_vendedores','relatorio_etiquetas_produtos','relatorio_movimentos_caixa','relatorio_inadimplencia'],
+      'relatorios' => ['relatorio_analise_dashboard','relatorio_comissao_vendedores','relatorio_etiquetas_produtos','relatorio_movimentos_caixa','relatorio_inadimplencia','relatorio_fluxo_caixa'],
       'utilitarios' => ['manutencao_produtos'],
       'tabelas' => ['gestao_vendedores','gestao_comandas_config','gestao_comandas_qrcode','gestao_comandas_impressao','gestao_comandas_agentes','gestao_pagamentos','fiscal_operacoes','fiscal_tributacoes','fiscal_cfops','fiscal_ncms','fiscal_cests','fiscal_cst','fiscal_ibscbs','fiscal_importacoes','usuarios','usuarios_perfis'],
       'fiscal_relatorios' => ['fiscal_relatorios','fiscal_relatorios_documentos','fiscal_sintegra','fiscal_sped_icms','fiscal_sped_contrib','fiscal_exportar_xml','fiscal_inventario','fiscal_contabilidade'],
