@@ -677,6 +677,12 @@ if (empty($barcodeColumns)) unset($gridColumnLabels['barras']);
     </div>
   </div>
 
+  <style>
+  /* Mostra o grid só depois das colunas/larguras do usuário (sem "pular" na tela). */
+  .products-grid-wrap:not(.is-ready){visibility:hidden}
+  </style>
+  <noscript><style>.products-grid-wrap{visibility:visible!important}</style></noscript>
+  <script>setTimeout(function(){var w=document.querySelector('.products-grid-wrap');if(w)w.classList.add('is-ready');},4000);</script>
   <div class="products-grid-wrap">
     <table class="products-grid" id="productsGrid">
       <thead>
@@ -815,10 +821,12 @@ if (empty($barcodeColumns)) unset($gridColumnLabels['barras']);
     preco:105, custo:105, estoque:175, prospero:125, cardapio:125, referencia:135,
     barras:150, status:95, acoes:175
   };
+  // Larguras mínimas pequenas: o usuário pode estreitar a coluna além do título
+  // (ex.: "Código" com números curtos). O título é cortado com reticências.
   const minWidths = {
-    imagem:62, codigo:78, produto:150, categoria:95, grupo:105, ordem:90,
-    preco:82, custo:82, estoque:120, prospero:95, cardapio:95, referencia:95,
-    barras:110, status:78, acoes:165
+    imagem:40, codigo:40, produto:90, categoria:50, grupo:50, ordem:40,
+    preco:50, custo:50, estoque:60, prospero:50, cardapio:50, referencia:50,
+    barras:60, status:44, acoes:165
   };
 
   let legacyPreferenceFound = false;
@@ -959,13 +967,11 @@ if (empty($barcodeColumns)) unset($gridColumnLabels['barras']);
   }
 
   function applyWidth(col, px, persist){
-    const min = minWidths[col] || 70;
+    const min = minWidths[col] || 40;
     const max = col === 'produto' ? 650 : 480;
     const value = Math.max(min, Math.min(max, Math.round(px)));
-    if (persist) {
-      widths[col] = value;
-      saveWidths();
-    }
+    widths[col] = value; // valor ao vivo (a sobra de espaço é calculada com ele)
+    if (persist) saveWidths();
     grid.querySelectorAll('[data-col="' + CSS.escape(col) + '"]').forEach(cell => {
       cell.style.width = value + 'px';
       cell.style.minWidth = value + 'px';
@@ -981,7 +987,16 @@ if (empty($barcodeColumns)) unset($gridColumnLabels['barras']);
       if (col !== 'acoes' && !visible.includes(col)) return;
       total += widthFor(col);
     });
-    grid.style.width = Math.max(wrap.clientWidth || 0, total) + 'px';
+    // Sobra de espaço vai só para a coluna Produto: estreitar uma coluna deixa
+    // ela realmente estreita, em vez de o espaço ser redistribuído entre todas.
+    const extra = Math.max(0, (wrap.clientWidth || 0) - total);
+    const flexCol = visible.includes('produto') ? 'produto' : null;
+    if (flexCol) {
+      const px = Math.round(widthFor(flexCol) + extra);
+      grid.querySelectorAll('[data-col="produto"]').forEach(cell => { cell.style.width = px + 'px'; cell.style.minWidth = px + 'px'; cell.style.maxWidth = px + 'px'; });
+    }
+    grid.style.minWidth = '0';
+    grid.style.width = (total + (flexCol ? extra : 0) > 0 ? Math.max(total + (flexCol ? extra : 0), flexCol ? 0 : (wrap.clientWidth || 0)) : (wrap.clientWidth || 0)) + 'px';
   }
 
   function applyAllWidths(){
@@ -1090,7 +1105,7 @@ if (empty($barcodeColumns)) unset($gridColumnLabels['barras']);
       ev.preventDefault();
       ev.stopPropagation();
       const startX = ev.clientX;
-      const startWidth = th.getBoundingClientRect().width || widthFor(col);
+      const startWidth = widthFor(col);
       grid.classList.add('resizing-columns');
       document.body.style.userSelect = 'none';
 
@@ -1113,6 +1128,7 @@ if (empty($barcodeColumns)) unset($gridColumnLabels['barras']);
   applyOrder();
   applyColumns();
   applyAllWidths();
+  if (wrap) wrap.classList.add('is-ready');
   window.addEventListener('resize', refreshGridWidth);
 
   // Se o usuário já personalizou o grid em uma versão anterior, migra uma vez

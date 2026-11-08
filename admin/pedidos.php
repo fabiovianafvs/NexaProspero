@@ -483,9 +483,11 @@ if ($ordersCrossContext && function_exists('multi_company_context_url')) $report
 <?php admin_topbar('Central - Pedidos','pedidos'); ?>
 <?php if ($ordersNewGrid): ?>
 <style id="ordersGridFirstPaint">
-/* Abre direto no novo grid: esconde os botões do layout antigo desde o primeiro
-   desenho da tela (antes o antigo aparecia e só depois virava o novo). */
+/* Abre direto no novo grid: esconde os botões do layout antigo e a tabela até as
+   colunas/larguras do usuário serem aplicadas (antes o antigo aparecia e só depois
+   virava o novo). */
 .pedidos-grid-v1 .pedidos-action-row{display:none!important}
+html:not(.orders-grid-ready) .pedidos-grid-v1-wrap{visibility:hidden}
 </style>
 <script>
 // Segurança: se o novo grid não carregar em 5s, mostra os botões antigos.
@@ -1448,7 +1450,7 @@ window.nexaOrdersGridConfig = <?= json_encode([
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/pedidos_actions_modal_v1.js?v=20261022_1805" defer></script>
-<script src="assets/pedidos_grid_v2.js?v=20261022_1805_modal" defer></script>
+<script src="assets/pedidos_grid_v2.js?v=20261108_min40" defer></script>
 <script src="assets/pedidos_mobile_cards_v2.js?v=20261022_1805_modal" defer></script>
 <?php endif; ?>
 <script>

@@ -207,8 +207,10 @@
       final.forEach(col=>{if(map[col])tr.appendChild(map[col]);});
     });
   }
-  function width(col){const n=Number(widths[col]);return Number.isFinite(n)&&n>=70&&n<=650 ? Math.round(n) : (defaults[col]||140);}
-  function applyWidths(){let sum=250;for(const col of movable){const px=width(col); table.querySelectorAll('[data-col="'+col+'"]:not(.orders-grid-hidden)').forEach(el=>{el.style.width=px+'px';el.style.minWidth=px+'px';el.style.maxWidth=px+'px';});if(visible.includes(col))sum+=px;}table.style.width=Math.max(wrap.clientWidth,sum)+'px';}
+  function width(col){const n=Number(widths[col]);return Number.isFinite(n)&&n>=40&&n<=650 ? Math.round(n) : (defaults[col]||140);}
+  // Sobra de espaço vai só para a coluna Cliente (ou a última visível); assim
+  // estreitar "Número" deixa a coluna realmente estreita, sem redistribuir.
+  function applyWidths(){let sum=250;for(const col of movable){if(visible.includes(col))sum+=width(col);}const extra=Math.max(0,(wrap.clientWidth||0)-sum);const flexCol=visible.includes('cliente')?'cliente':visible[visible.length-1];for(const col of movable){const px=width(col)+(col===flexCol?extra:0); table.querySelectorAll('[data-col="'+col+'"]:not(.orders-grid-hidden)').forEach(el=>{el.style.width=px+'px';el.style.minWidth=px+'px';el.style.maxWidth=px+'px';});}table.style.width=(sum+extra)+'px';}
   function applyVisibility(){for(const col of movable){table.querySelectorAll('[data-col="'+col+'"]').forEach(el=>el.classList.toggle('orders-grid-hidden',!visible.includes(col)));}applyWidths();}
   function serialize(){return {visible:[...visible],order:[...order],widths:{...widths}};}
   function save(){
@@ -232,7 +234,7 @@
     th.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});
     th.addEventListener('drop',e=>{e.preventDefault();const src=e.dataTransfer.getData('text/plain');if(!movable.includes(src)||src===col)return;order=order.filter(x=>x!==src);order.splice(order.indexOf(col),0,src);applyOrder();scheduleSave();});
     const resize=document.createElement('span');resize.className='orders-grid-resizer';resize.title='Arraste para redimensionar';th.appendChild(resize);
-    resize.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();const start=ev.clientX,oldWidth=width(col); resize.setPointerCapture(ev.pointerId);const moving=e=>{widths[col]=Math.max(70,Math.min(650,Math.round(oldWidth+e.clientX-start)));applyWidths();};const stop=()=>{resize.removeEventListener('pointermove',moving);resize.removeEventListener('pointerup',stop);resize.removeEventListener('pointercancel',stop);scheduleSave();};resize.addEventListener('pointermove',moving);resize.addEventListener('pointerup',stop);resize.addEventListener('pointercancel',stop);});
+    resize.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();const start=ev.clientX,oldWidth=width(col); resize.setPointerCapture(ev.pointerId);const moving=e=>{widths[col]=Math.max(40,Math.min(650,Math.round(oldWidth+e.clientX-start)));applyWidths();};const stop=()=>{resize.removeEventListener('pointermove',moving);resize.removeEventListener('pointerup',stop);resize.removeEventListener('pointercancel',stop);scheduleSave();};resize.addEventListener('pointermove',moving);resize.addEventListener('pointerup',stop);resize.addEventListener('pointercancel',stop);});
   }
   applyOrder();applyVisibility();
   document.documentElement.classList.add('orders-grid-ready');
