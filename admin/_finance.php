@@ -663,7 +663,7 @@ function finance_page_header(string $title, string $description, array $actions 
       $actions = [];
     }
   }
-  echo '<div class="finance-hero"><div><h1>' . finance_h($title) . '</h1><p>' . finance_h($description) . '</p></div>';
+  echo '<div class="finance-hero"><div><h1>' . finance_h($title) . '</h1>' . (trim($description) !== '' ? '<p>' . finance_h($description) . '</p>' : '') . '</div>';
   if ($actions) {
     echo '<div class="finance-actions">';
     foreach ($actions as $a) {

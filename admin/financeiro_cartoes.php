@@ -158,14 +158,14 @@ function card_grid_filter_menu(string $field, string $label, string $value, stri
 
 $headerActions = [['href'=>'gestao_formas_pagamento.php','label'=>'Configurar cartões','class'=>'btn btn-primary']];
 finance_admin_start('Financeiro - Controle de Cartões', 'fin_cartoes');
-finance_page_header('Controle de Cartões','Agenda prevista de recebimentos de débito/crédito. Selecione as parcelas efetivamente recebidas para gerar o movimento financeiro.', $headerActions);
+finance_page_header('Controle de Cartões','', $headerActions);
 finance_flash();
 if($err!==''): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
 <?php if(!$schemaReady): ?><div class="msg err"><strong>Estrutura pendente.</strong> Aplique a migration <b>V11.52.7 — Controle de Cartões</b> pelo Atualizador do Banco antes de usar esta tela.</div><?php endif; ?>
 
 <style>
 /* V11.52.7.2: Controle de Cartões alinhado ao padrão do Cadastro de Produtos. */
-.card-kpis{gap:10px;margin:4px 0 12px}.card-kpi{padding:13px 15px}.card-kpi small{margin-bottom:4px}.card-kpi strong{display:block;color:#07184d;font-size:20px;margin-top:0}
+.card-kpis{gap:10px;margin:4px 0 12px}.card-kpi{padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}.card-kpi small{margin:0;font-size:12px}.card-kpi strong{display:block;color:#07184d;font-size:clamp(17px,1.7vw,21px);margin-top:0}
 .card-filter{display:grid;grid-template-columns:minmax(270px,1.8fr) minmax(140px,.85fr) 145px 145px minmax(118px,.65fr) minmax(185px,1fr) auto;gap:14px;align-items:end}.card-filter label{font-size:11px;font-weight:850;color:#52627d;margin-bottom:4px}.card-filter input,.card-filter select{min-height:40px}.card-filter-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding-bottom:1px}.card-filter-actions .btn{min-height:40px;min-width:78px}
 .card-batch{display:grid;grid-template-columns:minmax(190px,1fr) 165px minmax(220px,1.5fr) auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid #e4ebf5;background:#f8fbff}.card-batch label{font-size:11px;font-weight:850;color:#52627d}
 .card-grid-wrap{overflow-x:auto;overflow-y:visible;border-top:1px solid #e5edf8;background:#fff}.card-grid{width:100%;min-width:1920px;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:12px}.card-grid th,.card-grid td{padding:9px 10px;border-bottom:1px solid #e7edf6;border-right:1px solid #f0f4f9;vertical-align:middle}.card-grid thead th{position:sticky;top:0;z-index:15;background:#f7faff;color:#243b70;font-size:11px;text-transform:uppercase;letter-spacing:.025em;font-weight:900;white-space:nowrap}.card-grid tbody tr:nth-child(odd) td{background:#fff}.card-grid tbody tr:nth-child(even) td{background:#dfe8f4}.card-grid tbody tr:hover td{background:#cbdaf0}.card-grid .num{text-align:right;font-variant-numeric:tabular-nums}.card-grid .center{text-align:center}.card-grid .nowrap{white-space:nowrap}.card-grid th[data-col]{position:relative;user-select:none}.card-grid thead th.filter-open{z-index:95}

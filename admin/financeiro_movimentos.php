@@ -526,7 +526,7 @@ if ($financeCrossContext) {
   $showCancel = false;
   $adjustMovement = null;
 }
-finance_page_header('Movimento Financeiro', 'Livro caixa/bancos. Baixas do receber/pagar entram automaticamente; ajustes de data bancaria nao alteram o titulo de origem.', $canManualMovement ? [
+finance_page_header('Movimento Financeiro', '', $canManualMovement ? [
   ['href'=>'financeiro_movimentos.php?new=1','label'=>'+ Movimento manual','class'=>'btn btn-primary'],
 ] + ($financeCrossContext ? [] : [1 => ['href'=>'financeiro_movimentos.php?transfer=1','label'=>'⇄ Transferência','class'=>'btn']]) : []);
 // V11.51.6: tela otimizada para priorizar a listagem; as abas gerais do Financeiro
