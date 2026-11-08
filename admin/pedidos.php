@@ -1450,7 +1450,7 @@ window.nexaOrdersGridConfig = <?= json_encode([
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/pedidos_actions_modal_v1.js?v=20261022_1805" defer></script>
-<script src="assets/pedidos_grid_v2.js?v=20261108_min40" defer></script>
+<script src="assets/pedidos_grid_v2.js?v=20261108_cols2" defer></script>
 <script src="assets/pedidos_mobile_cards_v2.js?v=20261022_1805_modal" defer></script>
 <?php endif; ?>
 <script>
