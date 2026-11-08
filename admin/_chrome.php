@@ -375,6 +375,7 @@ function admin_topbar(string $title, string $active=''): void {
       'relatorio_movimentos_caixa' => ['Movimentações de caixa', 'relatorio_movimentos_caixa.php'],
       'relatorio_inadimplencia' => ['Análise de inadimplência', 'relatorio_inadimplencia.php'],
       'relatorio_fluxo_caixa' => ['Fluxo de Caixa', 'relatorio_fluxo_caixa.php'],
+      'relatorio_estoque' => ['Estoque', 'relatorio_estoque.php'],
     ]],
     'fiscal_relatorios' => ['Relatórios Fiscais','fiscal_relatorio_documentos.php', [
       'fiscal_relatorios' => ['Visão Geral', 'fiscal_relatorios.php'],
@@ -560,6 +561,7 @@ function admin_topbar(string $title, string $active=''): void {
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_movimentos_caixa' && $isCrossV11_25) continue;
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_inadimplencia' && $isCrossV11_25) continue;
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_fluxo_caixa' && $isCrossV11_25) continue;
+              if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_estoque' && $isCrossV11_25) continue;
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_clientes') {
                 if (function_exists('nexa_people_permission_allowed') && nexa_people_permission_allowed($pdoAdmin, (int)COMPANY_ID)) $children[$childKey] = $child;
                 continue;

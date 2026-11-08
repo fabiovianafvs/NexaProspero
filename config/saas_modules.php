@@ -777,7 +777,7 @@ if (!function_exists('saas_admin_page_required_modules')) {
   function saas_admin_page_required_modules(string $page): array {
     $page = strtolower(basename($page));
     return match ($page) {
-      'dashboard.php', 'relatorio_analise_dashboard.php' => ['*'],
+      'dashboard.php', 'relatorio_analise_dashboard.php', 'relatorio_estoque.php' => ['*'],
       'compras_assistente.php', 'compras_listas.php', 'compras_lista_editar.php', 'compras_cotacoes.php',
       'compras_cotacoes_matriz.php', 'compras_pedidos.php', 'compras_pedido_enviar.php',
       'compras_pedido_receber.php', 'compras_pedido_conciliacao.php', 'compras_pedido_conciliar_xml.php',
