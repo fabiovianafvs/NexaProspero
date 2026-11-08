@@ -31,7 +31,10 @@ function smf_company_column(PDO $pdo, string $column): bool {
 function smf_add_counts(array &$rowsById, array $counts, string $key): void {
   foreach ($counts as $row) {
     $cid = (int)($row['company_id'] ?? 0);
-    if ($cid > 0 && isset($rowsById[$cid])) $rowsById[$cid][$key] = (int)($row['qty'] ?? 0);
+    if ($cid > 0 && isset($rowsById[$cid])) {
+      $rowsById[$cid][$key] = (int)($row['qty'] ?? 0);
+      $rowsById[$cid][substr($key, 0, -4) . '_last'] = $row['last_at'] ?? null;
+    }
   }
 }
 
@@ -47,23 +50,43 @@ function smf_first_date_column(PDO $pdo, string $table, array $candidates): ?str
   return null;
 }
 
+// Quantidade no período (se houver) + data do último registro (sempre geral,
+// sem o período, para saber o último dia em que a empresa usou o sistema).
+function smf_period_condition(string $dateCol, string $dateFrom, string $dateTo, array &$params): string {
+  $cond = [];
+  if ($dateFrom !== '') { $cond[] = "`{$dateCol}` >= ?"; $params[] = $dateFrom . ' 00:00:00'; }
+  if ($dateTo !== '') { $cond[] = "`{$dateCol}` < DATE_ADD(?, INTERVAL 1 DAY)"; $params[] = $dateTo . ' 00:00:00'; }
+  return $cond ? implode(' AND ', $cond) : '1=1';
+}
+
 function smf_group_count(PDO $pdo, string $table, array $companyIds, string $extraWhere = '', string $dateFrom = '', string $dateTo = '', array $dateCandidates = ['created_at']): array {
   if (!$companyIds || !smf_table_exists($pdo, $table) || !smf_column_exists($pdo, $table, 'company_id')) return [];
-  $ph = implode(',', array_fill(0, count($companyIds), '?'));
-  $sql = "SELECT company_id, COUNT(*) qty FROM `{$table}` WHERE company_id IN ({$ph})";
-  $params = $companyIds;
-  if ($extraWhere !== '') $sql .= ' AND (' . $extraWhere . ')';
-  if ($dateFrom !== '' || $dateTo !== '') {
-    $dateCol = smf_first_date_column($pdo, $table, $dateCandidates);
-    if ($dateCol !== null) {
-      if ($dateFrom !== '') { $sql .= " AND `{$dateCol}` >= ?"; $params[] = $dateFrom . ' 00:00:00'; }
-      if ($dateTo !== '') { $sql .= " AND `{$dateCol}` < DATE_ADD(?, INTERVAL 1 DAY)"; $params[] = $dateTo . ' 00:00:00'; }
-    }
+  $dateCol = smf_first_date_column($pdo, $table, $dateCandidates);
+  $params = [];
+  if ($dateCol !== null) {
+    $inPeriod = smf_period_condition($dateCol, $dateFrom, $dateTo, $params);
+    $cols = "SUM(CASE WHEN {$inPeriod} THEN 1 ELSE 0 END) qty, MAX(`{$dateCol}`) last_at";
+  } else {
+    $cols = 'COUNT(*) qty, NULL last_at';
   }
+  $ph = implode(',', array_fill(0, count($companyIds), '?'));
+  $sql = "SELECT company_id, {$cols} FROM `{$table}` WHERE company_id IN ({$ph})";
+  $params = array_merge($params, $companyIds);
+  if ($extraWhere !== '') $sql .= ' AND (' . $extraWhere . ')';
   $sql .= ' GROUP BY company_id';
   $st = $pdo->prepare($sql);
   $st->execute($params);
   return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
+function smf_last_html($value, bool $activity = true): string {
+  $value = trim((string)$value);
+  if ($value === '' || strpos($value, '0000-00-00') === 0) return '<small class="last none">sem registro</small>';
+  $ts = strtotime($value);
+  if ($ts === false) return '';
+  $days = (int)floor((strtotime('today') - strtotime(date('Y-m-d', $ts))) / 86400);
+  $cls = !$activity ? '' : ($days > 30 ? ' old' : ($days > 7 ? ' mid' : ''));
+  return '<small class="last' . $cls . '" title="Último registro em ' . e(date('d/m/Y H:i', $ts)) . '">' . e(date('d/m/Y', $ts)) . '</small>';
 }
 
 function smf_domain(array $row): string {
@@ -120,6 +143,8 @@ try {
     $row += [
       'products_qty'=>0,'customers_qty'=>0,'orders_qty'=>0,
       'nfce_qty'=>0,'nfe_qty'=>0,'nfse_qty'=>0,'rejected_qty'=>0,'contingency_qty'=>0,
+      'products_last'=>null,'customers_last'=>null,'orders_last'=>null,
+      'nfce_last'=>null,'nfe_last'=>null,'nfse_last'=>null,'rejected_last'=>null,'contingency_last'=>null,
     ];
     $rowsById[$cid] = $row;
   }
@@ -143,29 +168,37 @@ try {
       if ($hasEmission) $contExpr .= " OR (UPPER(COALESCE(emission_type,'NORMAL')) <> 'NORMAL' AND UPPER(COALESCE(status,'')) NOT IN ('AUTORIZADA','CANCELADA','REJEITADA'))";
       if ($hasContStarted) $contExpr .= " OR (contingency_started_at IS NOT NULL AND UPPER(COALESCE(status,'')) NOT IN ('AUTORIZADA','CANCELADA','REJEITADA'))";
 
-      $fiscalDateWhere = '';
-      $fiscalParams = $companyIds;
-      if ($dateFrom !== '' || $dateTo !== '') {
-        $fiscalDateCol = smf_first_date_column($pdo, 'fiscal_documents', ['operation_datetime','issue_datetime','created_at']);
+      $fiscalParams = [];
+      $fiscalDateCol = smf_first_date_column($pdo, 'fiscal_documents', ['operation_datetime','issue_datetime','created_at']);
+      $fiscalCats = [
+        'nfce' => "model='65' AND UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA')",
+        'nfe' => "model='55' AND UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA')",
+        'nfse' => "UPPER(COALESCE(model,'')) IN ('NFSE','DPS','RPS','SS') AND UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA')",
+        'rejected' => "UPPER(COALESCE(status,''))='REJEITADA'",
+        'contingency' => "({$contExpr})",
+      ];
+      $fiscalCols = [];
+      foreach ($fiscalCats as $k => $cond) {
         if ($fiscalDateCol !== null) {
-          if ($dateFrom !== '') { $fiscalDateWhere .= " AND `{$fiscalDateCol}` >= ?"; $fiscalParams[] = $dateFrom . ' 00:00:00'; }
-          if ($dateTo !== '') { $fiscalDateWhere .= " AND `{$fiscalDateCol}` < DATE_ADD(?, INTERVAL 1 DAY)"; $fiscalParams[] = $dateTo . ' 00:00:00'; }
+          $inPeriod = smf_period_condition($fiscalDateCol, $dateFrom, $dateTo, $fiscalParams);
+          $fiscalCols[] = "SUM(CASE WHEN ({$cond}) AND {$inPeriod} THEN 1 ELSE 0 END) {$k}_qty";
+          $fiscalCols[] = "MAX(CASE WHEN ({$cond}) THEN `{$fiscalDateCol}` END) {$k}_last";
+        } else {
+          $fiscalCols[] = "SUM(CASE WHEN ({$cond}) THEN 1 ELSE 0 END) {$k}_qty";
+          $fiscalCols[] = "NULL {$k}_last";
         }
       }
-
-      $sqlFiscal = "SELECT company_id,
-        SUM(CASE WHEN model='65' AND UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA') THEN 1 ELSE 0 END) nfce_qty,
-        SUM(CASE WHEN model='55' AND UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA') THEN 1 ELSE 0 END) nfe_qty,
-        SUM(CASE WHEN UPPER(COALESCE(model,'')) IN ('NFSE','DPS','RPS','SS') AND UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA') THEN 1 ELSE 0 END) nfse_qty,
-        SUM(CASE WHEN UPPER(COALESCE(status,''))='REJEITADA' THEN 1 ELSE 0 END) rejected_qty,
-        SUM(CASE WHEN ({$contExpr}) THEN 1 ELSE 0 END) contingency_qty
-        FROM fiscal_documents WHERE company_id IN ({$ph}) {$saida} {$fiscalDateWhere} GROUP BY company_id";
+      $fiscalParams = array_merge($fiscalParams, $companyIds);
+      $sqlFiscal = 'SELECT company_id, ' . implode(', ', $fiscalCols) . " FROM fiscal_documents WHERE company_id IN ({$ph}) {$saida} GROUP BY company_id";
       $fs = $pdo->prepare($sqlFiscal);
       $fs->execute($fiscalParams);
       foreach ($fs->fetchAll(PDO::FETCH_ASSOC) ?: [] as $fr) {
         $cid = (int)$fr['company_id'];
         if (!isset($rowsById[$cid])) continue;
-        foreach (['nfce_qty','nfe_qty','nfse_qty','rejected_qty','contingency_qty'] as $k) $rowsById[$cid][$k] = (int)($fr[$k] ?? 0);
+        foreach (['nfce','nfe','nfse','rejected','contingency'] as $k) {
+          $rowsById[$cid][$k . '_qty'] = (int)($fr[$k . '_qty'] ?? 0);
+          $rowsById[$cid][$k . '_last'] = $fr[$k . '_last'] ?? null;
+        }
       }
     }
   }
@@ -185,6 +218,7 @@ foreach ($rows as $row) foreach ($totals as $key => $_) $totals[$key] += (int)($
 <title>Monitor Fiscal - Suporte Nexa Próspero</title>
 <style>
 :root{--bg:#f4f7fb;--card:#fff;--text:#0b1f5b;--muted:#5b6475;--line:#dce7f5;--primary:#2454d6;--accent:#00b8ff;--danger:#b91c1c;--warn:#b45309;--success:#15803d;--shadow:0 18px 44px rgba(11,31,91,.09)}*{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(circle at 12% 10%,rgba(0,184,255,.10),transparent 28%),var(--bg);color:var(--text);font-family:"Segoe UI",Arial,sans-serif}.shell{max-width:1600px;margin:0 auto;padding:22px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-radius:24px;background:linear-gradient(135deg,#0b1f5b,#2454d6 70%,#00b8ff 140%);color:#fff;box-shadow:0 20px 50px rgba(11,31,91,.18)}.brand{display:flex;align-items:center;gap:12px}.brand img{width:52px;height:52px;object-fit:contain;background:#fff;padding:5px;border-radius:15px}.brand strong{display:block;font-size:20px}.nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}.nav a{color:#eaf8ff;text-decoration:none;font-weight:850;padding:7px 10px;border-radius:999px}.nav a.active,.nav a:hover{background:rgba(255,255,255,.16);color:#fff}.user{text-align:right;font-size:13px;color:#dff6ff}.user strong{display:block;color:#fff}.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:28px 4px 16px}.hero h1{font-size:34px;margin:0 0 8px;letter-spacing:-.04em}.hero p{margin:0;color:var(--muted)}.search-card,.table-card,.kpi{background:#fff;border:1px solid rgba(36,84,214,.12);box-shadow:var(--shadow)}.search-card{padding:16px;border-radius:20px;margin-bottom:14px}.search-form{display:grid;grid-template-columns:minmax(280px,1fr) 170px 170px auto auto;gap:10px;align-items:end}.search-form label{font-weight:900}.search-form input{display:block;width:100%;height:46px;margin-top:6px;border:1px solid var(--line);border-radius:14px;padding:0 14px;font-size:15px;outline:none}.btn{height:46px;border:0;border-radius:999px;padding:0 20px;background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}.kpi{border-radius:18px;padding:14px}.kpi small{display:block;color:var(--muted);font-weight:800}.kpi strong{display:block;margin-top:4px;font-size:22px}.kpi.danger strong{color:var(--danger)}.kpi.warn strong{color:var(--warn)}.table-card{border-radius:22px;padding:16px;overflow:hidden}.table-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}.table-head h2{margin:0;font-size:20px}.table-head span{color:var(--muted);font-weight:800}.scroll{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:separate;border-spacing:0;min-width:1180px;background:#fff}thead th{position:sticky;top:0;z-index:2;background:#f5f8fd;color:#334155;font-size:12px;text-align:center;padding:11px 9px;border-bottom:1px solid var(--line);white-space:nowrap}thead th:first-child{text-align:left}tbody td{padding:11px 9px;border-bottom:1px solid #edf2f7;text-align:center;font-weight:800;color:#1f2937}tbody td:first-child{text-align:left}tbody tr:last-child td{border-bottom:0}tbody tr.has-danger{background:#fff7f7}tbody tr.has-warn:not(.has-danger){background:#fffaf0}.company strong{display:block;color:var(--text);font-size:14px}.company small{display:block;color:var(--muted);margin-top:3px;font-weight:700}.num{font-variant-numeric:tabular-nums}.bad{display:inline-flex;min-width:34px;justify-content:center;padding:5px 8px;border-radius:999px;background:#fee2e2;color:#991b1b}.warning{display:inline-flex;min-width:34px;justify-content:center;padding:5px 8px;border-radius:999px;background:#fef3c7;color:#92400e}.ok{color:#64748b}.error{margin-bottom:14px;padding:12px 14px;border-radius:14px;background:#fef2f2;color:var(--danger);border:1px solid #fecaca;font-weight:800}.empty{padding:28px;text-align:center;color:var(--muted)}@media(max-width:980px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.search-form{grid-template-columns:1fr}.btn{width:100%}.hero{align-items:flex-start;flex-direction:column}}@media(max-width:560px){.shell{padding:12px}.topbar{align-items:flex-start;border-radius:18px}.kpis{grid-template-columns:1fr}.hero h1{font-size:28px}}
+.num small.last{display:block;margin-top:2px;font-size:10.5px;font-weight:600;color:#7b8798;letter-spacing:.01em;white-space:nowrap}.num small.last.mid{color:#b45309}.num small.last.old{color:#b91c1c}.num small.last.none{color:#b4bcc8;font-weight:500}.last-legend{padding:0 2px 10px;font-size:12px;color:#7b8798}.last-legend .mid{color:#b45309}.last-legend .old{color:#b91c1c}
 </style>
 </head>
 <body>
@@ -216,6 +250,7 @@ foreach ($rows as $row) foreach ($totals as $key => $_) $totals[$key] += (int)($
 
 <section class="table-card">
 <div class="table-head"><h2>Empresas monitoradas<?= $periodActive ? " no período" : "" ?></h2><span><?= count($rows) ?> registro(s)</span></div>
+<div class="last-legend">Data pequena abaixo de cada número: último registro da empresa (geral, independente do período). <b class="mid">Laranja</b>: mais de 7 dias · <b class="old">vermelho</b>: mais de 30 dias sem movimento.</div>
 <div class="scroll"><table>
 <thead><tr><th>Empresa</th><th>Produtos</th><th>Clientes</th><th>Pedidos</th><th>NFC-e emitidas</th><th>NF-e emitidas</th><th>NFS-e emitidas</th><th>Rejeitadas</th><th>Contingência</th></tr></thead>
 <tbody>
@@ -228,14 +263,14 @@ foreach ($rows as $row) foreach ($totals as $key => $_) $totals[$key] += (int)($
 ?>
 <tr class="<?= e($rowClass) ?>">
 <td><div class="company"><strong><?= e((string)$row['name']) ?></strong><small><?= e($fantasia !== '' && $fantasia !== (string)$row['name'] ? $fantasia . ' · ' . $domain : $domain) ?></small></div></td>
-<td class="num"><?= number_format((int)$row['products_qty'],0,',','.') ?></td>
-<td class="num"><?= number_format((int)$row['customers_qty'],0,',','.') ?></td>
-<td class="num"><?= number_format((int)$row['orders_qty'],0,',','.') ?></td>
-<td class="num"><?= number_format((int)$row['nfce_qty'],0,',','.') ?></td>
-<td class="num"><?= number_format((int)$row['nfe_qty'],0,',','.') ?></td>
-<td class="num"><?= number_format((int)$row['nfse_qty'],0,',','.') ?></td>
-<td class="num"><?= $rej>0?'<span class="bad">'.number_format($rej,0,',','.').'</span>':'<span class="ok">0</span>' ?></td>
-<td class="num"><?= $cont>0?'<span class="warning">'.number_format($cont,0,',','.').'</span>':'<span class="ok">0</span>' ?></td>
+<td class="num"><?= number_format((int)$row['products_qty'],0,',','.') ?><?= smf_last_html($row['products_last']) ?></td>
+<td class="num"><?= number_format((int)$row['customers_qty'],0,',','.') ?><?= smf_last_html($row['customers_last']) ?></td>
+<td class="num"><?= number_format((int)$row['orders_qty'],0,',','.') ?><?= smf_last_html($row['orders_last']) ?></td>
+<td class="num"><?= number_format((int)$row['nfce_qty'],0,',','.') ?><?= smf_last_html($row['nfce_last']) ?></td>
+<td class="num"><?= number_format((int)$row['nfe_qty'],0,',','.') ?><?= smf_last_html($row['nfe_last']) ?></td>
+<td class="num"><?= number_format((int)$row['nfse_qty'],0,',','.') ?><?= smf_last_html($row['nfse_last']) ?></td>
+<td class="num"><?= $rej>0?'<span class="bad">'.number_format($rej,0,',','.').'</span>':'<span class="ok">0</span>' ?><?= smf_last_html($row['rejected_last'], false) ?></td>
+<td class="num"><?= $cont>0?'<span class="warning">'.number_format($cont,0,',','.').'</span>':'<span class="ok">0</span>' ?><?= smf_last_html($row['contingency_last'], false) ?></td>
 </tr>
 <?php endforeach; ?>
 </tbody></table></div>
