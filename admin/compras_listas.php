@@ -149,7 +149,6 @@ admin_topbar('Listas de Compras','produtos');
 </style>
 <div class="cl-wrap">
 <h1>Listas de Compras</h1>
-<p>Consulte as listas cadastradas e abra a lista desejada para editar produtos e realizar a cotação completa.</p>
 <p><a href="compras_assistente.php">← Assistente de Compras / Nova lista</a></p>
 <?php if(!$ready):?>
 <div class="cl-box" role="alert">A estrutura do banco ainda não foi atualizada. Aplique a migration Compras 1.8 no Atualizador do Banco.</div>
@@ -163,7 +162,7 @@ admin_topbar('Listas de Compras','produtos');
 </form>
 </div>
 <div class="cl-box"><h2>Listas existentes</h2>
-<div class="cl-scroll"><table><thead><tr><th>Nº</th><th>Nome</th><th>Status</th><th>Itens</th><th>Criação</th><th>Ações</th></tr></thead><tbody>
+<?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="cl-scroll"><table<?=nexa_grid_auto_attrs($pdo,'auto_compras_listas')?>><thead><tr><th>Nº</th><th>Nome</th><th>Status</th><th>Itens</th><th>Criação</th><th>Ações</th></tr></thead><tbody>
 <?php foreach($lists as $l):?><tr>
 <td><?= (int)$l['id']?></td><td><?=cl_h($l['nome'])?></td><td><?=cl_h($l['status'])?></td><td><?= (int)$l['itens']?></td>
 <td><?=cl_h($l['created_at'])?></td><td class="cl-actions"><a href="compras_lista_editar.php?id=<?= (int)$l['id']?>">Visualizar</a></td>

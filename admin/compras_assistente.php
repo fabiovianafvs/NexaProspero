@@ -262,7 +262,6 @@ admin_topbar('Assistente de Compras', 'produtos');
 </style>
 <div class="compras-wrap">
   <h1>Assistente de Compras</h1>
-  <p class="muted">Fase 1.6 · Pedidos finalizados (indicador comercial, sem confirmação fiscal), saídas físicas, giro e cobertura, além das quantidades e valores mensais preliminares de entradas fiscais, pedidos e estoque, em modo somente leitura.</p>
   <div class="card">
     <form class="compras-filter" method="get">
       <label>Período inicial<input type="date" name="inicio" value="<?=compras_h($start)?>"></label>

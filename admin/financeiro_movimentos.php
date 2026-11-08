@@ -558,7 +558,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   require_once __DIR__ . '/../config/grid_preferences.php';
   $movGridPrefs = nexa_grid_prefs_load($pdo, (int)COMPANY_ID, 'fin_movimentos');
 ?>
-<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_3">
+<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_4">
 <style id="ntgFirstPaint">.ntg-wrap:not(.is-ready){visibility:hidden}</style>
 <script>setTimeout(function(){var s=document.getElementById('ntgFirstPaint');if(s&&!document.documentElement.classList.contains('ntg-ready'))s.remove();},4000);</script>
 <div class="finance-card">
@@ -634,7 +634,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   </div>
   <?php endif; ?>
 </div>
-<script src="assets/nexa_titles_grid.js?v=20261108_3" defer></script>
+<script src="assets/nexa_titles_grid.js?v=20261108_4" defer></script>
 
 <?php if($showForm && $canManualMovement): ?>
 <div class="finance-modal" role="dialog" aria-modal="true"><div class="finance-modal-dialog finance-modal-wide"><div class="finance-modal-head"><div><h2><?= $editId ? 'Editar movimento #' . (int)$editId : 'Novo movimento manual' ?></h2><p class="finance-muted"><?= $editId ? 'Altere os dados do movimento financeiro. A origem do lançamento é preservada.' : 'Use para ajustes, entradas manuais, saídas manuais, tarifas, sangrias e transferências simples.' ?></p></div><a class="finance-modal-close" href="<?= finance_h($listUrl) ?>">×</a></div><form method="post" class="finance-form nexa-movement-manual-form"><input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>"><?php if($financeCrossMovementScope): ?><input type="hidden" name="mc_csrf" value="<?= finance_h($financeMcCsrf) ?>"><?php if($financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?><?php endif; ?><div class="finance-form-section"><h3>Dados do movimento</h3><div class="finance-form-grid nexa-movement-manual-grid">

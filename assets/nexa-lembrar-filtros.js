@@ -5,6 +5,7 @@
  *   data-lembrar-filtros="nome-da-tela"
  *   data-lembrar-extra="pg,por_pagina"          (opcional: outros parâmetros a lembrar)
  *   data-lembrar-ignorar="edit,new,settle"      (opcional: modos em que não restaura)
+ *   data-lembrar-somente-retorno="1"             (opcional: restaura só ao voltar da própria tela)
  * e inclua este script logo DEPOIS do formulário (sem defer).
  *
  * Como funciona:
@@ -64,6 +65,13 @@
 
     var saved = sessionStorage.getItem(storeKey);
     if (!saved) return;
+    // data-lembrar-somente-retorno: só restaura ao voltar de uma ação da própria
+    // tela (salvar, baixar, editar). Entrando pelo menu, abre limpa e sem consultar.
+    if (form.getAttribute('data-lembrar-somente-retorno') === '1') {
+      var ref = '';
+      try { ref = document.referrer ? new URL(document.referrer).pathname : ''; } catch (e2) { ref = ''; }
+      if (ref !== location.pathname) return;
+    }
     var merged = new URLSearchParams(saved);
     params.forEach(function (v, k) { if (!keys[k]) merged.append(k, v); });
     sessionStorage.setItem(flagKey, '1');

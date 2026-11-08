@@ -238,7 +238,7 @@ finance_admin_start('Financeiro - Vales','fin_vales');
 finance_tabs('fin_vales'); finance_flash();
 if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?><?php if($voucherError !== ''): ?><div class="msg err"><?= finance_h($voucherError) ?></div><?php endif; ?>
 <div class="finance-hero voucher-hero">
-  <div><span class="finance-eyebrow">Crédito do cliente</span><h1>Vales</h1><p>Consulte vales de devolução, vales avulsos e adiantamentos recebidos em caixa.</p></div>
+  <div><span class="finance-eyebrow">Crédito do cliente</span><h1>Vales</h1></div>
   <?php if($voucherCanCreate): ?><a class="btn btn-primary" href="financeiro_vales.php?new=1">+ Novo Vale</a><?php endif; ?>
 </div>
 <div class="finance-kpis voucher-kpis">
@@ -347,7 +347,7 @@ mode.addEventListener('change',refresh);refresh();})();
 /* V11.53 - Tela Vales: espaçamento e grade no padrão Cadastro de Produtos */
 .voucher-hero{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
 .finance-page .voucher-kpis{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;align-items:stretch}
-.finance-page .voucher-kpis .finance-kpi{min-width:0;margin:0}
+.finance-page .voucher-kpis .finance-kpi{min-width:0;margin:0;padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}.finance-page .voucher-kpis .finance-kpi span{margin:0;font-size:12px}.finance-page .voucher-kpis .finance-kpi strong{margin:0;font-size:clamp(17px,1.7vw,21px)}
 .finance-page .voucher-kpis .finance-kpi strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .voucher-filters{display:grid;grid-template-columns:minmax(260px,2.2fr) minmax(155px,1fr) minmax(155px,1fr) minmax(155px,1fr) auto;gap:10px;align-items:end}
 .voucher-filters>div{min-width:0}

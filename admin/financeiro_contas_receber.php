@@ -673,7 +673,13 @@ if ($personFilter > 0) {
     if ($selectedPersonName === '') $personFilter = 0;
   } catch (Throwable $ignored) { $personFilter = 0; }
 }
-$rows = finance_query_all($pdo, 'SELECT r.*, p.name AS person_name, ca.code, ca.name AS account_name FROM finance_receivables r LEFT JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=r.company_id AND ca.id=r.chart_account_id WHERE ' . implode(' AND ', $where) . ' ORDER BY r.due_date ASC, r.id DESC LIMIT 500', $params);
+// A tela abre sem consultar: a lista só é carregada ao clicar em Filtrar (ou ao
+// voltar de uma ação com os filtros lembrados). Deixa a entrada leve.
+$receivableListRequested = isset($_GET['filtrar']);
+foreach (['status','q','person_id','issue_ini','issue_fim','due_ini','due_fim','settle_ini','settle_fim'] as $receivableFilterKey) {
+  if (array_key_exists($receivableFilterKey, $_GET)) $receivableListRequested = true;
+}
+$rows = $receivableListRequested ? finance_query_all($pdo, 'SELECT r.*, p.name AS person_name, ca.code, ca.name AS account_name FROM finance_receivables r LEFT JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=r.company_id AND ca.id=r.chart_account_id WHERE ' . implode(' AND ', $where) . ' ORDER BY r.due_date ASC, r.id DESC LIMIT 500', $params) : [];
 
 // Carrega os boletos vinculados em lote para exibir as ações sem gerar N+1 consultas.
 $receivableChargeMap = [];
@@ -847,7 +853,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
 <?php endif; ?>
 
 <div class="finance-card finance-filter-card">
-  <form method="get" class="receivable-filter-form" data-lembrar-filtros="contas_receber" data-lembrar-ignorar="edit,new,settle,action,id">
+  <form method="get" class="receivable-filter-form" data-lembrar-filtros="contas_receber" data-lembrar-ignorar="edit,new,settle,action,id" data-lembrar-somente-retorno="1"><input type="hidden" name="filtrar" value="1">
     <div class="receivable-filter-grid">
       <div><label>Emissão inicial</label><input type="date" name="issue_ini" value="<?= finance_h($issueIni ?? '') ?>"></div>
       <div><label>Emissão final</label><input type="date" name="issue_fim" value="<?= finance_h($issueFim ?? '') ?>"></div>
@@ -876,7 +882,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
       <div class="receivable-history receivable-history-second"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento ou cliente"></div>
       <div class="receivable-filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn" href="financeiro_contas_receber.php?limpar_filtros=1">Limpar filtros</a></div>
     </div>
-  </form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script>
+  </form><script src="/assets/nexa-lembrar-filtros.js?v=2"></script>
 </div>
 
 <?php
@@ -884,7 +890,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
   $recGridPrefs = nexa_grid_prefs_load($pdo, (int)COMPANY_ID, 'fin_receber');
   $recGridToday = $creTodayDate->format('Y-m-d');
 ?>
-<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_3">
+<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_4">
 <style id="ntgFirstPaint">.ntg-wrap:not(.is-ready){visibility:hidden}</style>
 <script>setTimeout(function(){var s=document.getElementById('ntgFirstPaint');if(s&&!document.documentElement.classList.contains('ntg-ready'))s.remove();},4000);</script>
 <div class="finance-card">
@@ -909,7 +915,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
       </div>
     </div>
   </div>
-  <?php if(!$rows): ?><div class="finance-empty">Nenhum título encontrado.</div><?php else: ?>
+  <?php if(!$receivableListRequested): ?><div class="finance-empty">Escolha os filtros acima e clique em <strong>Filtrar</strong> para consultar as contas a receber.</div><?php elseif(!$rows): ?><div class="finance-empty">Nenhum título encontrado.</div><?php else: ?>
   <div class="ntg-wrap">
     <table class="ntg-table" data-ntg="fin_receber" data-scope="<?= (int)COMPANY_ID ?>" data-save-url="grid_preferencias.php" data-csrf="<?= finance_h(nexa_grid_csrf()) ?>"
       data-prefs="<?= finance_h(json_encode($recGridPrefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) ?>"
@@ -1037,7 +1043,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
   </div>
   <?php endif; ?>
 </div>
-<script src="assets/nexa_titles_grid.js?v=20261108_3" defer></script>
+<script src="assets/nexa_titles_grid.js?v=20261108_4" defer></script>
 
 <style>
 .receivable-boleto-whatsapp{background:#25D366!important;border-color:#1ebe57!important;color:#fff!important}.receivable-boleto-whatsapp:hover{background:#1fbd5a!important;border-color:#18a94c!important;color:#fff!important}.finance-filter-card{padding-top:10px!important;padding-bottom:10px!important}.receivable-filter-form label,.receivable-person-picker>label{display:block;font-size:12px;font-weight:850;color:#475569;margin-bottom:3px}.receivable-filter-grid{display:grid;grid-template-columns:repeat(6,minmax(118px,.78fr)) minmax(145px,.9fr);gap:8px 10px;align-items:end}.receivable-filter-grid input,.receivable-filter-grid select{min-height:39px}.receivable-filter-second{display:grid;grid-template-columns:minmax(300px,420px) minmax(260px,1fr) auto;align-items:end;gap:10px;margin-top:4px}.receivable-person-picker,.receivable-history-second{min-width:0}.receivable-person-picker .finance-field-inline{display:grid;grid-template-columns:minmax(145px,1fr) auto auto;gap:8px}.receivable-person-picker .finance-field-inline .btn{white-space:nowrap}.receivable-filter-actions{display:flex;gap:8px;margin-left:0;white-space:nowrap}.receivable-filter-actions .btn{min-height:39px}.receivable-list-head{align-items:center}.receivable-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.receivable-selected-summary{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid #86efac;border-radius:12px;background:#f0fdf4;color:#166534;font-size:12px;white-space:nowrap}.receivable-selected-summary[hidden]{display:none}.receivable-selected-summary span{font-weight:800}.receivable-selected-summary strong{font-weight:950}.receivable-check-all{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #dbe4f0;border-radius:12px;background:#f8fbff;font-size:12px;font-weight:850;color:#475569}.receivable-help{margin:-5px 0 13px}.receivable-list{display:grid;gap:12px}.receivable-title-card{border:1px solid #dbe4f0;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 22px rgba(15,23,42,.035)}.receivable-title-card.is-overdue{border-color:#fca5a5;border-left:5px solid #dc2626;background:#fff7f7;box-shadow:0 8px 22px rgba(185,28,28,.07)}.receivable-title-card.is-overdue .receivable-title-main{background:#fff7f7}.receivable-title-card.is-overdue .receivable-title-actions{background:#fff1f2;border-top-color:#fecaca}.receivable-title-main{display:grid;grid-template-columns:34px 58px minmax(170px,1.18fr) minmax(125px,.82fr) 72px 86px 94px 96px 98px 112px minmax(135px,.86fr);gap:9px;align-items:center;padding:13px 14px}.receivable-title-main>div{min-width:0}.receivable-title-main span{display:block;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.025em;color:#64748b;margin-bottom:4px}.receivable-title-main strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:13px}.receivable-title-client small{display:block;margin-top:4px;color:#64748b;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.receivable-title-history strong{font-size:12px}.receivable-title-delay{text-align:center}.receivable-title-delay strong{color:#64748b;font-size:12px}.receivable-title-card.is-overdue .receivable-title-delay strong,.receivable-title-card.is-overdue .receivable-open-updated{color:#b91c1c;font-weight:950}.receivable-title-open .receivable-open-updated{color:#047857}.receivable-title-card.is-overdue .receivable-title-open .receivable-open-updated{color:#b91c1c}.receivable-select-cell{text-align:center}.receivable-select-cell input{width:18px;height:18px}.receivable-title-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#f8fbff;border-top:1px solid #e5eaf2}.receivable-title-actions>div{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.receivable-title-actions-left>span{font-size:11px;text-transform:uppercase;font-weight:900;color:#64748b;margin-right:3px}.receivable-title-actions-left .receivable-view-products{font-weight:850;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.receivable-title-actions-left .receivable-view-products:hover{background:#dbeafe;border-color:#93c5fd;color:#1e40af}.receivable-title-actions form{margin:0}.receivable-title-actions .btn{min-height:34px;height:34px;padding:0 11px;border-radius:10px;font-size:12px}.finance-bulk-modal .finance-modal-dialog{width:min(1220px,100%)}.finance-bulk-common{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}.finance-bulk-common .wide{grid-column:span 4}.bulk-mode-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px;border:1px solid #dbe4f0;border-radius:15px;background:#f8fbff}.bulk-mode-box label{display:flex;align-items:center;gap:6px;font-weight:850}.bulk-partial-controls{display:flex;align-items:end;gap:8px;flex:1 1 350px}.bulk-partial-controls>div{flex:1}.bulk-partial-controls input{min-height:42px}.finance-bulk-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.finance-bulk-total{border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;padding:9px 12px;font-weight:950;color:#0b1f5b}.bulk-settle-list{display:grid;gap:10px}.bulk-settle-row{border:1px solid #dbe4f0;border-radius:16px;padding:12px;background:#fff}.bulk-settle-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}.bulk-settle-head strong{display:block;color:#0b1f5b}.bulk-settle-head small{display:block;color:#64748b;margin-top:3px}.bulk-settle-fields{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:9px;align-items:end}.bulk-settle-fields label{font-size:10px;text-transform:uppercase;font-weight:850;color:#64748b}.bulk-settle-fields input{min-height:39px;padding:7px 8px}.bulk-readonly{min-height:39px;border:1px solid #dbe4f0;border-radius:12px;padding:9px;background:#f8fbff;font-weight:850;white-space:nowrap}.bulk-balance.partial{color:#b45309}.bulk-balance.paid{color:#047857}.person-lookup-list{display:grid;gap:8px;max-height:55vh;overflow:auto}.person-lookup-item{width:100%;text-align:left;border:1px solid #dbe4f0;background:#fff;border-radius:14px;padding:11px;cursor:pointer}.person-lookup-item:hover{border-color:#60a5fa;background:#eff6ff}.person-lookup-item strong{display:block;color:#0b1f5b}.person-lookup-item small{display:block;color:#64748b;margin-top:3px}

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../config/os_module.php';
 require_once __DIR__ . '/_os_ui.php';
+require_once __DIR__ . '/../config/grid_preferences.php';
 
 $pdo=os_db(); $companyId=os_company_id(); os_require_enabled($pdo,$companyId); os_ensure_defaults($pdo,$companyId);
 $photoCleanupCount=0;
@@ -43,8 +44,9 @@ echo '<div><label>Faturamento</label><select name="billing_status"><option value
 echo '<div><label>Contém</label><select name="item_type"><option value="">Produtos/serviços</option><option value="PRODUTO" '.($type==='PRODUTO'?'selected':'').'>Produto</option><option value="SERVICO" '.($type==='SERVICO'?'selected':'').'>Serviço</option></select></div>';
 echo '<div><label>Data inicial</label><input type="date" name="date_from" value="'.os_e($dateFrom).'"></div><div><label>Data final</label><input type="date" name="date_to" value="'.os_e($dateTo).'"></div>';
 echo '<div class="filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn btn-secondary" href="os_monitor.php">Limpar</a><span class="muted small filter-count">'.count($rows).' O.S. encontrada(s)</span></div></div></form></div></div>';
-echo '<div class="totals" style="margin-bottom:18px"><div class="total-box"><span>Total em produtos</span><strong>'.os_money($sumP).'</strong></div><div class="total-box"><span>Total em serviços</span><strong>'.os_money($sumS).'</strong></div><div class="total-box"><span>Total geral</span><strong>'.os_money($sumG).'</strong></div></div>';
-echo '<div class="card"><div class="card-head">Ordens de Serviço</div><div class="card-body table-wrap os-monitor-table-wrap"><table class="table os-monitor-table"><thead><tr><th>O.S.</th><th>Abertura</th><th>Cliente</th><th>Status</th><th>Itens</th><th class="num">Produtos</th><th class="num">Serviços</th><th class="num">Total</th><th>Faturamento</th><th>Ações</th></tr></thead><tbody>';
+echo '<style>.os-monitor-kpis .total-box{padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}.os-monitor-kpis .total-box span{font-size:12px}.os-monitor-kpis .total-box strong{margin:0;font-size:clamp(17px,1.7vw,21px)}</style>';
+echo '<div class="totals os-monitor-kpis" style="margin-bottom:12px"><div class="total-box"><span>Total em produtos</span><strong>'.os_money($sumP).'</strong></div><div class="total-box"><span>Total em serviços</span><strong>'.os_money($sumS).'</strong></div><div class="total-box"><span>Total geral</span><strong>'.os_money($sumG).'</strong></div></div>';
+echo '<div class="card"><div class="card-head">Ordens de Serviço</div><div class="card-body table-wrap os-monitor-table-wrap">'.nexa_grid_assets().'<table class="table os-monitor-table"'.nexa_grid_auto_attrs($pdo,'auto_os_monitor').'><thead><tr><th>O.S.</th><th>Abertura</th><th>Cliente</th><th>Status</th><th>Itens</th><th class="num">Produtos</th><th class="num">Serviços</th><th class="num">Total</th><th>Faturamento</th><th>Ações</th></tr></thead><tbody>';
 if(!$rows)echo '<tr><td colspan="10" class="muted">Nenhuma O.S. encontrada.</td></tr>';
 foreach($rows as $r){
  $rowColor=os_ui_hex_color(isset($r['status_color'])?$r['status_color']:null,'#64748B');

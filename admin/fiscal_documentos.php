@@ -304,7 +304,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
 
 <div class="fiscal-card">
   <div class="fiscal-list-head"><h2>Documentos</h2><span class="fiscal-list-count"><?= count($rows) ?> registro(s)</span></div>
-  <div class="table-wrap"><table class="nfce-doc-table">
+  <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="table-wrap"><table class="nfce-doc-table"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_documentos')?>>
     <thead><tr><th>Documento</th><th>Origem</th><th>Operação</th><th>Autorização</th><th>Status</th><th>Total</th><th>Retorno fiscal</th></tr></thead>
     <tbody>
       <?php if (!$rows): ?><tr><td colspan="7"><div class="fiscal-empty-state">Nenhum documento fiscal encontrado.</div></td></tr><?php endif; ?>

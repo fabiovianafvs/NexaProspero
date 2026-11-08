@@ -70,3 +70,15 @@
 .ntg-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 .ntg-legend .lg-overdue{background:#fecaca;box-shadow:inset 3px 0 0 #dc2626}.ntg-legend .lg-today{background:#bfdbfe;box-shadow:inset 3px 0 0 #2563eb}
 .ntg-empty{padding:18px;color:#64748b;text-align:center}
+/* Grid automático (data-ntg-auto) em telas de listagem. */
+table[data-ntg-auto]:not(.ntg-table){visibility:hidden}
+.ntg-auto-bar{justify-content:flex-end;margin:0 0 6px}
+.ntg-icons .ntg-mini{display:inline-flex;align-items:center;justify-content:center;height:30px;min-height:30px;padding:0 9px;border-radius:8px;font-size:11.5px;font-weight:800;white-space:nowrap;margin:0;line-height:1}
+.ntg-icons select{height:30px;min-height:30px;padding:2px 6px;font-size:12px}
+.ntg-table tbody tr.ntg-empty-row td{white-space:normal}
+.ntg-menu{position:fixed;z-index:100050;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 16px 45px #0f172a40;min-width:200px;max-width:min(340px,calc(100vw - 16px));max-height:70vh;overflow:auto;padding:7px;display:grid;gap:5px}
+.ntg-menu[hidden]{display:none!important}
+.ntg-menu form{display:block!important;margin:0!important}
+.ntg-menu a,.ntg-menu button,.ntg-menu .ntg-mini,.ntg-menu .ntg-icon{display:flex!important;align-items:center;justify-content:flex-start!important;width:100%!important;min-width:0;height:auto!important;min-height:32px;padding:7px 9px!important;font-size:12px;white-space:normal;text-align:left;box-sizing:border-box}
+.ntg-menu .ntg-icon svg{margin-right:7px}
+.ntg-menu .ntg-icon::after{content:attr(aria-label);font-weight:700;color:#0f172a}

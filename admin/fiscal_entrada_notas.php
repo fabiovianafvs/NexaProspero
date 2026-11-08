@@ -132,7 +132,7 @@ if ($err) echo '<div class="msg err">' . fiscal_h(trim($err)) . '</div>';
 
 <div class="fiscal-card">
   <div class="fiscal-list-head"><div><h2>Notas em conferência e entradas geradas</h2></div><div class="fiscal-inline-actions"><a class="btn btn-primary" href="<?= fiscal_h(fiscal_v10_entry_context_url('fiscal_importar_xml.php')) ?>">Importar XML</a><span class="fiscal-list-count"><?= count($rows) ?> registro(s)</span></div></div>
-  <div class="table-wrap entrada-notas-wrap"><table class="fiscal-table"><thead><tr><th>NF-e</th><th>Fornecedor</th><th>Emissão</th><th>Entrada</th><th>Total</th><th>Status</th><th>Operação</th></tr></thead><tbody>
+  <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="table-wrap entrada-notas-wrap"><table class="fiscal-table"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_entrada_notas')?>><thead><tr><th>NF-e</th><th>Fornecedor</th><th>Emissão</th><th>Entrada</th><th>Total</th><th>Status</th><th>Operação</th></tr></thead><tbody>
   <?php if (!$rows): ?><tr><td colspan="7" style="text-align:center;color:#64748b">Nenhuma nota encontrada para os filtros informados.</td></tr><?php endif; ?>
   <?php foreach ($rows as $x): ?>
     <tr class="entrada-notas-record-row">

@@ -219,7 +219,7 @@ function radarSolicitarJustificativa(form) {
 
 <div class="fiscal-card">
   <div class="fiscal-list-head"><h2>NF-e emitidas para o CNPJ</h2><span class="fiscal-list-count"><?= count($dfeRows) ?> registro(s)</span></div>
-  <div class="table-wrap radar-dfe-wrap"><table class="fiscal-table radar-dfe-table"><thead><tr><th>Documento</th><th>Fornecedor</th><th>Origem</th><th>Emissão</th><th>Total</th><th>Status</th></tr></thead><tbody>
+  <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="table-wrap radar-dfe-wrap"><table class="fiscal-table radar-dfe-table"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_radar')?>><thead><tr><th>Documento</th><th>Fornecedor</th><th>Origem</th><th>Emissão</th><th>Total</th><th>Status</th></tr></thead><tbody>
   <?php if (!$dfeRows): ?><tr><td colspan="6" style="text-align:center;color:#64748b">Nenhuma NF-e localizada no período informado.</td></tr><?php endif; ?>
   <?php foreach ($dfeRows as $x): $kind = strtoupper((string)($x['dfe_kind'] ?? '')); $hasXml = trim((string)($x['xml_raw'] ?? '')) !== '' && !in_array($kind, ['RESNFE','RESEVENTO','EVENTO'], true) && stripos((string)($x['xml_raw'] ?? ''), '<NFe') !== false; ?>
     <tr class="radar-dfe-record-row">

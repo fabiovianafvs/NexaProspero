@@ -172,7 +172,7 @@ if ($err) echo '<div class="msg err">' . fiscal_h($err) . '</div>';
       <a class="btn" href="<?= fiscal_h(fiscal_v10_entry_context_url('fiscal_importar_xml.php')) ?>">Limpar</a>
     </div>
   </form>
-  <div class="table-wrap"><table class="fiscal-table"><thead><tr><th>Data</th><th>NF-e</th><th>Fornecedor</th><th>Total</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+  <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="table-wrap"><table class="fiscal-table"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_importar_xml')?>><thead><tr><th>Data</th><th>NF-e</th><th>Fornecedor</th><th>Total</th><th>Status</th><th>Ações</th></tr></thead><tbody>
   <?php if (!$recent): ?><tr><td colspan="6" style="text-align:center;color:#64748b">Nenhum XML encontrado para os filtros informados.</td></tr><?php endif; ?>
   <?php foreach ($recent as $x): ?>
     <tr>

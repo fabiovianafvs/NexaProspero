@@ -100,7 +100,7 @@ if ($err) echo '<div class="msg err">' . fiscal_h($err) . '</div>';
 <div class="fiscal-card">
   <div class="fiscal-list-head"><h2>Devoluções e outras entradas</h2><span class="fiscal-list-count"><?= count($rows) ?> registro(s)</span></div>
   <div class="table-wrap">
-    <table class="fiscal-table fiscal-grid-table devolucao-grid">
+    <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><table class="fiscal-table fiscal-grid-table devolucao-grid"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_devolucoes')?>>
       <colgroup>
         <col style="width:18%">
         <col style="width:17%">

@@ -208,7 +208,7 @@ $editMask = (string)($edit['months_mask'] ?? '111111111111');
 if (strlen(preg_replace('/[^01]/', '', $editMask)) !== 12) $editMask = '111111111111';
 
 finance_admin_start('Financeiro - Despesas Fixas', 'fin_fixas');
-finance_page_header($financeFixedCrossContext ? 'Despesas Fixas · ' . $financeFixedCompanyName : 'Despesas Fixas', $financeFixedCrossContext ? 'V11.5: regras recorrentes e provisões protegidas na empresa selecionada pelo F11.' : 'Cadastre contas recorrentes e mantenha automaticamente um horizonte contínuo de provisões no Contas a Pagar.', [
+finance_page_header($financeFixedCrossContext ? 'Despesas Fixas · ' . $financeFixedCompanyName : 'Despesas Fixas', $financeFixedCrossContext ? 'V11.5: regras recorrentes e provisões protegidas na empresa selecionada pelo F11.' : '', [
   ['href'=>'financeiro_despesas_fixas.php?new=1','label'=>'+ Nova despesa fixa','class'=>'btn btn-primary'],
 ]);
 // V11.51.7: barra geral do Financeiro removida desta tela para priorizar os registros.
@@ -219,7 +219,7 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
 <div class="fixed-kpis">
   <div class="finance-kpi"><small>Despesas fixas ativas</small><strong><?= $activeCount ?></strong></div>
   <div class="finance-kpi"><small>Valor médio mensal cadastrado</small><strong class="neg">R$ <?= finance_money_br($averageTotal) ?></strong></div>
-  <div class="finance-kpi"><small>Regra de provisionamento</small><strong>Horizonte contínuo</strong><div class="finance-muted">Ao quitar uma conta, uma nova competência é criada no final.</div></div>
+  <div class="finance-kpi" title="Ao quitar uma conta, uma nova competência é criada no final."><small>Regra de provisionamento</small><strong>Horizonte contínuo</strong></div>
 </div>
 
 <div class="finance-card finance-filter-card">
@@ -236,42 +236,51 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
     <div><h2 class="finance-subtitle">Despesas cadastradas</h2><span class="finance-muted"><?= count($rules) ?> registro(s) · Total filtrado: <strong>R$ <?= finance_money_br($filteredTotal) ?></strong></span></div>
     <form method="post"><input type="hidden" name="action" value="replenish_all"><button class="btn" type="submit">Recompor todas as provisões</button></form>
   </div>
-  <div class="fixed-list">
-    <?php if (!$rules): ?><div class="finance-empty">Nenhuma despesa fixa cadastrada.</div><?php endif; ?>
+  <?php require_once __DIR__ . '/../config/grid_preferences.php'; echo nexa_grid_assets(); ?>
+  <?php if (!$rules): ?><div class="finance-empty">Nenhuma despesa fixa cadastrada.</div><?php else: ?>
+  <table class="fixed-grid"<?= nexa_grid_auto_attrs($pdo, 'auto_fin_despesas_fixas') ?>>
+    <thead><tr><th>Situação</th><th>Despesa</th><th>Fornecedor</th><th class="num">Valor médio</th><th>Vencimento</th><th>Próximo venc.</th><th>Provisões abertas</th><th class="num">Total gerado</th><th>Meses</th><th>Plano de contas</th><th>Centro de custo</th><th>Últ. competência</th><th>Ações</th></tr></thead>
+    <tbody>
     <?php foreach ($rules as $rule):
       $mask = (string)($rule['months_mask'] ?? '111111111111');
       $months = [];
       foreach ($monthNames as $number=>$name) if (finance_fixed_expense_month_enabled($mask, $number)) $months[] = $name;
+      $ruleActive = !empty($rule['active']);
+      $rulePerson = (string)($rule['person_name'] ?? '') . (!empty($rule['person_document']) ? ' · ' . (string)$rule['person_document'] : '');
+      $rulePlan = trim((string)($rule['account_code'] ?? '') . ' ' . (string)($rule['account_name'] ?? ''));
     ?>
-      <article class="fixed-card <?= empty($rule['active']) ? 'inactive' : '' ?>">
-        <div class="fixed-card-main">
-          <div class="fixed-title"><span><?= !empty($rule['active']) ? 'Ativa' : 'Inativa' ?></span><h3><?= finance_h($rule['description'] ?? '') ?></h3><p><?= finance_h($rule['person_name'] ?? '') ?><?= !empty($rule['person_document']) ? ' · ' . finance_h($rule['person_document']) : '' ?></p></div>
-          <div><span>Valor médio</span><strong>R$ <?= finance_money_br($rule['average_amount'] ?? 0) ?></strong></div>
-          <div><span>Vencimento</span><strong>Dia <?= (int)($rule['due_day'] ?? 1) ?></strong><small>Próximo: <?= finance_date_br($rule['next_due_date'] ?? '') ?: '—' ?></small></div>
-          <div><span>Provisões abertas</span><strong><?= (int)($rule['open_count'] ?? 0) ?> de <?= (int)($rule['horizon_count'] ?? 12) ?></strong><small>Total gerado: <?= (int)($rule['total_generated'] ?? 0) ?></small></div>
-          <div><span>Meses</span><strong><?= finance_h(implode(', ', $months)) ?></strong></div>
-          <div class="fixed-account"><span>Plano de contas</span><strong><span class="code"><?= finance_h($rule['account_code'] ?? '') ?></span> <?= finance_h($rule['account_name'] ?? '') ?></strong><small><?= finance_h($rule['cost_center_name'] ?? '') ?></small></div>
-        </div>
-        <div class="fixed-card-actions">
-          <span>Competência mais recente: <?= finance_date_br($rule['last_reference_month'] ?? '') ?: '—' ?></span>
-          <div>
-            <a class="btn" href="financeiro_contas_pagar.php?fixed_expense_id=<?= (int)$rule['id'] ?>&status=ABERTO">Ver contas</a>
-            <a class="btn" href="?edit=<?= (int)$rule['id'] ?>">Editar</a>
-            <?php if (!empty($rule['active'])): ?>
-              <form method="post"><input type="hidden" name="action" value="replenish"><input type="hidden" name="id" value="<?= (int)$rule['id'] ?>"><button class="btn" type="submit">Recompor</button></form>
-              <form method="post" onsubmit="return confirm('Inativar esta despesa fixa? As contas já geradas serão mantidas.')"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$rule['id'] ?>"><input type="hidden" name="active" value="0"><button class="btn btn-danger" type="submit">Inativar</button></form>
-            <?php else: ?>
-              <form method="post"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$rule['id'] ?>"><input type="hidden" name="active" value="1"><button class="btn btn-primary" type="submit">Reativar</button></form>
-            <?php endif; ?>
-          </div>
-        </div>
-      </article>
+      <tr class="<?= $ruleActive ? '' : 'ntg-canceled' ?>">
+        <td><span class="finance-status <?= $ruleActive ? 'ABERTO' : 'CANCELADO' ?>"><?= $ruleActive ? 'Ativa' : 'Inativa' ?></span></td>
+        <td title="<?= finance_h($rule['description'] ?? '') ?>"><strong><?= finance_h($rule['description'] ?? '') ?></strong></td>
+        <td title="<?= finance_h($rulePerson) ?>"><?= finance_h($rulePerson) ?></td>
+        <td class="num" data-sort="<?= number_format((float)($rule['average_amount'] ?? 0), 2, '.', '') ?>">R$ <?= finance_money_br($rule['average_amount'] ?? 0) ?></td>
+        <td data-sort="<?= str_pad((string)(int)($rule['due_day'] ?? 1), 2, '0', STR_PAD_LEFT) ?>">Dia <?= (int)($rule['due_day'] ?? 1) ?></td>
+        <td data-sort="<?= finance_h(substr((string)($rule['next_due_date'] ?? ''), 0, 10)) ?>"><?= finance_date_br($rule['next_due_date'] ?? '') ?: '—' ?></td>
+        <td data-sort="<?= (int)($rule['open_count'] ?? 0) ?>"><?= (int)($rule['open_count'] ?? 0) ?> de <?= (int)($rule['horizon_count'] ?? 12) ?></td>
+        <td class="num"><?= (int)($rule['total_generated'] ?? 0) ?></td>
+        <td title="<?= finance_h(implode(', ', $months)) ?>"><?= finance_h(count($months) === 12 ? 'Todos' : implode(', ', $months)) ?></td>
+        <td title="<?= finance_h($rulePlan) ?>"><span class="code"><?= finance_h($rule['account_code'] ?? '') ?></span> <?= finance_h($rule['account_name'] ?? '') ?></td>
+        <td><?= finance_h($rule['cost_center_name'] ?? '') ?></td>
+        <td data-sort="<?= finance_h(substr((string)($rule['last_reference_month'] ?? ''), 0, 10)) ?>"><?= finance_date_br($rule['last_reference_month'] ?? '') ?: '—' ?></td>
+        <td>
+          <a class="btn" href="financeiro_contas_pagar.php?fixed_expense_id=<?= (int)$rule['id'] ?>&status=ABERTO" title="Ver as contas a pagar geradas por esta despesa">Ver contas</a>
+          <a class="btn" href="?edit=<?= (int)$rule['id'] ?>">Editar</a>
+          <?php if ($ruleActive): ?>
+            <form method="post"><input type="hidden" name="action" value="replenish"><input type="hidden" name="id" value="<?= (int)$rule['id'] ?>"><button class="btn" type="submit" title="Recompor as provisões desta despesa">Recompor</button></form>
+            <form method="post" onsubmit="return confirm('Inativar esta despesa fixa? As contas já geradas serão mantidas.')"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$rule['id'] ?>"><input type="hidden" name="active" value="0"><button class="btn btn-danger" type="submit">Inativar</button></form>
+          <?php else: ?>
+            <form method="post"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$rule['id'] ?>"><input type="hidden" name="active" value="1"><button class="btn btn-primary" type="submit">Reativar</button></form>
+          <?php endif; ?>
+        </td>
+      </tr>
     <?php endforeach; ?>
-  </div>
+    </tbody>
+  </table>
+  <?php endif; ?>
 </div>
 
 <style>
-.fixed-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:9px}.finance-filter-card{padding-top:9px!important;padding-bottom:9px!important}.fixed-filter{display:grid;grid-template-columns:minmax(180px,340px) minmax(160px,190px) minmax(150px,190px) auto;gap:7px 10px;align-items:end}.fixed-filter label{display:block;font-size:12px;font-weight:850;color:#475569;margin-bottom:3px}.fixed-filter input,.fixed-filter select{min-height:39px;height:39px}.fixed-filter select{width:100%;min-width:0;box-sizing:border-box;padding-right:36px;text-overflow:clip;white-space:nowrap;overflow:visible;background-position:right 10px center}.fixed-filter select[name="due_day"],.fixed-filter select[name="status"]{min-width:100%}.fixed-filter-actions{display:flex;gap:7px}.fixed-filter-actions .btn{min-height:39px;height:39px}.fixed-list{display:grid;gap:8px}.fixed-card{border:1px solid #dbe4f0;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 22px rgba(15,23,42,.04)}.fixed-card.inactive{opacity:.72}.fixed-card-main{display:grid;grid-template-columns:minmax(220px,1.35fr) minmax(120px,.7fr) minmax(130px,.75fr) minmax(145px,.85fr) minmax(160px,1fr) minmax(210px,1.25fr);gap:10px;align-items:center;padding:11px 12px}.fixed-card-main>div{min-width:0}.fixed-card-main span{display:block;font-size:10px;font-weight:900;text-transform:uppercase;color:#64748b;margin-bottom:4px}.fixed-card-main strong{display:block;color:#0f172a;overflow:hidden;text-overflow:ellipsis}.fixed-card-main small{display:block;color:#64748b;margin-top:4px}.fixed-title span{display:inline-flex;padding:4px 8px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0}.inactive .fixed-title span{background:#f8fafc;color:#64748b;border-color:#e2e8f0}.fixed-title h3{margin:6px 0 3px;color:#0b1f5b;font-size:17px}.fixed-title p{margin:0;color:#64748b;font-size:12px}.fixed-card-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;background:#f8fbff;border-top:1px solid #e5eaf2}.fixed-card-actions>span{font-size:11px;color:#64748b;font-weight:800}.fixed-card-actions>div{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.fixed-card-actions form{margin:0}.fixed-card-actions .btn{min-height:34px;height:34px;padding:0 11px;border-radius:10px;font-size:12px}.fixed-months{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.fixed-months label{display:flex!important;align-items:center;gap:7px;padding:9px;border:1px solid #dbe4f0;border-radius:12px;background:#f8fbff;margin:0!important}.fixed-months input{width:auto}.fixed-info{padding:12px 14px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;color:#1e3a8a;font-size:13px;line-height:1.5}
+.fixed-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:9px}.fixed-kpis .finance-kpi{padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}.fixed-kpis .finance-kpi small{margin:0;font-size:12px}.fixed-kpis .finance-kpi strong{margin:0;font-size:clamp(17px,1.7vw,21px)}.finance-filter-card{padding-top:9px!important;padding-bottom:9px!important}.fixed-filter{display:grid;grid-template-columns:minmax(180px,340px) minmax(160px,190px) minmax(150px,190px) auto;gap:7px 10px;align-items:end}.fixed-filter label{display:block;font-size:12px;font-weight:850;color:#475569;margin-bottom:3px}.fixed-filter input,.fixed-filter select{min-height:39px;height:39px}.fixed-filter select{width:100%;min-width:0;box-sizing:border-box;padding-right:36px;text-overflow:clip;white-space:nowrap;overflow:visible;background-position:right 10px center}.fixed-filter select[name="due_day"],.fixed-filter select[name="status"]{min-width:100%}.fixed-filter-actions{display:flex;gap:7px}.fixed-filter-actions .btn{min-height:39px;height:39px}.fixed-list{display:grid;gap:8px}.fixed-card{border:1px solid #dbe4f0;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 22px rgba(15,23,42,.04)}.fixed-card.inactive{opacity:.72}.fixed-card-main{display:grid;grid-template-columns:minmax(220px,1.35fr) minmax(120px,.7fr) minmax(130px,.75fr) minmax(145px,.85fr) minmax(160px,1fr) minmax(210px,1.25fr);gap:10px;align-items:center;padding:11px 12px}.fixed-card-main>div{min-width:0}.fixed-card-main span{display:block;font-size:10px;font-weight:900;text-transform:uppercase;color:#64748b;margin-bottom:4px}.fixed-card-main strong{display:block;color:#0f172a;overflow:hidden;text-overflow:ellipsis}.fixed-card-main small{display:block;color:#64748b;margin-top:4px}.fixed-title span{display:inline-flex;padding:4px 8px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0}.inactive .fixed-title span{background:#f8fafc;color:#64748b;border-color:#e2e8f0}.fixed-title h3{margin:6px 0 3px;color:#0b1f5b;font-size:17px}.fixed-title p{margin:0;color:#64748b;font-size:12px}.fixed-card-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;background:#f8fbff;border-top:1px solid #e5eaf2}.fixed-card-actions>span{font-size:11px;color:#64748b;font-weight:800}.fixed-card-actions>div{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.fixed-card-actions form{margin:0}.fixed-card-actions .btn{min-height:34px;height:34px;padding:0 11px;border-radius:10px;font-size:12px}.fixed-months{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.fixed-months label{display:flex!important;align-items:center;gap:7px;padding:9px;border:1px solid #dbe4f0;border-radius:12px;background:#f8fbff;margin:0!important}.fixed-months input{width:auto}.fixed-info{padding:12px 14px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;color:#1e3a8a;font-size:13px;line-height:1.5}
 @media(max-width:1250px){.fixed-card-main{grid-template-columns:repeat(3,minmax(0,1fr))}.fixed-title,.fixed-account{grid-column:span 2}.fixed-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:820px){.fixed-filter{grid-template-columns:1fr}.fixed-filter-actions{justify-content:flex-end}.fixed-card-main{grid-template-columns:repeat(2,minmax(0,1fr))}.fixed-title,.fixed-account{grid-column:1/-1}.fixed-card-actions{align-items:flex-start;flex-direction:column}.fixed-months{grid-template-columns:repeat(3,minmax(0,1fr))}.fixed-kpis{grid-template-columns:1fr}}
 @media(max-width:520px){.fixed-card-main{grid-template-columns:1fr}.fixed-card-main>div{grid-column:1!important}.fixed-card-actions>div{width:100%}.fixed-card-actions .btn{flex:1}.fixed-months{grid-template-columns:repeat(2,minmax(0,1fr))}}

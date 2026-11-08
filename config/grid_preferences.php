@@ -18,6 +18,20 @@ if (!function_exists('nexa_grid_registry')) {
   }
 }
 
+if (!function_exists('nexa_grid_allowed_columns')) {
+  /** Colunas válidas: whitelist fixa ou, nos grids automáticos (auto_*), nomes simples. */
+  function nexa_grid_allowed_columns(string $grid, array $input = []): ?array {
+    $registry = nexa_grid_registry();
+    if (isset($registry[$grid])) return $registry[$grid];
+    if (!preg_match('/^auto_[a-z0-9_]{1,40}$/', $grid)) return null;
+    $cols = [];
+    foreach (['visible', 'order'] as $part) foreach ((array)($input[$part] ?? []) as $c) if (is_string($c)) $cols[] = $c;
+    foreach (array_keys((array)($input['widths'] ?? [])) as $c) $cols[] = (string)$c;
+    $cols = array_values(array_unique(array_filter($cols, static fn($c) => (bool)preg_match('/^[a-z0-9_]{1,40}$/', $c))));
+    return array_slice($cols, 0, 60);
+  }
+}
+
 if (!function_exists('nexa_grid_user_id')) {
   function nexa_grid_user_id(): int {
     return function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : (int)($_SESSION['user_id'] ?? 0);
@@ -51,14 +65,13 @@ if (!function_exists('nexa_grid_prefs_sanitize')) {
 
 if (!function_exists('nexa_grid_prefs_load')) {
   function nexa_grid_prefs_load(PDO $pdo, int $companyId, string $grid): array {
-    $registry = nexa_grid_registry();
     $userId = nexa_grid_user_id();
-    if ($companyId <= 0 || $userId <= 0 || !isset($registry[$grid])) return [];
+    if ($companyId <= 0 || $userId <= 0 || nexa_grid_allowed_columns($grid) === null) return [];
     try {
       $st = $pdo->prepare('SELECT cfg_json FROM app_config WHERE company_id=? AND cfg_key=? LIMIT 1');
-      $st->execute([$companyId, 'ui_grid_' . $grid . '_user_' . $userId]);
+      $st->execute([$companyId, substr('ui_grid_' . $grid . '_user_' . $userId, 0, 64)]);
       $data = json_decode((string)($st->fetchColumn() ?: ''), true);
-      return is_array($data) ? nexa_grid_prefs_sanitize($data, $registry[$grid]) : [];
+      return is_array($data) ? nexa_grid_prefs_sanitize($data, (array)nexa_grid_allowed_columns($grid, $data)) : [];
     } catch (Throwable $e) {
       return [];
     }
@@ -67,12 +80,12 @@ if (!function_exists('nexa_grid_prefs_load')) {
 
 if (!function_exists('nexa_grid_prefs_save')) {
   function nexa_grid_prefs_save(PDO $pdo, int $companyId, string $grid, array $input): array {
-    $registry = nexa_grid_registry();
     $userId = nexa_grid_user_id();
-    if ($companyId <= 0 || $userId <= 0 || !isset($registry[$grid])) throw new RuntimeException('Grid inválido.');
-    $prefs = nexa_grid_prefs_sanitize($input, $registry[$grid]);
+    $allowed = nexa_grid_allowed_columns($grid, $input);
+    if ($companyId <= 0 || $userId <= 0 || $allowed === null) throw new RuntimeException('Grid inválido.');
+    $prefs = nexa_grid_prefs_sanitize($input, $allowed);
     $st = $pdo->prepare('INSERT INTO app_config (company_id,cfg_key,cfg_json,updated_at) VALUES (?,?,?,NOW()) ON DUPLICATE KEY UPDATE cfg_json=VALUES(cfg_json),updated_at=NOW()');
-    $st->execute([$companyId, 'ui_grid_' . $grid . '_user_' . $userId, json_encode($prefs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+    $st->execute([$companyId, substr('ui_grid_' . $grid . '_user_' . $userId, 0, 64), json_encode($prefs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
     return $prefs;
   }
 }
@@ -92,5 +105,28 @@ if (!function_exists('nexa_grid_icon')) {
       'products' => '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
     ];
     return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ($paths[$name] ?? $paths['view']) . '</svg>';
+  }
+}
+
+if (!function_exists('nexa_grid_assets')) {
+  /** CSS + JS do grid (uma vez por página). Coloque antes da tabela. */
+  function nexa_grid_assets(): string {
+    static $done = false;
+    if ($done) return '';
+    $done = true;
+    return '<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_4">'
+      . '<style id="ntgFirstPaint">.ntg-wrap:not(.is-ready){visibility:hidden}</style>'
+      . '<script>setTimeout(function(){var s=document.getElementById("ntgFirstPaint");if(s&&!document.documentElement.classList.contains("ntg-ready"))s.remove();document.querySelectorAll("table[data-ntg-auto]").forEach(function(t){t.style.visibility="visible";});},4000);</script>'
+      . '<script src="assets/nexa_titles_grid.js?v=20261108_4" defer></script>';
+  }
+}
+
+if (!function_exists('nexa_grid_auto_attrs')) {
+  /** Atributos para transformar uma tabela comum no grid (colunas, ordenação, largura, ícones). */
+  function nexa_grid_auto_attrs(PDO $pdo, string $grid): string {
+    if (!preg_match('/^auto_[a-z0-9_]{1,40}$/', $grid)) return '';
+    $h = static fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+    $prefs = nexa_grid_prefs_load($pdo, (int)(defined('COMPANY_ID') ? COMPANY_ID : 0), $grid);
+    return ' data-ntg-auto="' . $h($grid) . '" data-scope="' . (int)(defined('COMPANY_ID') ? COMPANY_ID : 0) . '" data-save-url="grid_preferencias.php" data-csrf="' . $h(nexa_grid_csrf()) . '" data-prefs="' . $h(json_encode($prefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) . '"';
   }
 }
