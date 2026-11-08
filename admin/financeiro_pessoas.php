@@ -530,7 +530,7 @@ if ($customerCrossContext) {
     echo '<div class="finance-card" style="border-color:#86efac;background:#f0fdf4"><strong style="color:#166534">V7 · Gravação protegida</strong><div class="finance-muted" style="margin-top:5px;color:#166534">Somente cadastros marcados como Cliente podem ser alterados neste contexto. Demais papéis e rotinas financeiras permanecem no fluxo legado.</div></div>';
   }
 } else {
-  finance_page_header('Pessoas', 'Cadastro único para clientes, fornecedores, vendedores, colaboradores, profissionais e transportadoras.', [
+  finance_page_header('Pessoas', '', [
     ['href' => 'financeiro_pessoas.php?new=1', 'label' => '+ Nova Pessoa', 'class' => 'btn btn-primary'],
   ]);
 }

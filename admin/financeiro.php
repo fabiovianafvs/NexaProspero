@@ -83,7 +83,7 @@ $salesDelta = $totalSalesPrevious > 0 ? (($totalSalesCurrent - $totalSalesPrevio
 $salesDeltaClass = $salesDelta > 0 ? 'pos' : ($salesDelta < 0 ? 'neg' : '');
 
 finance_admin_start('Financeiro', 'financeiro');
-finance_page_header('Financeiro', 'Controle contas a receber, contas a pagar, baixas, caixa/banco, plano de contas e resultado financeiro.', [
+finance_page_header('Financeiro', '', [
   ['href' => 'financeiro_contas_receber.php?new=1', 'label' => '+ Receber', 'class' => 'btn btn-primary'],
   ['href' => 'financeiro_contas_pagar.php?new=1', 'label' => '+ Pagar', 'class' => 'btn'],
   ['href' => 'financeiro_movimentos.php?new=1', 'label' => 'Movimento manual', 'class' => 'btn'],

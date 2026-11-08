@@ -180,7 +180,7 @@ function gestao_tabs(string $active, bool $openAuxActive = true): void {
 }
 
 function gestao_page_header(string $title, string $description, array $actions = []): void {
-  echo '<div class="mg-hero"><div><h1>' . gestao_h($title) . '</h1><p>' . gestao_h($description) . '</p></div>';
+  echo '<div class="mg-hero"><div><h1>' . gestao_h($title) . '</h1>' . (trim($description) !== '' ? '<p>' . gestao_h($description) . '</p>' : '') . '</div>';
   if ($actions) { echo '<div class="mg-actions">'; foreach ($actions as $a) echo '<a class="' . gestao_h($a['class'] ?? 'btn') . '" href="' . gestao_h($a['href'] ?? '#') . '">' . gestao_h($a['label'] ?? 'Ação') . '</a>'; echo '</div>'; }
   echo '</div>';
 }

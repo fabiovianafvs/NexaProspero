@@ -235,10 +235,10 @@ try {
 } catch(Throwable $e){$err=$e->getMessage();}
 
 finance_admin_start('Financeiro - Vales','fin_vales');
-finance_tabs('fin_vales'); finance_flash();
+finance_flash();
 if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?><?php if($voucherError !== ''): ?><div class="msg err"><?= finance_h($voucherError) ?></div><?php endif; ?>
 <div class="finance-hero voucher-hero">
-  <div><span class="finance-eyebrow">Crédito do cliente</span><h1>Vales</h1></div>
+  <div><h1>Vales - Crédito de cliente</h1></div>
   <?php if($voucherCanCreate): ?><a class="btn btn-primary" href="financeiro_vales.php?new=1">+ Novo Vale</a><?php endif; ?>
 </div>
 <div class="finance-kpis voucher-kpis">

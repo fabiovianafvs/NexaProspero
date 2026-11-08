@@ -851,7 +851,7 @@ if (!function_exists('receivable_payment_editor')) {
   }
 }
 finance_admin_start('Financeiro - Contas a Receber', 'fin_receber');
-finance_page_header('Contas a Receber', 'Lançamentos de clientes. A baixa gera movimento financeiro de crédito.', [
+finance_page_header('Contas a Receber', '', [
   ['href'=>'financeiro_contas_receber.php?new=1','label'=>'+ Novo recebimento','class'=>'btn btn-primary'],
 ]);
 // V11.51.4: Contas a Receber ganha mais área útil. As abas gerais do Financeiro

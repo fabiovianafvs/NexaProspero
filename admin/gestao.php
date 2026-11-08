@@ -221,16 +221,26 @@ gestao_page_header(
   'Gestão',
   $gestaoSalesCross
     ? 'V11.28 · Vendas Multiempresa: indicadores, pedidos, Pedido PDV, Venda Mobile, PDV Resumido, Formas de Pagamento e Caixa operacional na empresa selecionada; emissão fiscal permanece protegida.'
-    : 'Pedidos manuais, clientes, vendedores, caixa e operações gerenciais.',
+    : '',
   $gestaoHeaderActions
 );
-gestao_tabs('gestao');
 gestao_flash();
 ?>
 <?php if ($gestaoSalesCross): ?>
   <div class="msg ok"><strong>V11.28 · Vendas Multiempresa.</strong> Os indicadores abaixo pertencem a <strong><?= gestao_h($gestaoCompanyName !== '' ? $gestaoCompanyName : ('Empresa #' . $companyId)) ?></strong>. Pedido PDV, Venda Mobile, PDV Resumido, Formas de Pagamento e Caixa operacional trabalham na empresa selecionada. Comandas, Pedido Detalhado e Fiscal permanecem protegidos.</div>
 <?php endif; ?>
-<div class="mg-grid-4">
+<style>
+  /* Painel no padrão do Movimento Financeiro: quadros baixos, ações rápidas numa linha. */
+  .gestao-kpis{gap:10px;margin-bottom:12px}
+  .gestao-kpis .mg-kpi{padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;min-width:0}
+  .gestao-kpis .mg-kpi span{font-size:12px}
+  .gestao-kpis .mg-kpi strong{margin-top:0;font-size:clamp(17px,1.7vw,21px)!important}
+  .gestao-stack{display:grid;gap:14px;margin-bottom:14px}
+  .gestao-quick{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+  .gestao-quick .cash-action{padding:9px 12px;border-radius:14px;font-size:13px}
+  .gestao-quick .cash-key{height:28px;width:38px}
+</style>
+<div class="mg-grid-4 gestao-kpis">
   <div class="mg-kpi"><span>Vendas de hoje</span><strong><?= gestao_money($salesToday) ?></strong></div>
   <div class="mg-kpi"><span>Pedidos hoje</span><strong><?= (int)$ordersToday ?></strong></div>
   <div class="mg-kpi"><span>Vendas do mês</span><strong><?= gestao_money($salesMonth) ?></strong></div>
@@ -241,10 +251,10 @@ gestao_flash();
   <?php endif; ?>
 </div>
 
-<div class="gestao-dashboard-grid">
+<div class="gestao-stack">
   <div class="mg-card">
     <h2>Ações rápidas</h2>
-    <div class="cash-menu">
+    <div class="cash-menu gestao-quick">
       <?php if ($gestaoSalesCross): ?>
         <?php if ($gestaoPdvCrossAllowed): ?><a class="cash-action" href="<?= gestao_h(function_exists('multi_company_context_url') ? multi_company_context_url('gestao_pdv.php') : 'gestao_pdv.php') ?>"><span>Pedido PDV sem fiscal</span><span class="cash-key">F2</span></a><?php endif; ?>
         <?php if ($gestaoMobileCrossAllowed): ?><a class="cash-action" href="<?= gestao_h(function_exists('multi_company_context_url') ? multi_company_context_url('gestao_pdv_mobile.php') : 'gestao_pdv_mobile.php') ?>"><span>Venda Mobile sem fiscal</span><span class="cash-key">M</span></a><?php endif; ?>

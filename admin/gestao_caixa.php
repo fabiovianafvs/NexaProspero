@@ -338,11 +338,7 @@ foreach ($cashCrPayments as $p) {
 $tipoTitulo = ['ABERTURA'=>'Abertura / suprimento', 'SUPRIMENTO'=>'Reforço / suprimento', 'SANGRIA'=>'Sangria / retirada', 'VENDA'=>'Venda PDV', 'ESTORNO'=>'Estorno de venda', 'RECEBIMENTO_CR'=>'Recebimento C/R', 'ESTORNO_CR'=>'Estorno C/R', 'FECHAMENTO'=>'Fechamento'];
 
 gestao_admin_start('Caixa', 'gestao_caixa');
-gestao_page_header('Caixa', 'Abertura, reforço, sangria, resumo financeiro e fechamento do caixa do operador.', [
-  ['label'=>'Pedido PDV', 'href'=>$cashUrl('gestao_pdv.php'), 'class'=>'btn btn-primary'],
-  ['label'=>'Formas de pagamento', 'href'=>$cashUrl('gestao_formas_pagamento.php'), 'class'=>'btn'],
-]);
-gestao_tabs('gestao_caixa');
+gestao_page_header('Caixa', '');
 if ($erro) echo '<div class="msg err">' . gestao_h($erro) . '</div>';
 if (!empty($schema['errors'])) {
   $schemaErrors = array_values(array_filter((array)$schema['errors'], static function($m){
@@ -352,9 +348,6 @@ if (!empty($schema['errors'])) {
 }
 gestao_flash();
 ?>
-<?php if (!nexa_cash_user_terminal_enabled($pdo, $companyId, $userId)): ?>
-  <div class="msg" style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><strong>Seu usuário não usa Caixa Terminal.</strong> Você vende, recebe e paga sem precisar abrir o caixa; abrir e fechar aqui é opcional. Para exigir abertura e fechamento de caixa de um usuário, marque "Ativar Caixa Terminal" no cadastro dele em Usuários. Transferências, sangrias e aportes também podem ser lançados em Financeiro &gt; Movimento financeiro.</div>
-<?php endif; ?>
 <?php if ($cashCrossContext): ?>
   <div class="msg ok"><strong>V11.26 · Caixa Multiempresa.</strong> Abertura, suprimento, sangria, fechamento e vendas vinculadas ao caixa pertencem exclusivamente à empresa selecionada pelo F11. A emissão fiscal continua bloqueada nesta etapa.</div>
 <?php endif; ?>
@@ -365,11 +358,23 @@ gestao_flash();
   @media(max-width:680px){.cash-card-soft{border-radius:20px;padding:15px}.cash-summary-head{align-items:flex-start;flex-direction:column}.cash-print-btn{width:100%;text-align:center}.cash-summary-line{font-size:14px}.cash-modal-backdrop{align-items:flex-end;padding:0}.cash-modal-box{border-radius:24px 24px 0 0;max-height:92vh}.cash-donut{width:150px;height:150px}.cash-donut:after{inset:38px}}
 </style>
 
+<style>
+  /* Status do caixa no padrão do Movimento Financeiro: quadros baixos e ações numa linha. */
+  .cash-status-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  .cash-status-kpis .mg-kpi,.cash-status-closed{padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;min-width:0}
+  .cash-status-kpis .mg-kpi span,.cash-status-closed span{font-size:12px}
+  .cash-status-kpis .mg-kpi strong,.cash-status-closed strong{margin-top:0;font-size:clamp(16px,1.5vw,20px)}
+  .cash-status-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .cash-status-actions .cash-action{padding:9px 12px;border-radius:14px}
+  .cash-status-actions .cash-key{height:28px;width:40px}
+  @media(max-width:1100px){.cash-status-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.cash-status-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:680px){.cash-status-kpis,.cash-status-actions{grid-template-columns:1fr}}
+</style>
 <div class="cash-page-grid">
-  <div class="mg-card">
+  <div class="mg-card<?= $cashCrossContext ? '' : ' cash-full' ?>">
     <h2>Status do caixa</h2>
     <?php if ($session): ?>
-      <div class="mg-grid-4" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+      <div class="cash-status-kpis">
         <div class="mg-kpi"><span>Situação</span><strong>Aberto</strong></div>
         <div class="mg-kpi"><span>Saldo previsto</span><strong><?= gestao_money($summary['expected'] ?? 0) ?></strong></div>
         <div class="mg-kpi"><span>Vendas PDV</span><strong><?= gestao_money($summary['sales'] ?? 0) ?></strong></div>
@@ -377,14 +382,14 @@ gestao_flash();
         <div class="mg-kpi red"><span>Estornos</span><strong><?= gestao_money($summary['estorno'] ?? 0) ?></strong></div>
       </div>
       <p class="mg-muted">Aberto em <?= gestao_h(date('d/m/Y H:i', strtotime((string)$session['opened_at']))) ?>.</p>
-      <div class="cash-menu" style="margin-top:12px;">
+      <div class="cash-menu cash-status-actions" style="margin-top:10px;">
         <a class="cash-action cash-action-modal" href="<?= gestao_h($cashUrl('gestao_caixa.php?modal=suprimento')) ?>"><span>Reforço de caixa</span><span class="cash-key">F4</span></a>
         <a class="cash-action cash-action-modal" href="<?= gestao_h($cashUrl('gestao_caixa.php?modal=sangria')) ?>"><span>Sangria / retirada</span><span class="cash-key">F5</span></a>
         <a class="cash-action cash-action-modal" href="<?= gestao_h($cashUrl('gestao_caixa.php?modal=fechar')) ?>"><span>Fechamento do caixa</span><span class="cash-key">F8</span></a>
         <a class="cash-action" href="<?= gestao_h($cashUrl('gestao_pdv.php')) ?>"><span>Nova venda PDV</span><span class="cash-key">F2</span></a>
       </div>
     <?php else: ?>
-      <div class="mg-kpi red"><span>Situação</span><strong>Fechado</strong></div>
+      <div class="mg-kpi red cash-status-closed" style="max-width:260px"><span>Situação</span><strong>Fechado</strong></div>
       <form method="post" class="mg-form-grid" style="margin-top:12px;">
         <input type="hidden" name="action" value="open_cash"><?php if ($cashCrossContext): ?><input type="hidden" name="mc_csrf" value="<?= gestao_h($cashMcCsrf) ?>"><?php endif; ?>
         <label>Caixa/Banco
@@ -400,6 +405,7 @@ gestao_flash();
     <?php endif; ?>
   </div>
 
+  <?php if ($cashCrossContext): ?>
   <div class="mg-card">
     <h2><?= $cashCrossContext ? 'Caixa preferencial da sessão F11' : 'Caixa padrão do usuário' ?></h2>
     <p class="mg-muted"><?= $cashCrossContext ? 'Usado nesta sessão Multiempresa quando a forma de pagamento não define um Caixa/Banco. Não altera o padrão da Empresa 1.' : 'Usado automaticamente no PDV e nas formas de pagamento sem banco definido.' ?></p>
@@ -411,6 +417,7 @@ gestao_flash();
       <div class="span-2 mg-form-actions"><button class="btn btn-primary" type="submit">Salvar padrão</button></div>
     </form>
   </div>
+  <?php endif; ?>
 
   <?php if ($session): ?>
   <div class="mg-card">

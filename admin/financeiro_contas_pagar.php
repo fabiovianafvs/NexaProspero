@@ -277,7 +277,7 @@ $canReverseSettlements = $canSettleTitles && (!$financeCrossContext || $financeC
 $fixedProtectedView = $financeCrossContext && $editIsFixedExpense;
 if (!$canSettleTitles) $showSettle = false;
 finance_admin_start('Financeiro - Contas a Pagar', 'fin_pagar');
-finance_page_header('Contas a Pagar', 'Lançamentos de fornecedores. A baixa gera movimento financeiro de débito.', [
+finance_page_header('Contas a Pagar', '', [
   ['href'=>'financeiro_despesas_fixas.php','label'=>'Despesas fixas','class'=>'btn'],
   ['href'=>'financeiro_contas_pagar.php?new=1','label'=>'+ Novo pagamento','class'=>'btn btn-primary'],
 ]);
