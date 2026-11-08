@@ -1655,7 +1655,7 @@ if (!function_exists('gestao_finalize_pdv_order')) {
         voucher_assert_ready($pdo);
         continue;
       }
-      if (!$session && nexa_cash_requires_open_session($pdo, $companyId, $payment)) {
+      if (!$session && nexa_cash_requires_open_session($pdo, $companyId, $payment, $userId)) {
         throw new RuntimeException('Abra o caixa antes de finalizar vendas em ' . (string)$payment['name'] . '.');
       }
       $chartIdLine = (int)($payment['default_chart_account_id'] ?? 0) ?: gestao_default_chart_id($pdo, $companyId, 'CREDITO');

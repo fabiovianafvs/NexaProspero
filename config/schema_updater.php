@@ -21,6 +21,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
   function nexa_schema_updater_registry(): array {
     return [
       [
+        'id' => '20261108_caixa_terminal_usuario_v1',
+        'module' => 'caixa_terminal_usuario',
+        'version' => 20261108001,
+        'label' => 'Caixa - Ativar Caixa Terminal por usuário',
+        'description' => 'Só os usuários marcados com Caixa Terminal abrem e fecham caixa; os demais vendem sem abrir caixa. Padrão: desligado.',
+        'file' => __DIR__ . '/../db/20261108_caixa_terminal_usuario_v1.sql',
+        'sha256' => 'e7fddd1ed2fc40a85e33783dd5eeeae29ca33bdf633042dddfb98032722a550e',
+        'order' => 20261108001,
+      ],
+      [
         'id' => '20261107_indices_grandes_volumes_v1',
         'module' => 'desempenho_indices',
         'version' => 20261107002,

@@ -3,14 +3,18 @@ declare(strict_types=1);
 /** V11.61: Exclusividade de CAIXA físico por empresa/operador; BANCO/PIX/CARTAO não são exclusivos. */
 require_once __DIR__ . '/cash_settings.php';
 if (!function_exists('nexa_cash_operator_conflict')) {
-  function nexa_cash_operator_conflict(PDO $pdo, int $companyId, int $bankId, int $userId): ?array {
+  /** $terminal: informa se o usuário é Caixa Terminal (null = consulta o cadastro). */
+  function nexa_cash_operator_conflict(PDO $pdo, int $companyId, int $bankId, int $userId, ?bool $terminal = null): ?array {
     if ($companyId <= 0 || $bankId <= 0 || $userId === 0) return ['name'=>'Operador inválido'];
     $st=$pdo->prepare("SELECT id,type FROM finance_bank_accounts WHERE company_id=? AND id=? AND active=1 LIMIT 1");
     $st->execute([$companyId,$bankId]); $bank=$st->fetch(PDO::FETCH_ASSOC);
     if (!$bank) return ['name'=>'Caixa/Banco inexistente ou inativo'];
     if (strtoupper((string)$bank['type']) !== 'CAIXA') return null;
-    // "Desabilitar caixa usuário": o mesmo caixa pode ser usado por vários usuários.
-    if (function_exists('nexa_cash_user_control_disabled') && nexa_cash_user_control_disabled($pdo, $companyId)) return null;
+    // Só o usuário com Caixa Terminal tem caixa físico exclusivo; os demais podem
+    // usar o mesmo caixa à vontade.
+    $terminalReady = function_exists('nexa_cash_terminal_ready') && nexa_cash_terminal_ready($pdo);
+    if ($terminal === null) $terminal = function_exists('nexa_cash_user_terminal_enabled') ? nexa_cash_user_terminal_enabled($pdo, $companyId, $userId) : true;
+    if (!$terminal) return null;
     // Uma sessão ativa de outro operador sempre impede reutilização do caixa físico.
     if (!function_exists('finance_table_exists') || finance_table_exists($pdo, 'gestao_cash_sessions')) {
     $st=$pdo->prepare("SELECT s.user_id,COALESCE(u.name,'Outro operador') name FROM gestao_cash_sessions s LEFT JOIN users u ON u.id=s.user_id AND u.company_id=s.company_id WHERE s.company_id=? AND s.bank_account_id=? AND s.status='ABERTO' AND s.user_id<>? ORDER BY s.id DESC LIMIT 1");
@@ -18,7 +22,7 @@ if (!function_exists('nexa_cash_operator_conflict')) {
     if ($other) return $other;
     }
     // A vinculação exclusiva também vale para permissões e caixas padrão (PDV/Comanda/Financeiro).
-    $st=$pdo->prepare("SELECT u.id AS user_id,u.name FROM users u WHERE u.company_id=? AND u.id<>? AND u.is_active=1 AND (u.default_cash_bank_account_id=? OR u.default_pdv_cash_bank_account_id=? OR u.default_comanda_cash_bank_account_id=? OR EXISTS(SELECT 1 FROM user_cash_accounts a WHERE a.company_id=u.company_id AND a.user_id=u.id AND a.bank_account_id=?)) ORDER BY u.id LIMIT 1");
+    $st=$pdo->prepare("SELECT u.id AS user_id,u.name FROM users u WHERE u.company_id=? AND u.id<>? AND u.is_active=1" . ($terminalReady ? " AND u.cash_terminal_enabled=1" : "") . " AND (u.default_cash_bank_account_id=? OR u.default_pdv_cash_bank_account_id=? OR u.default_comanda_cash_bank_account_id=? OR EXISTS(SELECT 1 FROM user_cash_accounts a WHERE a.company_id=u.company_id AND a.user_id=u.id AND a.bank_account_id=?)) ORDER BY u.id LIMIT 1");
     $st->execute([$companyId,$userId,$bankId,$bankId,$bankId,$bankId]);return $st->fetch(PDO::FETCH_ASSOC) ?: null;
   }
 }

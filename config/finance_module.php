@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 // NEXA_PATCH_PLANO_CLASSIFICACAO_V1_20260805
 
+require_once __DIR__ . '/schema_runtime.php';
 require_once __DIR__ . '/access_control.php';
 require_once __DIR__ . '/commercial_rules.php';
 require_once __DIR__ . '/cash_receivables_integration.php';
@@ -94,6 +95,8 @@ if (!function_exists('finance_add_column_if_missing')) {
 if (!function_exists('finance_ensure_schema')) {
   function finance_ensure_schema(PDO $pdo): array {
     $errors = [];
+    // Desempenho: conferência completa no máximo a cada 15 min por empresa (ver schema_runtime.php).
+    if (function_exists('nexa_schema_ensure_recent') && nexa_schema_ensure_recent($pdo, 'finance', __FILE__)) return ['ok' => true, 'errors' => []];
 
     finance_try_exec($pdo, "
       CREATE TABLE IF NOT EXISTS finance_people (
@@ -460,7 +463,9 @@ if (!function_exists('finance_ensure_schema')) {
         && stripos((string)$msg, 'Multiple primary key') === false;
     }));
 
-    return ['ok' => finance_table_exists($pdo, 'finance_people') && finance_table_exists($pdo, 'finance_chart_accounts'), 'errors' => $errors];
+    $financeOk = finance_table_exists($pdo, 'finance_people') && finance_table_exists($pdo, 'finance_chart_accounts');
+    if ($financeOk && !$errors && function_exists('nexa_schema_ensure_done')) nexa_schema_ensure_done($pdo, 'finance', __FILE__);
+    return ['ok' => $financeOk, 'errors' => $errors];
   }
 }
 

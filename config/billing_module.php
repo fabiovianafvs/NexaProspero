@@ -21,6 +21,8 @@ function billing_add_column(PDO $pdo,string $table,string $column,string $defini
 function billing_ensure_schema(PDO $pdo): void {
     // V11.25: o contexto F11 nunca cria/altera schema durante a venda. O banco já deve estar atualizado pelo Atualizador.
     if (!empty($GLOBALS['NEXA_MULTI_COMPANY_NO_RUNTIME_DDL'])) return;
+    // Desempenho: conferência completa no máximo a cada 15 min (ver schema_runtime.php).
+    if (function_exists('nexa_schema_ensure_recent') && nexa_schema_ensure_recent($pdo, 'billing', __FILE__)) return;
     $pdo->exec("CREATE TABLE IF NOT EXISTS finance_bank_billing_configs (
       id INT NOT NULL AUTO_INCREMENT,
       company_id INT NOT NULL,
@@ -169,6 +171,7 @@ function billing_ensure_schema(PDO $pdo): void {
         billing_add_column($pdo,'finance_receivables','boleto_charge_id','BIGINT NULL AFTER contract_generation_id');
     }
     if(billing_table_exists($pdo,'pedidos')) billing_add_column($pdo,'pedidos','payment_method_id','INT NULL');
+    if (function_exists('nexa_schema_ensure_done')) nexa_schema_ensure_done($pdo, 'billing', __FILE__);
 }
 function billing_bank_config(PDO $pdo,int $companyId,int $bankAccountId): array {
     if($bankAccountId<=0) return [];

@@ -3107,6 +3107,8 @@ if (!function_exists('fiscal_nfce_ensure_schema')) {
     // Evita DDL durante transações de geração da NFC-e.
     // CREATE/ALTER TABLE pode dar commit implícito e quebrar o fluxo.
     if ($pdo->inTransaction()) return;
+    // Desempenho: conferência completa no máximo a cada 15 min (ver schema_runtime.php).
+    if (function_exists('nexa_schema_ensure_recent') && nexa_schema_ensure_recent($pdo, 'fiscal_nfce', __FILE__)) return;
     $pdo->exec("CREATE TABLE IF NOT EXISTS fiscal_company_config (
       id INT NOT NULL AUTO_INCREMENT,
       company_id INT NOT NULL,
@@ -3468,6 +3470,7 @@ if (!function_exists('fiscal_nfce_ensure_schema')) {
       KEY idx_fiscal_queue_doc (fiscal_document_id, action)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     if (function_exists('fiscal_inutilization_ensure_schema')) fiscal_inutilization_ensure_schema($pdo);
+    if (function_exists('nexa_schema_ensure_done')) nexa_schema_ensure_done($pdo, 'fiscal_nfce', __FILE__);
   }
 }
 

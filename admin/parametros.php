@@ -456,8 +456,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'item_note_instruction' => $productOptionsItemNoteInstruction,
       ],
       'orders_grid' => [
-        // Piloto por empresa, desligado por padrão.
-        'enabled' => post_bool('orders_grid_enabled'),
+        // Novo grid é o padrão; marcar "Utilizar grid antigo" volta ao layout anterior.
+        'legacy' => post_bool('orders_grid_legacy'),
       ],
       'order_edit' => [
         // V11.52.11: nova visualização avançada do Editar Pedido fica opt-in por empresa.
@@ -643,7 +643,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($erro === '') {
       try {
         config_store_set($pdo, COMPANY_ID, 'business', $over);
-        nexa_cash_settings_save($pdo, COMPANY_ID, ['disable_user_cash' => post_bool('disable_user_cash')]);
         if (function_exists('business_save_delivery_fees_to_db')) {
           business_save_delivery_fees_to_db($pdo, COMPANY_ID, (float)$over['delivery_fees']['default'], (array)$over['delivery_fees']['bairros']);
         }
@@ -969,20 +968,9 @@ admin_topbar('Central - Configurações','params');
       <h4 style="margin:0 0 10px;">Consulta de Pedidos</h4>
       <div class="subcard">
         <label class="checkline" style="align-items:flex-start;gap:10px;margin:0;">
-          <input type="checkbox" name="orders_grid_enabled" value="1" <?= !empty($biz['orders_grid']['enabled']) ? 'checked' : '' ?>>
-          <span><strong>Habilita novo grid na Consulta de Pedidos</strong><br><small class="hint">Ações em ícones na mesma linha, coluna fixa, impressões e fiscal em menus, status em modal e colunas personalizáveis por usuário. Desabilitado preserva o layout atual. A configuração é exclusiva desta empresa.</small></span>
+          <input type="checkbox" name="orders_grid_legacy" value="1" <?= !empty($biz['orders_grid']['legacy']) ? 'checked' : '' ?>>
+          <span><strong>Utilizar grid antigo na Consulta de Pedidos</strong><br><small class="hint">Por padrão a Consulta de Pedidos abre direto no novo grid. Marque para voltar ao layout anterior (botões abaixo de cada pedido). Sobre o novo grid: Ações em ícones na mesma linha, coluna fixa, impressões e fiscal em menus, status em modal e colunas personalizáveis por usuário. Desabilitado preserva o layout atual. A configuração é exclusiva desta empresa.</small></span>
         </label>
-      </div>
-    </div>
-
-    <div style="margin-top:18px;" id="caixa-usuario">
-      <h4 style="margin:0 0 10px;">Caixa</h4>
-      <div class="subcard">
-        <label class="checkline" style="align-items:flex-start;gap:10px;margin:0;">
-          <input type="checkbox" name="disable_user_cash" value="1" <?= nexa_cash_user_control_disabled($pdo, COMPANY_ID) ? 'checked' : '' ?>>
-          <span><strong>Desabilitar caixa usuário</strong><br><small class="hint">O mesmo caixa pode ser usado por mais de um usuário, e vendas, recebimentos, pagamentos de contas e movimentações financeiras são feitos sem abrir o caixa. Os lançamentos vão normalmente para o Movimento Financeiro, na conta escolhida. Desmarcado mantém o controle atual: um caixa por usuário e abertura obrigatória nas formas de pagamento que exigem caixa.</small></span>
-        </label>
-        <div class="hint" style="margin-top:8px;">Planos de contas padrão de transferência, sangria e aporte: <a href="configuracoes_caixa.php">Configurações de caixa</a>.</div>
       </div>
     </div>
 

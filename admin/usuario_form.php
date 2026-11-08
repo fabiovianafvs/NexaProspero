@@ -73,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $active = !empty($_POST['is_active']) ? 1 : 0;
     $allowOsMobile = !empty($_POST['allow_os_mobile']) ? 1 : 0;
     $showContractNotice = !empty($_POST['show_contract_due_notice']) ? 1 : 0;
+    $cashTerminal = !empty($_POST['cash_terminal_enabled']) ? 1 : 0;
     $defaultFinance = (int)($_POST['default_cash_bank_account_id'] ?? 0) ?: null;
     $defaultPdv = (int)($_POST['default_pdv_cash_bank_account_id'] ?? 0) ?: null;
     $defaultComanda = (int)($_POST['default_comanda_cash_bank_account_id'] ?? 0) ?: null;
@@ -114,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // V11.61: caixas físicos são exclusivos; contas bancárias permanecem compartilháveis.
     // Validar no POST, não apenas desabilitar opções no HTML.
     foreach ($allowedCashIds as $cashId) {
-      $conflict = nexa_cash_operator_conflict($pdo, $cid, (int)$cashId, $id > 0 ? $id : -1);
+      $conflict = nexa_cash_operator_conflict($pdo, $cid, (int)$cashId, $id > 0 ? $id : -1, $cashTerminal === 1 || !acluf_col($pdo, 'users', 'cash_terminal_enabled'));
       if ($conflict) throw new RuntimeException('Caixa físico em uso/vinculado a outro usuário: ' . (string)$conflict['name'] . '. Revise os caixas permitidos e os padrões.');
     }
     if ($name === '') throw new RuntimeException('Informe o nome do usuário.');
@@ -144,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $userAccessCols = [];
     if (acluf_col($pdo, 'users', 'allow_os_mobile')) $userAccessCols['allow_os_mobile'] = $allowOsMobile;
     if (acluf_col($pdo, 'users', 'show_contract_due_notice')) $userAccessCols['show_contract_due_notice'] = $showContractNotice;
+    if (acluf_col($pdo, 'users', 'cash_terminal_enabled')) $userAccessCols['cash_terminal_enabled'] = $cashTerminal;
 
     if ($id > 0) {
       $chk = $pdo->prepare("SELECT id,role FROM users WHERE company_id = ? AND id = ? AND role IN ('company_admin','company_user') LIMIT 1");
@@ -222,6 +224,8 @@ admin_topbar(($id > 0 ? 'Editar usuário' : 'Novo usuário'), 'usuarios');
 
   <div class="acluf-card">
     <h2>Caixas e contas permitidas</h2>
+    <?php $cashTerminalReady = acluf_col($pdo, 'users', 'cash_terminal_enabled'); ?>
+    <label class="acluf-check" style="margin-bottom:12px"><input type="checkbox" name="cash_terminal_enabled" value="1" <?= !empty($form['cash_terminal_enabled'])?'checked':'' ?> <?= $cashTerminalReady?'':'disabled' ?>><span><b>Ativar Caixa Terminal</b><br><span class="acluf-muted">Marcado: este usuário abre e fecha caixa, precisa do caixa aberto para vender nas formas de pagamento que exigem caixa, e o caixa físico dele fica exclusivo. Desmarcado (padrão): vende, recebe e paga sem abrir caixa; os lançamentos vão para o Movimento Financeiro normalmente.<?= $cashTerminalReady ? '' : ' Para usar, aplique "Caixa - Ativar Caixa Terminal por usuário" no Atualizador do Banco.' ?></span></span></label>
     <div class="acluf-form-grid">
       <div><label>Caixa padrão financeiro<select name="default_cash_bank_account_id"><option value="">Selecione</option><?php foreach($banks as $b): ?><option value="<?= (int)$b['id'] ?>" <?= ((int)($form['default_cash_bank_account_id'] ?? 0)===(int)$b['id'])?'selected':'' ?> <?= nexa_cash_operator_conflict($pdo,$cid,(int)$b['id'],$id>0?$id:-1)?'disabled':'' ?>><?= acluf_h($b['name']) ?></option><?php endforeach; ?></select></label></div>
       <div><label>Caixa padrão PDV<select name="default_pdv_cash_bank_account_id"><option value="">Usar padrão financeiro</option><?php foreach($banks as $b): ?><option value="<?= (int)$b['id'] ?>" <?= ((int)($form['default_pdv_cash_bank_account_id'] ?? 0)===(int)$b['id'])?'selected':'' ?> <?= nexa_cash_operator_conflict($pdo,$cid,(int)$b['id'],$id>0?$id:-1)?'disabled':'' ?>><?= acluf_h($b['name']) ?></option><?php endforeach; ?></select></label></div>

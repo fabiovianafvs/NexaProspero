@@ -506,7 +506,7 @@ if (!function_exists('os_billing_finalize_order')) {
         $session = gestao_open_cash_session($pdo,$companyId,$userId);
         foreach ($payments as $line) {
             $payment=$line['payment'];
-            if (!$session && nexa_cash_requires_open_session($pdo,$companyId,$payment)) throw new RuntimeException('Abra o caixa antes de faturar a O.S. em '.(string)$payment['name'].'.');
+            if (!$session && nexa_cash_requires_open_session($pdo,$companyId,$payment,(int)$userId)) throw new RuntimeException('Abra o caixa antes de faturar a O.S. em '.(string)$payment['name'].'.');
             $chartIdLine=(int)($payment['default_chart_account_id'] ?? 0) ?: gestao_default_chart_id($pdo,$companyId,'CREDITO');
             if ($chartIdLine<=0) throw new RuntimeException('Configure o plano de contas da forma de pagamento: '.(string)$payment['name']);
         }

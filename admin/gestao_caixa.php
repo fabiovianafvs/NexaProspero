@@ -352,8 +352,8 @@ if (!empty($schema['errors'])) {
 }
 gestao_flash();
 ?>
-<?php if (nexa_cash_user_control_disabled($pdo, $companyId)): ?>
-  <div class="msg" style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><strong>Caixa por usuário desabilitado.</strong> Nesta empresa, vendas, baixas e pagamentos não exigem caixa aberto e o mesmo caixa pode ser usado por vários usuários. Abrir e fechar o caixa continua opcional. Transferências, sangrias e aportes também podem ser lançados em Financeiro &gt; Movimento financeiro.</div>
+<?php if (!nexa_cash_user_terminal_enabled($pdo, $companyId, $userId)): ?>
+  <div class="msg" style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><strong>Seu usuário não usa Caixa Terminal.</strong> Você vende, recebe e paga sem precisar abrir o caixa; abrir e fechar aqui é opcional. Para exigir abertura e fechamento de caixa de um usuário, marque "Ativar Caixa Terminal" no cadastro dele em Usuários. Transferências, sangrias e aportes também podem ser lançados em Financeiro &gt; Movimento financeiro.</div>
 <?php endif; ?>
 <?php if ($cashCrossContext): ?>
   <div class="msg ok"><strong>V11.26 · Caixa Multiempresa.</strong> Abertura, suprimento, sangria, fechamento e vendas vinculadas ao caixa pertencem exclusivamente à empresa selecionada pelo F11. A emissão fiscal continua bloqueada nesta etapa.</div>

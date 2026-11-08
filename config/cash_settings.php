@@ -4,10 +4,13 @@ declare(strict_types=1);
 /**
  * Configurações de caixa por empresa (app_config, chave "cash_settings").
  *
- * - disable_user_cash: "Desabilitar caixa usuário". Quando ligado, o mesmo
- *   Caixa pode ser usado por vários usuários e vendas, baixas, pagamentos e
- *   lançamentos não exigem abertura de caixa. Os lançamentos continuam indo
- *   normalmente para o Movimento Financeiro, na conta escolhida.
+ * - Controle de caixa POR USUÁRIO: "Ativar Caixa Terminal" no cadastro do
+ *   usuário (users.cash_terminal_enabled). Só quem tem Caixa Terminal abre e
+ *   fecha caixa, precisa do caixa aberto nas formas de pagamento que exigem
+ *   caixa e tem o caixa físico exclusivo. Os demais (padrão) vendem e lançam
+ *   sem abrir caixa; os lançamentos vão normalmente para o Movimento Financeiro.
+ * - disable_user_cash: configuração antiga por empresa, usada só enquanto a
+ *   migração 20261108_caixa_terminal_usuario_v1 não for aplicada.
  * - planos de contas padrão: transferência (saída/entrada), sangria e aporte.
  *
  * Sem DDL: usa a tabela app_config já existente.
@@ -57,15 +60,49 @@ if (!function_exists('nexa_cash_settings_save')) {
 }
 
 if (!function_exists('nexa_cash_user_control_disabled')) {
-  /** true = "Desabilitar caixa usuário" ligado: não exige caixa aberto nem caixa exclusivo. */
+  /** Configuração antiga por empresa ("Desabilitar caixa usuário"); só vale antes da migração. */
   function nexa_cash_user_control_disabled(PDO $pdo, int $companyId): bool {
     return !empty(nexa_cash_settings($pdo, $companyId)['disable_user_cash']);
   }
 }
 
+if (!function_exists('nexa_cash_terminal_ready')) {
+  /** A coluna users.cash_terminal_enabled existe? (migração aplicada) */
+  function nexa_cash_terminal_ready(PDO $pdo): bool {
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'cash_terminal_enabled'");
+      return $ready = ((int)$st->fetchColumn() > 0);
+    } catch (Throwable $e) {
+      return $ready = false;
+    }
+  }
+}
+
+if (!function_exists('nexa_cash_user_terminal_enabled')) {
+  /**
+   * O usuário trabalha com Caixa Terminal (abre/fecha caixa)?
+   * Antes da migração mantém o comportamento antigo da empresa.
+   */
+  function nexa_cash_user_terminal_enabled(PDO $pdo, int $companyId, int $userId): bool {
+    if (!nexa_cash_terminal_ready($pdo)) return !nexa_cash_user_control_disabled($pdo, $companyId);
+    if ($userId <= 0) return false;
+    static $cache = [];
+    if (isset($cache[$userId])) return $cache[$userId];
+    try {
+      $st = $pdo->prepare('SELECT cash_terminal_enabled FROM users WHERE id = ? LIMIT 1');
+      $st->execute([$userId]);
+      return $cache[$userId] = ((int)$st->fetchColumn() === 1);
+    } catch (Throwable $e) {
+      return $cache[$userId] = false;
+    }
+  }
+}
+
 if (!function_exists('nexa_cash_requires_open_session')) {
-  /** A forma de pagamento exige caixa aberto nesta empresa? */
-  function nexa_cash_requires_open_session(PDO $pdo, int $companyId, array $paymentMethod): bool {
-    return !empty($paymentMethod['require_open_cash']) && !nexa_cash_user_control_disabled($pdo, $companyId);
+  /** A forma de pagamento exige caixa aberto para ESTE usuário? */
+  function nexa_cash_requires_open_session(PDO $pdo, int $companyId, array $paymentMethod, int $userId = 0): bool {
+    return !empty($paymentMethod['require_open_cash']) && nexa_cash_user_terminal_enabled($pdo, $companyId, $userId);
   }
 }

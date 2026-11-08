@@ -21,6 +21,41 @@ if (!function_exists('nexa_schema_versions_ensure')) {
   }
 }
 
+if (!function_exists('nexa_schema_ensure_recent')) {
+  /**
+   * Desempenho: as rotinas antigas "ensure_schema" conferem tabelas e colunas
+   * (CREATE TABLE IF NOT EXISTS + dezenas de SHOW COLUMNS) a cada tela. Depois
+   * de uma conferência completa, ela só é refeita após 15 minutos ou quando o
+   * arquivo do módulo muda (git pull). A marca fica em arquivo temporário por
+   * banco, empresa e versão do arquivo; nada muda no banco.
+   * Retorna true quando a conferência pode ser pulada.
+   */
+  function nexa_schema_ensure_recent(PDO $pdo, string $name, string $sourceFile): bool {
+    $file = nexa_schema_ensure_marker($pdo, $name, $sourceFile);
+    if ($file === '') return false;
+    static $seen = [];
+    if (isset($seen[$file])) return true;
+    $mtime = @filemtime($file);
+    if ($mtime !== false && $mtime > time() - 900) { $seen[$file] = true; return true; }
+    return false;
+  }
+
+  function nexa_schema_ensure_done(PDO $pdo, string $name, string $sourceFile): void {
+    $file = nexa_schema_ensure_marker($pdo, $name, $sourceFile);
+    if ($file !== '') @touch($file);
+  }
+
+  function nexa_schema_ensure_marker(PDO $pdo, string $name, string $sourceFile): string {
+    static $db = null;
+    if ($db === null) {
+      try { $db = (string)$pdo->query('SELECT DATABASE()')->fetchColumn(); } catch (Throwable $e) { $db = ''; }
+    }
+    if ($db === '') return '';
+    $company = defined('COMPANY_ID') ? (int)COMPANY_ID : 0;
+    return rtrim(sys_get_temp_dir(), '/') . '/nexa_schema_ok_' . md5($db . '|' . $name . '|' . $company . '|' . (string)@filemtime($sourceFile));
+  }
+}
+
 if (!function_exists('nexa_schema_version_ready')) {
   function nexa_schema_version_ready(PDO $pdo, string $module, int $requiredVersion): bool {
     if ($module === '' || $requiredVersion <= 0) return false;

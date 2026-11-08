@@ -184,9 +184,9 @@ if (!function_exists('voucher_settle_customer_return')) {
     }
 
     $session = gestao_open_cash_session($pdo,$companyId,(int)$userId);
-    $cashFree = function_exists('nexa_cash_user_control_disabled') && nexa_cash_user_control_disabled($pdo,$companyId);
+    $cashFree = function_exists('nexa_cash_user_terminal_enabled') && !nexa_cash_user_terminal_enabled($pdo,$companyId,(int)$userId);
     if (!$session && !$cashFree) throw new RuntimeException('Abra o caixa antes de devolver o valor em dinheiro.');
-    // Caixa por usuário desabilitado: sai do caixa padrão do usuário, sem sessão.
+    // Usuário sem Caixa Terminal: sai do caixa padrão do usuário, sem sessão.
     $bankId = $session ? (int)($session['bank_account_id'] ?? 0) : gestao_user_default_cash_account($pdo,$companyId,(int)$userId);
     if ($bankId <= 0) throw new RuntimeException('Defina o caixa padrão do usuário para devolver o valor em dinheiro.');
     if ($bankId > 0 && function_exists('gestao_pdv_assert_cash_account')) gestao_pdv_assert_cash_account($pdo,$companyId,$bankId,'Este usuário não possui permissão para usar o caixa da devolução.');

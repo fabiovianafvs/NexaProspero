@@ -35,7 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       throw new RuntimeException('Sessão expirada. Atualize a página e tente novamente.');
     }
     $new = [
-      'disable_user_cash' => !empty($_POST['disable_user_cash']),
       'chart_transfer_out' => (int)($_POST['chart_transfer_out'] ?? 0),
       'chart_transfer_in' => (int)($_POST['chart_transfer_in'] ?? 0),
       'chart_sangria' => (int)($_POST['chart_sangria'] ?? 0),
@@ -55,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $cfg = nexa_cash_settings($pdo, $cid, true);
 
 finance_admin_start('Configurações de caixa', 'configuracoes_caixa');
-finance_page_header('Configurações de caixa', 'Controle do caixa por usuário e planos de contas padrão para transferência, sangria e aporte.');
+finance_page_header('Configurações de caixa', 'Planos de contas padrão para transferência, sangria e aporte.');
 finance_flash();
 if ($err !== '') echo '<div class="msg err">' . finance_h($err) . '</div>';
 if ($cashCfgCross) echo '<div class="msg err">Estas configurações pertencem à empresa de login. Saia do contexto Multiempresa (F11) para alterá-las.</div>';
@@ -66,10 +65,7 @@ if ($cashCfgCross) echo '<div class="msg err">Estas configurações pertencem à
 
 <form method="post" class="finance-form">
   <input type="hidden" name="cash_cfg_csrf" value="<?= finance_h($cashCfgCsrf) ?>">
-  <div class="finance-card">
-    <div class="finance-card-head"><div><h2 class="finance-subtitle">Caixa por usuário</h2><div class="finance-muted">Também disponível em Configurações gerais.</div></div></div>
-    <label class="finance-check"><input type="checkbox" name="disable_user_cash" value="1" <?= !empty($cfg['disable_user_cash']) ? 'checked' : '' ?>><span><strong>Desabilitar caixa usuário</strong><br><small>O mesmo caixa pode ser usado por mais de um usuário, e vendas, recebimentos, pagamentos e movimentações financeiras são feitos sem abrir o caixa. Os lançamentos vão normalmente para o Movimento Financeiro, na conta escolhida. Desmarcado mantém o controle atual: um caixa por usuário e abertura obrigatória nas formas de pagamento que exigem caixa.</small></span></label>
-  </div>
+  <div class="finance-card"><div class="finance-muted">Para exigir abertura e fechamento de caixa de um usuário, marque <b>Ativar Caixa Terminal</b> no cadastro dele em Usuários. Os demais usuários vendem e lançam sem abrir caixa.</div></div>
 
   <div class="finance-card">
     <div class="finance-card-head"><div><h2 class="finance-subtitle">Planos de contas padrão</h2><div class="finance-muted">Já vêm preenchidos nas telas; podem ser trocados em cada lançamento.</div></div></div>

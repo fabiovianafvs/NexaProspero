@@ -20,15 +20,15 @@ $ordersCompanyId = $ordersCrossContext && function_exists('multi_company_operati
 $ordersMcCtx = function_exists('multi_company_context_request_token') ? multi_company_context_request_token() : '';
 $ordersMcCsrf = $ordersCrossContext && function_exists('multi_company_context_csrf_token') ? multi_company_context_csrf_token() : '';
 
-// Novo grid opt-in por empresa (app_config/business), sem DDL na consulta.
-// Falha de leitura = mantém consulta tradicional.
-$ordersNewGrid = false;
+// Novo grid é o padrão; a empresa pode voltar ao antigo em Configurações gerais
+// ("Utilizar grid antigo na Consulta de Pedidos"). Sem DDL na consulta.
+$ordersNewGrid = true;
 try {
   $gridFlagSt = $pdo->prepare("SELECT cfg_json FROM app_config WHERE company_id=? AND cfg_key='business' LIMIT 1");
   $gridFlagSt->execute([$ordersCompanyId]);
   $gridBusiness = json_decode((string)($gridFlagSt->fetchColumn() ?: ''), true);
-  $ordersNewGrid = is_array($gridBusiness) && !empty($gridBusiness['orders_grid']['enabled']);
-} catch (Throwable $ignored) { $ordersNewGrid = false; }
+  $ordersNewGrid = !(is_array($gridBusiness) && !empty($gridBusiness['orders_grid']['legacy']));
+} catch (Throwable $ignored) { $ordersNewGrid = true; }
 
 // Preferências por usuário e empresa, mesmo modelo de persistência do Cadastro de Produtos.
 $ordersGridUserId = function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : (int)($_SESSION['user_id'] ?? 0);
@@ -482,6 +482,15 @@ if ($ordersCrossContext && function_exists('multi_company_context_url')) $report
 ?>
 <?php admin_topbar('Central - Pedidos','pedidos'); ?>
 <?php if ($ordersNewGrid): ?>
+<style id="ordersGridFirstPaint">
+/* Abre direto no novo grid: esconde os botões do layout antigo desde o primeiro
+   desenho da tela (antes o antigo aparecia e só depois virava o novo). */
+.pedidos-grid-v1 .pedidos-action-row{display:none!important}
+</style>
+<script>
+// Segurança: se o novo grid não carregar em 5s, mostra os botões antigos.
+setTimeout(function(){ if(!document.documentElement.classList.contains('orders-grid-ready')){ var s=document.getElementById('ordersGridFirstPaint'); if(s) s.remove(); } }, 5000);
+</script>
 <link rel="stylesheet" href="assets/pedidos_grid_v2.css?v=20261022_1645_status">
 <link rel="stylesheet" href="assets/pedidos_actions_modal_v1.css?v=20261022_1805">
 <?php endif; ?>
