@@ -344,19 +344,9 @@
       progressHasReal = true;
       window.clearInterval(stepTimer); // deixa de usar as mensagens de exemplo
     }
-    const box = ensureOverlay();
+    // Mostra só a etapa atual, trocando a mensagem a cada novo andamento.
     const last = steps[steps.length - 1] || {};
     setProcessingText(String(last.text || ''));
-    const log = box.querySelector('.admin-processing-log');
-    if(log){
-      log.innerHTML = '';
-      steps.slice(0, -1).forEach(function(step){
-        const li = document.createElement('li');
-        li.textContent = String(step.text || '');
-        if(step.state === 'warn') li.className = 'warn';
-        log.appendChild(li);
-      });
-    }
   }
 
   function startProgressPolling(token){
