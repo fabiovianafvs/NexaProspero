@@ -138,6 +138,7 @@ foreach ($daily as $d => $v) {
 }
 $totals = ['rec' => 0.0, 'card' => 0.0, 'pay' => 0.0];
 foreach ($groups as $k => $g) {
+  $k = (string)$k; // ano '2026' vira chave inteira no PHP
   $credits = $g['rec'] + $g['card'];
   $balance += $credits - $g['pay'];
   foreach ($totals as $f => $_) $totals[$f] += $g[$f];
@@ -181,8 +182,8 @@ finance_admin_start('Fluxo de Caixa', 'relatorio_fluxo_caixa');
 ?>
 <style>
 .rfc-filter{display:grid;grid-template-columns:150px 150px 210px 150px auto;gap:10px;align-items:end}
-.rfc-filter label{display:grid;gap:4px;font-size:12px;font-weight:800;color:#334155}
-.rfc-filter .rfc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rfc-filter label{display:grid;gap:4px;margin:0!important;font-size:12px;font-weight:800;color:#334155}
+.rfc-filter .rfc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.rfc-filter .rfc-actions .rfc-check{height:44px}.rfc-filter input:not([type=checkbox]),.rfc-filter select{height:44px!important;min-height:44px!important;box-sizing:border-box;margin:0!important}.rfc-filter .rfc-actions .btn{height:44px!important;min-height:44px!important;display:inline-flex;align-items:center;justify-content:center;margin:0!important;box-sizing:border-box}
 .rfc-filter .rfc-check{display:flex;gap:6px;align-items:center;font-size:12px;font-weight:700;color:#334155}
 .rfc-filter .rfc-check input{width:auto;margin:0}
 .rfc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:10px}
