@@ -53,6 +53,19 @@
 .ntg-table tbody tr.ntg-overdue:hover td{background:#fee2e2}
 .ntg-table tbody tr.ntg-today:hover td{background:#dbeafe}
 .ntg-subline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:2px}
+.ntg-table tbody tr.ntg-debit td{background:#fff5f5}
+.ntg-table tbody tr.ntg-debit td:first-child{box-shadow:inset 4px 0 0 #dc2626}
+.ntg-table tbody tr.ntg-debit td[data-col="valor"],.ntg-table tbody tr.ntg-debit td[data-col="tipo"]{color:#b91c1c;font-weight:900}
+.ntg-table tbody tr.ntg-credit td{background:#eff6ff}
+.ntg-table tbody tr.ntg-credit td:first-child{box-shadow:inset 4px 0 0 #2563eb}
+.ntg-table tbody tr.ntg-credit td[data-col="valor"],.ntg-table tbody tr.ntg-credit td[data-col="tipo"]{color:#1d4ed8;font-weight:900}
+.ntg-table tbody tr.ntg-debit:hover td{background:#fee2e2}
+.ntg-table tbody tr.ntg-credit:hover td{background:#dbeafe}
+.ntg-table tbody tr.ntg-canceled td{background:#f8fafc;color:#94a3b8}
+.ntg-table tbody tr.ntg-canceled td:first-child{box-shadow:inset 4px 0 0 #cbd5e1}
+.ntg-table tbody tr.ntg-canceled td[data-col="valor"]{text-decoration:line-through;color:#94a3b8}
+.ntg-icon.ntg-static{cursor:help;color:#64748b;border-color:#e2e8f0;background:#f8fafc}
+.ntg-legend .lg-debit{background:#fecaca;box-shadow:inset 3px 0 0 #dc2626}.ntg-legend .lg-credit{background:#bfdbfe;box-shadow:inset 3px 0 0 #2563eb}.ntg-legend .lg-canceled{background:#e2e8f0;box-shadow:inset 3px 0 0 #94a3b8}
 .ntg-legend{display:flex;gap:12px;align-items:center;font-size:11px;font-weight:750;color:#64748b;white-space:nowrap}
 .ntg-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 .ntg-legend .lg-overdue{background:#fecaca;box-shadow:inset 3px 0 0 #dc2626}.ntg-legend .lg-today{background:#bfdbfe;box-shadow:inset 3px 0 0 #2563eb}

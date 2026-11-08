@@ -11,8 +11,9 @@ if (!function_exists('nexa_grid_registry')) {
   /** Grids que aceitam preferências e suas colunas válidas (whitelist). */
   function nexa_grid_registry(): array {
     return [
-      'fin_receber' => ['id','cliente','doc','historico','atraso','emissao','vencimento','baixa','situacao','original','aberto','plano'],
-      'fin_pagar' => ['id','fornecedor','doc','historico','emissao','vencimento','baixa','situacao','original','aberto','plano'],
+      'fin_receber' => ['id','cliente','doc','historico','atraso','emissao','vencimento','baixa','situacao','original','baixado','aberto','plano'],
+      'fin_pagar' => ['id','fornecedor','doc','historico','emissao','vencimento','baixa','situacao','original','baixado','aberto','plano'],
+      'fin_movimentos' => ['data','tipo','pessoa','plano','historico','doc','centro','conta','origem','valor'],
     ];
   }
 }
@@ -86,6 +87,8 @@ if (!function_exists('nexa_grid_icon')) {
       'boleto' => '<path d="M3 5v14M6 5v14M9 5v14M12 5v14M15 5v14M18 5v14M21 5v14" stroke-width="1.4"/><path d="M7 5v14M16 5v14" stroke-width="2.4"/>',
       'whatsapp' => '<path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 8.8c.6 3.2 2.6 5.2 5.8 6l1.6-1.4"/>',
       'mail' => '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 6 9 7 9-7"/>',
+      'calendar' => '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 15h6"/>',
+      'ban' => '<circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/>',
       'products' => '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
     ];
     return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ($paths[$name] ?? $paths['view']) . '</svg>';

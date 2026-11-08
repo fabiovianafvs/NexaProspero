@@ -533,7 +533,11 @@ finance_page_header('Movimento Financeiro', 'Livro caixa/bancos. Baixas do receb
 // continuam disponíveis nas demais telas.
 finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
 
-<div class="finance-grid-4">
+<style>
+.fin-mov-kpis{gap:10px!important}.fin-mov-kpis .finance-kpi{padding:8px 14px;border-radius:14px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.fin-mov-kpis .finance-kpi small{margin:0;font-size:12px}.fin-mov-kpis .finance-kpi strong{font-size:clamp(17px,1.7vw,21px)}
+</style>
+<div class="finance-grid-4 fin-mov-kpis">
   <div class="finance-kpi"><small>Saldo inicial</small><strong class="<?= $saldoInicialPeriodo>=0?'pos':'neg' ?>">R$ <?= finance_money_br($saldoInicialPeriodo) ?></strong></div>
   <div class="finance-kpi"><small>Créditos</small><strong class="pos">R$ <?= finance_money_br($creditos) ?></strong></div>
   <div class="finance-kpi"><small>Débitos</small><strong class="neg">R$ <?= finance_money_br($debitos) ?></strong></div>
@@ -550,37 +554,87 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div class="finance-filter-actions"><button class="btn">Filtrar</button><a class="btn" href="<?= finance_h($clearUrl) ?>">Limpar</a></div>
 </form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script></div>
 
-<div class="finance-card"><div class="finance-card-head"><h2 class="finance-subtitle">Movimentos</h2><span class="finance-muted"><?= count($rows) ?> movimento(s)</span></div><div class="table-wrap"><table class="finance-list-table finance-table-movements"><thead><tr><th>Data</th><th>Tipo</th><th>Pessoa</th><th>Plano</th><th>Centro</th><th>Conta/Caixa</th><th>Origem</th><th>Valor</th><th class="finance-actions-th">Ações</th></tr></thead><tbody>
-<?php if(!$rows): ?><tr><td colspan="9" class="finance-empty">Nenhum movimento encontrado.</td></tr><?php endif; ?>
+<?php
+  require_once __DIR__ . '/../config/grid_preferences.php';
+  $movGridPrefs = nexa_grid_prefs_load($pdo, (int)COMPANY_ID, 'fin_movimentos');
+?>
+<link rel="stylesheet" href="assets/nexa_titles_grid.css?v=20261108_3">
+<style id="ntgFirstPaint">.ntg-wrap:not(.is-ready){visibility:hidden}</style>
+<script>setTimeout(function(){var s=document.getElementById('ntgFirstPaint');if(s&&!document.documentElement.classList.contains('ntg-ready'))s.remove();},4000);</script>
+<div class="finance-card">
+  <div class="finance-card-head" style="align-items:center">
+    <div><h2 class="finance-subtitle">Movimentos</h2><div class="ntg-subline"><span class="finance-muted"><?= count($rows) ?> movimento(s)</span><span class="ntg-legend"><span><i class="lg-credit"></i>Crédito</span><span><i class="lg-debit"></i>Débito</span><span><i class="lg-canceled"></i>Cancelado</span></span></div></div>
+    <div class="ntg-toolbar">
+      <details class="ntg-picker"><summary class="btn btn-sm">☷ Colunas</summary><div class="ntg-picker-panel"><strong>Colunas visíveis</strong><div data-ntg-columns="fin_movimentos"></div><button type="button" class="btn ntg-reset" data-ntg-reset="fin_movimentos">Restaurar padrão</button><small>Clique no título para ordenar · arraste ⠿ para mudar de lugar · ajuste a largura pela borda do cabeçalho.</small></div></details>
+      <span class="ntg-pref-state" data-ntg-state="fin_movimentos" role="status" aria-live="polite"></span>
+    </div>
+  </div>
+  <?php if(!$rows): ?><div class="finance-empty">Nenhum movimento encontrado.</div><?php else: ?>
+  <div class="ntg-wrap">
+    <table class="ntg-table" data-ntg="fin_movimentos" data-scope="<?= (int)COMPANY_ID ?>" data-save-url="grid_preferencias.php" data-csrf="<?= finance_h(nexa_grid_csrf()) ?>"
+      data-prefs="<?= finance_h(json_encode($movGridPrefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) ?>"
+      data-defaults='{"data":102,"tipo":76,"pessoa":200,"plano":190,"historico":250,"doc":110,"centro":120,"conta":150,"origem":95,"valor":120}'>
+      <thead><tr>
+        <th data-col="data">Data</th>
+        <th data-col="tipo">Tipo</th>
+        <th data-col="pessoa">Pessoa</th>
+        <th data-col="plano">Plano</th>
+        <th data-col="historico">Histórico</th>
+        <th data-col="doc">Documento</th>
+        <th data-col="centro">Centro</th>
+        <th data-col="conta">Conta/Caixa</th>
+        <th data-col="origem">Origem</th>
+        <th data-col="valor" data-type="num" class="ntg-num">Valor</th>
+        <th class="ntg-actions">Ações</th>
+      </tr></thead>
+      <tbody>
 <?php foreach($rows as $r):
   $cred = (string)$r['type'] === 'CREDITO';
   $status = (string)($r['status'] ?? 'ATIVO');
   if ($status === '') $status = 'ATIVO';
   $canceled = $status === 'CANCELADO';
   $reason = trim((string)($r['canceled_reason'] ?? ''));
+  $movDate = substr((string)($r['movement_date'] ?? ''), 0, 10);
+  $movPlan = trim((string)($r['code'] ?? '') . ' ' . (string)($r['account_name'] ?? ''));
+  $movDesc = (string)($r['description'] ?? '');
+  $originKind = strtoupper(trim((string)($r['origin_type'] ?? '')));
+  $originId = (int)($r['origin_id'] ?? 0);
 ?>
-<tr class="<?= $canceled ? 'finance-row-canceled' : '' ?>">
-  <td data-label="Data"><?= finance_date_br($r['movement_date'] ?? '') ?></td>
-  <td data-label="Tipo"><?= $cred?'<span class="finance-badge green">Crédito</span>':'<span class="finance-badge red">Débito</span>' ?></td>
-  <td data-label="Pessoa"><?= finance_h($r['person_name'] ?? '') ?></td>
-  <td data-label="Plano" class="finance-primary"><span class="code"><?= finance_h($r['code'] ?? '') ?></span> <?= finance_h($r['account_name'] ?? '') ?><br><span class="finance-muted"><?= finance_h($r['description'] ?? '') ?></span><?php if($canceled && $reason !== ''): ?><span class="finance-cancel-reason">Motivo: <?= finance_h($reason) ?></span><?php endif; ?></td>
-  <td data-label="Centro"><?= finance_h($r['cost_name'] ?? '') ?></td>
-  <td data-label="Conta/Caixa"><?= finance_h($r['bank_name'] ?? '') ?></td>
-  <td data-label="Origem"><?= finance_h($r['origin_type'] ?? '') ?></td>
-  <td data-label="Valor" class="finance-value <?= $cred?'pos':'neg' ?>">R$ <?= finance_money_br($r['amount'] ?? 0) ?></td>
-  <td data-label="Ações" class="finance-action-cell"><div class="finance-inline-actions finance-action-line"><?php if($canceled): ?><span class="finance-status CANCELADO">CANCELADO</span><?php else: ?><?php $originKind=strtoupper(trim((string)($r['origin_type']??''))); $originId=(int)($r['origin_id']??0); ?>
-      <?php if($canManualMovement && $originKind==='MANUAL'): ?><a class="btn" href="<?= finance_h($linkWithAction(['edit'=>(int)$r['id']])) ?>">Editar</a>
+<tr class="<?= $canceled ? 'ntg-canceled' : ($cred ? 'ntg-credit' : 'ntg-debit') ?>">
+  <td data-col="data" data-sort="<?= finance_h($movDate) ?>"><?= finance_date_br($r['movement_date'] ?? '') ?></td>
+  <td data-col="tipo"><?= $cred ? 'Crédito' : 'Débito' ?></td>
+  <td data-col="pessoa" title="<?= finance_h($r['person_name'] ?? '') ?>"><?= finance_h($r['person_name'] ?? '') ?: '<span class="ntg-muted">—</span>' ?></td>
+  <td data-col="plano" title="<?= finance_h($movPlan) ?>"><span class="code"><?= finance_h($r['code'] ?? '') ?></span> <?= finance_h($r['account_name'] ?? '') ?></td>
+  <td data-col="historico" title="<?= finance_h($movDesc . ($canceled && $reason !== '' ? ' · Motivo do cancelamento: ' . $reason : '')) ?>"><?= $movDesc !== '' ? finance_h($movDesc) : '<span class="ntg-muted">—</span>' ?><?php if($canceled && $reason !== ''): ?> <span class="ntg-muted">· Motivo: <?= finance_h($reason) ?></span><?php endif; ?></td>
+  <td data-col="doc" title="<?= finance_h($r['document_number'] ?? '') ?>"><?= finance_h($r['document_number'] ?? '') ?: '<span class="ntg-muted">—</span>' ?></td>
+  <td data-col="centro" title="<?= finance_h($r['cost_name'] ?? '') ?>"><?= finance_h($r['cost_name'] ?? '') ?: '<span class="ntg-muted">—</span>' ?></td>
+  <td data-col="conta" title="<?= finance_h($r['bank_name'] ?? '') ?>"><?= finance_h($r['bank_name'] ?? '') ?></td>
+  <td data-col="origem"><?= finance_h($r['origin_type'] ?? '') ?></td>
+  <td data-col="valor" class="ntg-num" data-sort="<?= number_format(($cred ? 1 : -1) * (float)($r['amount'] ?? 0), 2, '.', '') ?>"><?= $cred ? '' : '- ' ?>R$ <?= finance_money_br($r['amount'] ?? 0) ?></td>
+  <td class="ntg-actions"><div class="ntg-icons">
+    <?php if($canceled): ?>
+      <span class="ntg-icon ntg-static" title="Movimento cancelado<?= $reason !== '' ? ' · Motivo: ' . finance_h($reason) : '' ?>" aria-label="Cancelado"><?= nexa_grid_icon('ban') ?></span>
+    <?php else: ?>
+      <?php if($canManualMovement && $originKind==='MANUAL'): ?><a class="ntg-icon" href="<?= finance_h($linkWithAction(['edit'=>(int)$r['id']])) ?>" title="Editar movimento" aria-label="Editar movimento"><?= nexa_grid_icon('edit') ?></a>
       <?php elseif(finance_mov_date_adjustable_origin($originKind)): ?>
-        <?php if($canManualMovement && $financeDateFeatureEnabled): ?><a class="btn btn-primary" href="<?= finance_h($linkWithAction(['adjust_date'=>(int)$r['id']])) ?>" title="Ajustar a data do extrato neste movimento financeiro, sem mudar o título">Ajustar data</a><?php endif; ?>
+        <?php if($canManualMovement && $financeDateFeatureEnabled): ?><a class="ntg-icon" href="<?= finance_h($linkWithAction(['adjust_date'=>(int)$r['id']])) ?>" title="Ajustar a data do extrato neste movimento financeiro, sem mudar o título" aria-label="Ajustar data"><?= nexa_grid_icon('calendar') ?></a><?php endif; ?>
         <?php if($originId>0 && in_array($originKind,['RECEBER','PAGAR'],true)):
           $titlePage=$originKind==='RECEBER'?'financeiro_contas_receber.php':'financeiro_contas_pagar.php';
           $titleUrl=$titlePage.'?edit='.$originId;
           if($financeCrossContext && function_exists('multi_company_context_url'))$titleUrl=multi_company_context_url($titleUrl);
-        ?><a class="btn" href="<?= finance_h($titleUrl) ?>" title="Consultar o título original; não é necessário modificá-lo para ajustar a data no Financeiro">Ver título</a><?php endif; ?>
-      <?php endif; ?><?php if($canCancelMovement): ?><a class="btn btn-danger" href="<?= finance_h($linkWithAction(['cancel' => (int)$r['id']])) ?>">Cancelar</a><?php endif; ?><?php endif; ?></div></td>
+        ?><a class="ntg-icon" href="<?= finance_h($titleUrl) ?>" title="Ver o título original (não é preciso alterá-lo para ajustar a data no Financeiro)" aria-label="Ver título"><?= nexa_grid_icon('view') ?></a><?php endif; ?>
+      <?php endif; ?>
+      <?php if($canCancelMovement): ?><a class="ntg-icon ntg-danger" href="<?= finance_h($linkWithAction(['cancel' => (int)$r['id']])) ?>" title="Cancelar movimento" aria-label="Cancelar movimento"><?= nexa_grid_icon('cancel') ?></a><?php endif; ?>
+    <?php endif; ?>
+  </div></td>
 </tr>
 <?php endforeach; ?>
-</tbody></table></div></div>
+      </tbody>
+    </table>
+  </div>
+  <?php endif; ?>
+</div>
+<script src="assets/nexa_titles_grid.js?v=20261108_3" defer></script>
 
 <?php if($showForm && $canManualMovement): ?>
 <div class="finance-modal" role="dialog" aria-modal="true"><div class="finance-modal-dialog finance-modal-wide"><div class="finance-modal-head"><div><h2><?= $editId ? 'Editar movimento #' . (int)$editId : 'Novo movimento manual' ?></h2><p class="finance-muted"><?= $editId ? 'Altere os dados do movimento financeiro. A origem do lançamento é preservada.' : 'Use para ajustes, entradas manuais, saídas manuais, tarifas, sangrias e transferências simples.' ?></p></div><a class="finance-modal-close" href="<?= finance_h($listUrl) ?>">×</a></div><form method="post" class="finance-form nexa-movement-manual-form"><input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>"><?php if($financeCrossMovementScope): ?><input type="hidden" name="mc_csrf" value="<?= finance_h($financeMcCsrf) ?>"><?php if($financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?><?php endif; ?><div class="finance-form-section"><h3>Dados do movimento</h3><div class="finance-form-grid nexa-movement-manual-grid">

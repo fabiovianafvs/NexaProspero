@@ -47,6 +47,7 @@
     // Largura da coluna de ações = maior quantidade de ícones de uma linha.
     let maxIcons = 1;
     tbody.querySelectorAll('.ntg-icons').forEach(box => { maxIcons = Math.max(maxIcons, box.querySelectorAll('.ntg-icon').length); });
+    if (table.dataset.minIcons) maxIcons = Math.max(maxIcons, Number(table.dataset.minIcons) || 1);
     const actionsWidth = Math.max(52, maxIcons * 34 + 10);
     table.querySelectorAll('.ntg-actions').forEach(el => setW(el, actionsWidth));
 
@@ -60,7 +61,7 @@
       });
     }
     function applyWidths() {
-      let sum = 34 + actionsWidth;
+      let sum = (table.tHead.querySelector('.ntg-sel') ? 34 : 0) + actionsWidth;
       for (const col of movable) {
         const px = width(col);
         if (visible.includes(col)) sum += px;
