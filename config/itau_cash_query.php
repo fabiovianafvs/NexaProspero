@@ -294,3 +294,41 @@ if (!function_exists('itau_cash_query_charge_protected')) {
         ];
     }
 }
+
+if (!function_exists('itau_cash_query_situation_readonly')) {
+    /**
+     * Consulta a situação do título no Itaú SEM alterar nada no Nexa (usada para
+     * conferir uma baixa feita direto no banco). Retorna checked=false quando a
+     * consulta não é possível (sem escopo Cash Management, sem Nosso Número etc.).
+     */
+    function itau_cash_query_situation_readonly(PDO $pdo, int $companyId, array $charge): array {
+        try {
+            $nosso = trim((string)($charge['nosso_numero'] ?? ''));
+            if ($nosso === '') return ['checked'=>false,'error'=>'Cobrança sem Nosso Número.'];
+            $cfg = billing_bank_config($pdo, $companyId, (int)($charge['bank_account_id'] ?? 0));
+            if (!$cfg) return ['checked'=>false,'error'=>'Configuração bancária não encontrada.'];
+            $beneficiary = itau_cash_query_digits((string)($cfg['itau_beneficiary_id'] ?? ''));
+            $wallet = itau_cash_query_digits((string)($cfg['carteira'] ?? ''));
+            if ($beneficiary === '' || $wallet === '') return ['checked'=>false,'error'=>'Beneficiário/carteira Itaú não configurados.'];
+            $authCfg = itau_cash_query_auth_config($cfg);
+            $check = itau_boleto_validate_config($authCfg, true);
+            if (empty($check['ok']) || empty($check['ready_for_token'])) return ['checked'=>false,'error'=>'Credencial de consulta Itaú incompleta.'];
+            $corr = itau_boleto_uuid();
+            $url = itau_cash_query_endpoint($authCfg) . '?' . http_build_query([
+                'id_beneficiario' => $beneficiary,
+                'codigo_carteira' => str_pad($wallet, 3, '0', STR_PAD_LEFT),
+                'nosso_numero' => str_pad(itau_cash_query_digits($nosso), 8, '0', STR_PAD_LEFT),
+                'view' => 'specific', 'page_size' => 20, 'page' => 0,
+            ], '', '&', PHP_QUERY_RFC3986);
+            $token = itau_boleto_get_token($authCfg);
+            $resp = itau_boleto_http($authCfg, 'GET', $url, itau_boleto_api_headers($authCfg, (string)$token['access_token'], $corr), null);
+            $http = (int)($resp['status'] ?? 0);
+            if ($http < 200 || $http >= 300) return ['checked'=>false,'error'=>'Consulta Itaú indisponível (HTTP '.$http.').'];
+            $data = itau_cash_query_extract($resp, $nosso);
+            if (empty($data['found'])) return ['checked'=>false,'error'=>'Título não localizado na consulta Itaú.'];
+            return ['checked'=>true,'situation'=>trim((string)($data['situacao_geral'] ?? ''))];
+        } catch (Throwable $e) {
+            return ['checked'=>false,'error'=>$e->getMessage()];
+        }
+    }
+}

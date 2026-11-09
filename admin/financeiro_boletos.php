@@ -243,6 +243,12 @@ try{
       if(!empty($r['found'])) $msg='Consulta Itaú concluída: '.$msg;
       else $msg='Consulta Itaú concluída sem confirmação de registro: '.$msg;
       $technical=(string)($r['response']['body']??'');
+    }elseif($action==='confirm_bank_writeoff'){
+      if($billingCrossContext) throw new RuntimeException('Use esta ação na própria empresa (fora do F11).');
+      if(!finance_effective_permission_allowed($pdo,'financeiro_receber')) throw new RuntimeException('Usuário sem permissão para Contas a Receber.');
+      if(strtoupper(trim((string)($_POST['confirm_writeoff']??'')))!=='BAIXADO') throw new RuntimeException('Digite BAIXADO para confirmar que o boleto foi baixado no banco sem pagamento.');
+      $r=billing_confirm_bank_writeoff($pdo,$cid,$chargeId,(int)(auth_user_id()??0),trim((string)($_POST['writeoff_reason']??'')));
+      $msg=(string)($r['message']??'Boleto marcado como baixado no banco.');
     }elseif($action==='cancel_local'){
       if($billingCrossContext){
         if(!$billingCrossCancelEnabled) throw new RuntimeException('V11.21: seu perfil não possui permissão para cancelar esta cobrança na empresa selecionada pelo F11.');
@@ -394,6 +400,17 @@ if($msg!==''):?><div class="msg ok"><?=finance_h($msg)?></div><?php endif;if($er
   <?php endif;?>
   <?php if(in_array($rStatus,billing_charge_local_cancel_statuses(),true)&&!billing_charge_has_bank_identity($r)):?><form method="post" onsubmit="return confirm('Cancelar esta cobrança antes do registro bancário? A Conta a Receber vinculada também será cancelada.')"><input type="hidden" name="action" value="cancel_local"><input type="hidden" name="charge_id" value="<?=(int)$r['id']?>"><button class="btn btn-danger">Cancelar</button></form><?php endif;?>
   <?php if($isItau&&($r['nosso_numero']||$r['response_payload']||$r['simulation_response_payload'])):?><a class="btn" href="financeiro_boleto_itau.php?id=<?=(int)$r['id']?>">Dados Itaú</a><?php endif;?>
+  <?php if(billing_charge_has_bank_identity($r)&&in_array($rStatus,['REGISTRADO','VERIFICAR_API','ERRO'],true)&&finance_effective_permission_allowed($pdo,'financeiro_receber')):?>
+    <details style="width:100%"><summary class="btn" style="display:inline-flex;cursor:pointer">Baixado no banco</summary>
+      <form method="post" style="display:grid;gap:6px;margin-top:6px;max-width:360px" onsubmit="return confirm('Confirma que este boleto foi BAIXADO/CANCELADO no banco e NÃO foi pago?')">
+        <input type="hidden" name="action" value="confirm_bank_writeoff"><input type="hidden" name="charge_id" value="<?=(int)$r['id']?>">
+        <div class="finance-muted" style="font-size:12px">Use quando você já baixou (cancelou) este boleto direto no banco, sem pagamento. <?=$isItau?'O sistema confere a situação no Itaú antes.':''?> Depois disso o pedido pode ser cancelado ou um novo boleto pode ser emitido.</div>
+        <input name="writeoff_reason" maxlength="200" placeholder="Motivo (ex.: emitido com valor errado)">
+        <input name="confirm_writeoff" required autocomplete="off" pattern="[Bb][Aa][Ii][Xx][Aa][Dd][Oo]" placeholder="Digite BAIXADO">
+        <button class="btn btn-danger">Confirmar baixa no banco</button>
+      </form>
+    </details>
+  <?php endif;?>
   <?php if((int)$r['contract_id']>0):?><a class="btn" href="contrato_editar.php?id=<?=(int)$r['contract_id']?>&tab=historico">Contrato</a><?php endif;?>
   <?php if((int)$r['order_id']>0):?><a class="btn" href="pedido.php?id=<?=(int)$r['order_id']?>">Pedido</a><?php endif;?>
   <?php if((int)$r['receivable_id']>0):?><a class="btn" href="financeiro_contas_receber.php?edit=<?=(int)$r['receivable_id']?>&tab=cobranca">Receber</a><?php endif;?>

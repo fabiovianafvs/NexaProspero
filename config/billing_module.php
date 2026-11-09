@@ -393,7 +393,7 @@ function billing_charge_local_cancel_message(array $charge): string {
     $status = strtoupper(trim((string)($charge['status'] ?? '')));
     if ($status === 'PAGO') return 'Este boleto já está pago e não pode ser cancelado pela rotina local.';
     if ($status === 'REGISTRADO' || billing_charge_has_bank_identity($charge)) {
-        return 'Este boleto já foi registrado no banco. O cancelamento local foi bloqueado para não deixar um boleto ativo no Itaú enquanto a venda fica cancelada no Nexa. A especificação BoleCode v1.0.7 fornecida contém somente a emissão POST /boletos-pix e não publica a rota de baixa/cancelamento do título já registrado.';
+        return 'Este boleto já foi registrado no banco. Se ele já foi baixado/cancelado no banco sem pagamento, abra Financeiro > Boletos e use "Baixado no banco" nesse boleto; depois o pedido pode ser cancelado normalmente.';
     }
     if (in_array($status, ['ENVIANDO_API','PROCESSANDO_API','VERIFICAR_API'], true)) {
         return 'Esta cobrança possui envio bancário em andamento ou situação incerta. Consulte o Itaú antes de cancelar para evitar duplicidade ou título ativo no banco.';
@@ -536,3 +536,59 @@ function billing_cancel_receivable_with_pending_charge(PDO $pdo,int $companyId,i
     return ['ok'=>true,'charge_id'=>(int)($charge['id']??0),'receivable_id'=>$receivableId];
 }
 
+/**
+ * Boleto baixado (cancelado) direto no banco, sem pagamento: registra no Nexa
+ * para liberar o cancelamento do pedido ou a emissão de um novo boleto.
+ * Itaú: confere a situação no banco antes (bloqueia se estiver pago ou ainda
+ * em aberto). Quando a consulta não é possível, vale a confirmação do usuário.
+ */
+if (!function_exists('billing_confirm_bank_writeoff')) {
+    function billing_confirm_bank_writeoff(PDO $pdo, int $companyId, int $chargeId, int $userId, string $reason = ''): array {
+        billing_ensure_schema($pdo);
+        $st = $pdo->prepare('SELECT * FROM finance_boleto_charges WHERE company_id=? AND id=? LIMIT 1');
+        $st->execute([$companyId, $chargeId]);
+        $charge = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (!$charge) throw new RuntimeException('Cobrança não encontrada.');
+        $status = strtoupper(trim((string)($charge['status'] ?? '')));
+        if ($status === 'CANCELADO') return ['ok'=>true,'already'=>true,'message'=>'Este boleto já está cancelado no Nexa.'];
+        if (in_array($status, ['PAGO','VERIFICAR_PAGAMENTO'], true)) throw new RuntimeException('Este boleto está '.$status.' no Nexa e não pode ser marcado como baixado sem pagamento.');
+        if (in_array($status, ['ENVIANDO_API','PROCESSANDO_API'], true)) throw new RuntimeException('Este boleto ainda está em envio ao banco. Aguarde e consulte antes de marcar a baixa.');
+
+        $receivableId = (int)($charge['receivable_id'] ?? 0);
+        if ($receivableId > 0 && billing_table_exists($pdo, 'finance_receivables')) {
+            $sr = $pdo->prepare('SELECT status, COALESCE(paid_amount,0) paid_amount FROM finance_receivables WHERE company_id=? AND id=? LIMIT 1');
+            $sr->execute([$companyId, $receivableId]);
+            $rec = $sr->fetch(PDO::FETCH_ASSOC) ?: [];
+            if ($rec && ((float)$rec['paid_amount'] > 0.009 || strtoupper((string)$rec['status']) === 'BAIXADO')) {
+                throw new RuntimeException('A Conta a Receber deste boleto já tem pagamento/baixa no Nexa. Confira antes de marcar o boleto como baixado sem pagamento.');
+            }
+        }
+
+        $verification = 'não verificada no banco (confirmação do usuário)';
+        $isItau = strtoupper((string)($charge['provider'] ?? '')) === 'ITAU';
+        if ($isItau) {
+            if (!function_exists('itau_cash_query_situation_readonly')) require_once __DIR__ . '/itau_cash_query.php';
+            $bank = itau_cash_query_situation_readonly($pdo, $companyId, $charge);
+            if (!empty($bank['checked'])) {
+                $situation = (string)($bank['situation'] ?? '');
+                $norm = function_exists('itau_cash_query_normalized_text') ? itau_cash_query_normalized_text($situation) : strtoupper($situation);
+                if (str_contains($norm, 'LIQUID') || preg_match('/\bPAG[OA]S?\b/u', $norm) || str_contains($norm, 'QUITAD')) {
+                    throw new RuntimeException('O Itaú indica que este boleto foi PAGO ("'.$situation.'"). Não marque como baixado; sincronize as liquidações.');
+                }
+                if (!str_contains($norm, 'BAIX') && (str_contains($norm, 'ABERT') || str_contains($norm, 'ATIVO') || str_contains($norm, 'A VENCER') || str_contains($norm, 'VENCID'))) {
+                    throw new RuntimeException('O Itaú ainda mostra este boleto como ativo ("'.$situation.'"). Faça a baixa no banco primeiro e tente novamente.');
+                }
+                $verification = 'conferida no Itaú: "'.$situation.'"';
+            } else {
+                $verification .= ' — consulta Itaú indisponível: '.(string)($bank['error'] ?? '');
+            }
+        }
+
+        $reason = trim($reason);
+        $text = 'Boleto baixado no banco sem pagamento; '.$verification.'.'.($reason !== '' ? ' Motivo: '.$reason : '').' Usuário #'.$userId.'.';
+        if (function_exists('mb_substr')) $text = mb_substr($text, 0, 500, 'UTF-8');
+        $pdo->prepare("UPDATE finance_boleto_charges SET status='CANCELADO',canceled_at=COALESCE(canceled_at,NOW()),cancellation_reason=?,cancellation_source='BAIXA_NO_BANCO',error_message=NULL,updated_at=NOW() WHERE company_id=? AND id=? AND UPPER(COALESCE(status,'')) NOT IN ('PAGO','VERIFICAR_PAGAMENTO','CANCELADO')")
+            ->execute([$text, $companyId, $chargeId]);
+        return ['ok'=>true,'already'=>false,'message'=>'Boleto #'.$chargeId.' marcado como baixado no banco ('.$verification.'). O pedido já pode ser cancelado, ou um novo boleto pode ser emitido.'];
+    }
+}
