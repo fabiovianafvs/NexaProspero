@@ -77,6 +77,7 @@ saas_layout_start('WhatsApp • Central SaaS', 'WhatsApp', 'Configure envio auto
 .wa-repair-box{width:100%;border:1px solid #fecaca;background:#fff7f7;color:#7f1d1d;border-radius:18px;padding:16px;text-align:left;line-height:1.5}.wa-repair-box b{color:#991b1b}.wa-repair-box code{display:block;background:#fff;border:1px solid #fecaca;border-radius:12px;padding:9px 10px;margin-top:10px;color:#7f1d1d;white-space:pre-wrap;word-break:break-word}.wa-instance{display:block;margin-top:7px;color:#0b1f5b;font-weight:800;font-size:12px}.wa-card .wa-actions .btn2{min-width:120px}</style>
 
 <div class="top-actions">
+  <a class="btn2" href="/saas/whatsapp_motor.php">Motor novo (leve)</a>
   <a class="btn2 btn2-ghost" href="/saas/empresas.php">Empresas</a>
   <a class="btn2 btn2-ghost" href="/saas/cobrancas.php">Cobranças</a>
   <a class="btn2 btn2-ghost" href="/saas/dashboard.php">Dashboard</a>

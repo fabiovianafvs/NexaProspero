@@ -1,0 +1,32 @@
+[Unit]
+Description=Nexa Próspero - motor de WhatsApp leve (Baileys)
+After=network-online.target wg-quick@wg-nexawa.service
+Wants=network-online.target
+Requires=wg-quick@wg-nexawa.service
+
+[Service]
+Type=simple
+User=nexawa
+Group=nexawa
+WorkingDirectory=/opt/nexa-wa-engine
+EnvironmentFile=/etc/nexa-wa/engine.env
+ExecStart=/usr/bin/node --max-old-space-size=__HEAP_MB__ /opt/nexa-wa-engine/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+LimitNOFILE=65536
+# Limite de memória: se passar, o serviço é reiniciado sozinho (as sessões voltam).
+MemoryHigh=__MEM_HIGH__M
+MemoryMax=__MEM_MAX__M
+# Segurança: o serviço só escreve na pasta de dados.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/nexa-wa
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

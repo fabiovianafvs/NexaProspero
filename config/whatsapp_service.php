@@ -414,6 +414,10 @@ function whatsapp_register_company_token(array $currentCfg, $companyId, string $
 
   $cfg = $currentCfg;
   $cfg['timeout_seconds'] = max(5, (int)($cfg['timeout_seconds'] ?? 30));
+  // Motor novo (outra VPS): o registro usa o token administrativo do motor.
+  if (!function_exists('whatsapp_engine_admin_token_for_url')) require_once __DIR__ . '/whatsapp_engine.php';
+  $engineToken = whatsapp_engine_admin_token_for_url((string)($cfg['service_url'] ?? ''));
+  if ($engineToken !== '') $cfg['api_token'] = $engineToken;
 
   try {
     return whatsapp_api_request($cfg, 'POST', '/tokens/upsert', [

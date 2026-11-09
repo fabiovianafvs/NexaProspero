@@ -77,7 +77,9 @@ function wa_outbox_cycle(PDO $pdo): ?int {
                 $st->execute([$cid, (string)$r['destino']]);
                 $err = (string)($st->fetchColumn() ?: $err);
             } catch (Throwable $e) {}
-            if ($attempt >= WA_OUTBOX_MAX_ATTEMPTS || stripos($err, 'desativada') !== false || stripos($err, 'vazia') !== false) {
+            // Erros definitivos (número sem WhatsApp/ inválido) não adiantam repetir.
+            if ($attempt >= WA_OUTBOX_MAX_ATTEMPTS || stripos($err, 'desativada') !== false || stripos($err, 'vazia') !== false
+                || stripos($err, 'não possui WhatsApp') !== false || stripos($err, 'Número de WhatsApp inválido') !== false) {
                 $pdo->prepare("UPDATE whatsapp_outbox SET status='FALHOU', last_error=? WHERE id=?")->execute([mb_substr($err, 0, 255), (int)$r['id']]);
             } else {
                 $wait = WA_OUTBOX_BACKOFF_MIN[$attempt] ?? 15;

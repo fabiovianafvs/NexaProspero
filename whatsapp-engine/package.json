@@ -1,0 +1,18 @@
+{
+  "name": "nexa-wa-engine",
+  "version": "1.0.0",
+  "description": "Nexa Próspero - motor de WhatsApp leve (Baileys, sem Chrome), várias empresas num único processo.",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "pino": "^9.0.0",
+    "qrcode": "^1.5.3"
+  }
+}
