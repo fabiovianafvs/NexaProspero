@@ -4359,11 +4359,30 @@ if (!function_exists('fiscal_cfop_normalize_direction')) {
     $direction = strtoupper(trim($direction));
     $prefix = substr($cfop, 0, 1);
     if ($direction === 'SAIDA') {
-      if (in_array($prefix, ['5','6','7'], true)) return $cfop;
-      if (in_array($prefix, ['1','2','3'], true)) return ($sameUf ? '5' : '6') . substr($cfop, 1);
+      if (in_array($prefix, ['1','2','3'], true)) $cfop = ($sameUf ? '5' : '6') . substr($cfop, 1);
     } else {
-      if (in_array($prefix, ['1','2','3'], true)) return $cfop;
-      if (in_array($prefix, ['5','6','7'], true)) return ($sameUf ? '1' : '2') . substr($cfop, 1);
+      if (in_array($prefix, ['5','6','7'], true)) $cfop = ($sameUf ? '1' : '2') . substr($cfop, 1);
+    }
+    // Dentro x fora do Estado: o CFOP precisa combinar com o destino (idDest),
+    // senão a SEFAZ rejeita (733: CFOP interno com idDest diferente de 1;
+    // 732: CFOP interestadual com idDest 1). Exterior (3/7) não é alterado.
+    return fiscal_cfop_state_equivalent($cfop, $sameUf);
+  }
+}
+
+if (!function_exists('fiscal_cfop_state_equivalent')) {
+  /** CFOP equivalente dentro (5/1) ou fora (6/2) do Estado. */
+  function fiscal_cfop_state_equivalent(string $cfop, bool $sameUf): string {
+    $cfop = substr(preg_replace('/\D+/', '', $cfop) ?: '', 0, 4);
+    if (strlen($cfop) !== 4) return $cfop;
+    $toInter = ['5405' => '6404'];
+    $toIntra = ['6404' => '5405', '6107' => '5101', '6108' => '5102'];
+    $prefix = $cfop[0];
+    if (!$sameUf && in_array($prefix, ['5','1'], true)) {
+      return $toInter[$cfop] ?? (($prefix === '5' ? '6' : '2') . substr($cfop, 1));
+    }
+    if ($sameUf && in_array($prefix, ['6','2'], true)) {
+      return $toIntra[$cfop] ?? (($prefix === '6' ? '5' : '1') . substr($cfop, 1));
     }
     return $cfop;
   }
@@ -5520,7 +5539,17 @@ if (!function_exists('fiscal_nfce_create_or_update_from_order')) {
         $itemOther = round((float)($otherAlloc[$n - 1] ?? 0), 2);
         $taxBase = max(0.0, round($total + $itemFreight + $itemOther - $itemDiscount, 2));
         $unitName = trim((string)($it['unidade_estoque'] ?? 'UN')) ?: 'UN';
-        $cfop = preg_replace('/\D+/', '', (string)($tax['cfop_sale_state'] ?? '')) ?: '5102';
+        // NF-e para cliente de outro Estado usa o CFOP "Venda fora do Estado"
+        // do produto/perfil; sem ele, o equivalente interestadual do CFOP interno.
+        $orderEmitUf = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', (string)($cfg['uf'] ?? '')), 0, 2));
+        $orderDestUf = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', (string)($order['uf'] ?? $order['state'] ?? '')), 0, 2));
+        $orderInterstate = $model === '55' && $orderEmitUf !== '' && $orderDestUf !== '' && $orderDestUf !== $orderEmitUf;
+        $cfopState = preg_replace('/\D+/', '', (string)($tax['cfop_sale_state'] ?? '')) ?: '5102';
+        $cfop = $cfopState;
+        if ($orderInterstate) {
+          $cfopInter = preg_replace('/\D+/', '', (string)($tax['cfop_sale_interstate'] ?? ''));
+          $cfop = (strlen($cfopInter) === 4 && $cfopInter !== $cfopState) ? $cfopInter : fiscal_cfop_state_equivalent($cfopState, false);
+        }
         if ($isNfeAfterNfce) $cfop = fiscal_nfe_after_nfce_cfop($order, $cfg);
         $ncm = preg_replace('/\D+/', '', (string)($tax['ncm'] ?? ''));
         $cest = preg_replace('/\D+/', '', (string)($tax['cest'] ?? ''));
