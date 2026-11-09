@@ -70,6 +70,14 @@ if (!function_exists('whatsapp_engine_admin_token_for_url')) {
   }
 }
 
+/** O motor aceita tokens de 32 a 256 caracteres; fora disso (ex.: token antigo digitado à mão) gera um novo. */
+if (!function_exists('whatsapp_engine_token_valid')) {
+  function whatsapp_engine_token_valid(string $token): bool {
+    $len = strlen(trim($token));
+    return $len >= 32 && $len <= 256;
+  }
+}
+
 if (!function_exists('whatsapp_engine_request')) {
   function whatsapp_engine_request(array $engine, string $method, string $path, array $payload = [], int $timeout = 15): array {
     return whatsapp_api_request(['service_url' => $engine['url'], 'api_token' => $engine['token'], 'timeout_seconds' => $timeout], $method, $path, $payload);
@@ -108,7 +116,7 @@ if (!function_exists('whatsapp_engine_migrate_company')) {
     $oldUrl = (string)$cfg['service_url'] !== '' ? (string)$cfg['service_url'] : WHATSAPP_LEGACY_SERVICE_URL;
     $sid = whatsapp_service_company_id($cfg, $companyId);
     $token = trim((string)$cfg['api_token']);
-    if ($token === '') $token = whatsapp_generate_service_token();
+    if (!whatsapp_engine_token_valid($token)) $token = whatsapp_generate_service_token();
 
     whatsapp_engine_request($engine, 'POST', '/tokens/upsert', ['company_id' => $sid, 'token' => $token]);
 
@@ -208,7 +216,7 @@ if (!function_exists('whatsapp_engine_migrate_all')) {
       require_once __DIR__ . '/saas_whatsapp_service.php';
       $saas = saas_whatsapp_load_config($pdo);
       if ($saas['provider'] === 'unofficial' && !whatsapp_engine_is_url($engine, (string)$saas['service_url'])) {
-        $token = $saas['api_token'] !== '' ? $saas['api_token'] : whatsapp_generate_service_token();
+        $token = whatsapp_engine_token_valid((string)$saas['api_token']) ? (string)$saas['api_token'] : whatsapp_generate_service_token();
         whatsapp_engine_request($engine, 'POST', '/tokens/upsert', ['company_id' => saas_whatsapp_unofficial_instance_id($saas), 'token' => $token]);
         $pdo->prepare('UPDATE saas_whatsapp_config SET service_url = ?, api_token = ? WHERE id = 1')->execute([$engine['url'], $token]);
         $out['saas']++;
@@ -227,7 +235,7 @@ if (!function_exists('whatsapp_engine_migrate_all')) {
         try {
           $sid = preg_replace('/\D+/', '', (string)($r['unofficial_instance_id'] ?? '')) ?: '';
           if ($sid === '' || $sid === '0') $sid = reseller_whatsapp_default_instance_id($resellerId);
-          $token = trim((string)$r['api_token']) !== '' ? trim((string)$r['api_token']) : whatsapp_generate_service_token();
+          $token = whatsapp_engine_token_valid(trim((string)$r['api_token'])) ? trim((string)$r['api_token']) : whatsapp_generate_service_token();
           whatsapp_engine_request($engine, 'POST', '/tokens/upsert', ['company_id' => $sid, 'token' => $token]);
           $pdo->prepare('UPDATE saas_reseller_whatsapp_config SET service_url = ?, api_token = ? WHERE reseller_company_id = ?')->execute([$engine['url'], $token, $resellerId]);
           $out['resellers']++;
