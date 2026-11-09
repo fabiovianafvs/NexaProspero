@@ -127,6 +127,23 @@ if (!function_exists('nfse_emitter_value')) {
   }
 }
 
+if (!function_exists('nfse_emitter_timezone')) {
+  /**
+   * Fuso usado nas datas da DPS. Sempre um fuso do Brasil: quando a emissão roda
+   * fora da tela (fila da O.S., cron) o PHP pode estar em UTC, e a Sefin Nacional
+   * rejeita dhEmi com "+00:00" como se fosse horário futuro (E0008).
+   */
+  function nfse_emitter_timezone(): DateTimeZone {
+    $name = (string)date_default_timezone_get();
+    static $brazil = null;
+    if ($brazil === null) {
+      try { $brazil = DateTimeZone::listIdentifiers(DateTimeZone::PER_COUNTRY, 'BR'); } catch (Throwable $e) { $brazil = []; }
+    }
+    if (!in_array($name, $brazil, true)) $name = 'America/Sao_Paulo';
+    return new DateTimeZone($name);
+  }
+}
+
 if (!function_exists('nfse_emitter_digits')) {
   function nfse_emitter_digits($value): string {
     return preg_replace('/\D+/', '', (string)$value) ?: '';
@@ -557,7 +574,7 @@ if (!function_exists('nfse_emitter_reserve_document')) {
       $insDoc = $pdo->prepare("INSERT INTO fiscal_documents
         (company_id,direction,model,series,number,status,environment,operation_nature,issue_datetime,competence_date,total_products,total_discount,total_iss,total_document,source_type,source_id,notes,created_at,updated_at)
         VALUES (?,?,?,?,?,'PREPARADA',?,'Prestação de serviços',NOW(),?,?,?,?,?,'PEDIDO',?,'DPS preparada pelo Nexa Próspero',NOW(),NOW())");
-      $competence = date('Y-m-d');
+      $competence = (new DateTimeImmutable('now', nfse_emitter_timezone()))->format('Y-m-d');
       $orderDate = (string)nfse_emitter_value($context['order'], ['data','data_pedido','created_at'], '');
       if ($orderDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}/', $orderDate, $m)) $competence = $m[0];
       $issAmount = round((float)$context['net'] * ((float)($context['tax']['iss_rate'] ?? 0) / 100), 2);
@@ -672,7 +689,7 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
     $root->appendChild($inf);
 
     nfse_emitter_xml_add($dom,$inf,'tpAmb',$environment === 'PRODUCAO' ? '1' : '2');
-    $timezone = new DateTimeZone(date_default_timezone_get() ?: 'America/Sao_Paulo');
+    $timezone = nfse_emitter_timezone();
     $realNow = new DateTimeImmutable('now',$timezone);
     // Rejeição "data de emissão da DPS não pode ser posterior à data do seu
     // processamento": basta o relógio do servidor estar alguns segundos à frente
@@ -687,7 +704,7 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
     nfse_emitter_xml_add($dom,$inf,'verAplic','NEXA-1.01');
     nfse_emitter_xml_add($dom,$inf,'serie',(string)(int)nfse_emitter_digits($series));
     nfse_emitter_xml_add($dom,$inf,'nDPS',(string)$number);
-    $competence = (string)($doc['competence_date'] ?? date('Y-m-d'));
+    $competence = (string)($doc['competence_date'] ?? $realNow->format('Y-m-d'));
     nfse_emitter_xml_add($dom,$inf,'dCompet',substr($competence,0,10));
     nfse_emitter_xml_add($dom,$inf,'tpEmit','1');
     nfse_emitter_xml_add($dom,$inf,'cLocEmi',substr(nfse_emitter_digits($cfg['city_ibge'] ?? ''),0,7));
