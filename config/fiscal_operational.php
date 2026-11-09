@@ -291,9 +291,17 @@ if (!function_exists('fiscal_save_company_config')) {
     // Antes da migration, salvar outras configurações fiscais continua funcionando sem tentar gravar colunas inexistentes.
     if (fiscal_column_exists($pdo, 'fiscal_company_config', 'order_modern_print_enabled')
         && fiscal_column_exists($pdo, 'fiscal_company_config', 'order_modern_print_default')) {
-      $payload['order_modern_print_enabled'] = fiscal_op_bool($data, 'order_modern_print_enabled');
-      $orderModernDefault = strtoupper(trim((string)($data['order_modern_print_default'] ?? 'A4')));
-      $payload['order_modern_print_default'] = in_array($orderModernDefault, ['A4','72MM'], true) ? $orderModernDefault : 'A4';
+      // Seleção única de layout (tela de Configurações fiscais): mapeia para as colunas existentes.
+      $layoutChoice = strtolower(trim((string)($data['order_print_layout'] ?? '')));
+      $layoutMap = ['legacy'=>[0,'A4'], 'modern_a4'=>[1,'A4'], 'modern_72mm'=>[1,'72MM'], 'duplicata'=>[1,'DUPLICATA']];
+      if (isset($layoutMap[$layoutChoice])) {
+        $payload['order_modern_print_enabled'] = $layoutMap[$layoutChoice][0];
+        $payload['order_modern_print_default'] = $layoutMap[$layoutChoice][1];
+      } else {
+        $payload['order_modern_print_enabled'] = fiscal_op_bool($data, 'order_modern_print_enabled');
+        $orderModernDefault = strtoupper(trim((string)($data['order_modern_print_default'] ?? 'A4')));
+        $payload['order_modern_print_default'] = in_array($orderModernDefault, ['A4','72MM','DUPLICATA'], true) ? $orderModernDefault : 'A4';
+      }
     }
 
     $cols = array_keys($payload);
@@ -656,7 +664,7 @@ if (!function_exists('fiscal_order_modern_print_default')) {
     if (!fiscal_column_exists($pdo, 'fiscal_company_config', 'order_modern_print_default')) return 'A4';
     $cfg = function_exists('fiscal_company_config') ? fiscal_company_config($pdo, $companyId) : [];
     $value = strtoupper(trim((string)($cfg['order_modern_print_default'] ?? 'A4')));
-    return in_array($value, ['A4','72MM'], true) ? $value : 'A4';
+    return in_array($value, ['A4','72MM','DUPLICATA'], true) ? $value : 'A4';
   }
 }
 

@@ -203,10 +203,13 @@ $orderAutoPrintEnabled = !array_key_exists('order_auto_print_enabled', $fiscalPr
 $printPack58mm = !empty($fiscalPrintCfg['print_pack_58mm_enabled']);
 $orderModernPrintEnabled = !empty($fiscalPrintCfg['order_modern_print_enabled']);
 $orderModernPrintDefault = strtoupper(trim((string)($fiscalPrintCfg['order_modern_print_default'] ?? 'A4')));
-if (!in_array($orderModernPrintDefault, ['A4','72MM'], true)) $orderModernPrintDefault = 'A4';
+if (!in_array($orderModernPrintDefault, ['A4','72MM','DUPLICATA'], true)) $orderModernPrintDefault = 'A4';
 $orderPrintForceLegacy = (string)($_GET['legacy'] ?? '') === '1';
-$orderModernPrintModel = strtolower(trim((string)($_GET['modelo'] ?? ($orderModernPrintDefault === '72MM' ? '72mm' : 'a4'))));
-if (!in_array($orderModernPrintModel, ['72mm','a4'], true)) $orderModernPrintModel = $orderModernPrintDefault === '72MM' ? '72mm' : 'a4';
+$orderModernDefaultModel = ['72MM'=>'72mm','DUPLICATA'=>'duplicata'][$orderModernPrintDefault] ?? 'a4';
+$orderModernPrintModel = strtolower(trim((string)($_GET['modelo'] ?? $orderModernDefaultModel)));
+if (!in_array($orderModernPrintModel, ['72mm','a4','duplicata'], true)) $orderModernPrintModel = $orderModernDefaultModel;
+// Modelo escolhido na tela de impressão vale mesmo se o layout padrão for o atual (cupom).
+if (isset($_GET['modelo']) && !$orderPrintForceLegacy) $orderModernPrintEnabled = true;
 $autoPrint = $orderAutoPrintEnabled && ((string)($_GET['autoprint'] ?? '1') !== '0');
 $pedidoWhatsapp = preg_replace('/\D+/', '', (string)($pedido['whatsapp'] ?? ''));
 $printReturnTo = 'pedido_print.php?id=' . $id . '&return_to=' . rawurlencode($returnTo) . '&autoprint=0';
@@ -492,7 +495,7 @@ $1", $text);
 // para todos os clientes já instalados e pode ser forçado com legacy=1 mesmo após habilitar o novo modelo.
 if ($orderModernPrintEnabled && !$orderPrintForceLegacy) {
   $modernOrderPrintModel = $orderModernPrintModel;
-  require __DIR__ . '/_pedido_print_moderno.php';
+  require __DIR__ . ($orderModernPrintModel === 'duplicata' ? '/_pedido_print_duplicata.php' : '/_pedido_print_moderno.php');
   exit;
 }
 

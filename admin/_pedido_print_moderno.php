@@ -105,12 +105,14 @@ $baseQuery = 'id=' . (int)$id . '&return_to=' . rawurlencode($returnTo) . '&auto
 $url72 = 'pedido_print.php?' . $baseQuery . '&modelo=72mm';
 $urlA4 = 'pedido_print.php?' . $baseQuery . '&modelo=a4';
 $urlLegacy = 'pedido_print.php?' . $baseQuery . '&legacy=1';
+$urlDuplicata = 'pedido_print.php?' . $baseQuery . '&modelo=duplicata';
 $waUrl = 'documento_whatsapp.php?type=pedido&id=' . (int)$id . '&modelo=' . rawurlencode($model) . '&return_to=' . rawurlencode($returnTo);
 $emailUrl = 'email_documento.php?type=pedido&id=' . (int)$id . '&return_to=' . rawurlencode($returnTo);
 if (function_exists('multi_company_context_url')) {
   $url72 = multi_company_context_url($url72);
   $urlA4 = multi_company_context_url($urlA4);
   $urlLegacy = multi_company_context_url($urlLegacy);
+  $urlDuplicata = multi_company_context_url($urlDuplicata);
   if (!$orderPrintCross) {
     $waUrl = multi_company_context_url($waUrl);
     $emailUrl = multi_company_context_url($emailUrl);
@@ -143,6 +145,7 @@ if (function_exists('multi_company_context_url')) {
   <div class="nexa-print-actions">
     <a class="nexa-print-action <?= $model==='72mm'?'is-active':'' ?>" title="Visualizar pedido em 70 mm" aria-label="Visualizar pedido em 70 mm" href="<?= pedido_moderno_h($url72) ?>"><span class="nexa-print-action-icon" aria-hidden="true">🧾</span><span class="nexa-print-action-label">70 mm</span></a>
     <a class="nexa-print-action <?= $model==='a4'?'is-active':'' ?>" title="Visualizar pedido em A4" aria-label="Visualizar pedido em A4" href="<?= pedido_moderno_h($urlA4) ?>"><span class="nexa-print-action-icon" aria-hidden="true">📄</span><span class="nexa-print-action-label">A4</span></a>
+    <a class="nexa-print-action" title="Visualizar pedido no modelo Duplicata de Venda Mercantil" aria-label="Duplicata" href="<?= pedido_moderno_h($urlDuplicata) ?>"><span class="nexa-print-action-icon" aria-hidden="true">📑</span><span class="nexa-print-action-label">Duplicata</span></a>
     <button class="nexa-print-action is-primary" type="button" title="Imprimir pedido" aria-label="Imprimir pedido" onclick="window.print()"><span class="nexa-print-action-icon" aria-hidden="true">🖨</span><span class="nexa-print-action-label">Imprimir</span></button>
     <?php if (!$orderPrintCross): ?>
       <a class="nexa-print-action is-whatsapp" title="Enviar pedido por WhatsApp" aria-label="Enviar pedido por WhatsApp" href="<?= pedido_moderno_h($waUrl) ?>"><span class="nexa-print-action-icon" aria-hidden="true">💬</span><span class="nexa-print-action-label">WhatsApp</span></a>

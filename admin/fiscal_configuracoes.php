@@ -106,6 +106,13 @@ try {
     }
     if ($action === 'save_config') {
       fiscal_save_company_config($pdo, $cid, $_POST);
+      if (array_key_exists('order_duplicata_terms', $_POST)) {
+        $dupTerms = trim(str_replace("\r\n", "\n", (string)$_POST['order_duplicata_terms']));
+        if (function_exists('mb_substr')) $dupTerms = mb_substr($dupTerms, 0, 2000, 'UTF-8');
+        $dupCfg = config_store_get($pdo, $cid, 'pedido_duplicata') ?: [];
+        $dupCfg['terms'] = $dupTerms;
+        config_store_set($pdo, $cid, 'pedido_duplicata', $dupCfg);
+      }
       // % aproximado de tributos do Simples Nacional (pTotTribSN da NFS-e Nacional).
       if (array_key_exists('nfse_sn_total_tax_rate', $_POST)) {
         $snRateInput = str_replace(',', '.', trim((string)$_POST['nfse_sn_total_tax_rate']));
@@ -647,9 +654,18 @@ if ($err): ?><div class="msg err"><?= fiscal_h($err) ?></div><?php endif; ?>
         <label class="fiscal-checkline span-3"><input type="checkbox" name="order_auto_print_enabled" value="1" <?= !array_key_exists('order_auto_print_enabled', $config) || !empty($config['order_auto_print_enabled'])?'checked':'' ?>> Habilitar impressão automática do pedido em toda finalização de venda</label>
         <label class="fiscal-checkline span-3"><input type="checkbox" name="order_print_disabled" value="1" <?= !empty($config['order_print_disabled'])?'checked':'' ?>> Desabilitar impresso de pedido</label>
         <?php if ($orderModernPrintReady): ?>
-        <label class="fiscal-checkline span-2"><input type="checkbox" name="order_modern_print_enabled" value="1" <?= !empty($config['order_modern_print_enabled'])?'checked':'' ?>> Habilitar novos modelos do Pedido (A4 e 72 mm)</label>
-        <div><label>Modelo padrão do novo Pedido</label><select name="order_modern_print_default"><option value="A4" <?= strtoupper((string)($config['order_modern_print_default']??'A4'))==='A4'?'selected':'' ?>>A4</option><option value="72MM" <?= strtoupper((string)($config['order_modern_print_default']??''))==='72MM'?'selected':'' ?>>72 mm</option></select></div>
-        <div class="span-3 fiscal-muted" style="font-weight:700;line-height:1.5"><b>Compatibilidade:</b> enquanto esta opção estiver desmarcada, o impresso atual do pedido permanece exatamente como está. Ao habilitar, o botão normal de imprimir abre o novo layout e permite alternar entre A4 e 72 mm; o modelo anterior continua disponível como contingência.</div>
+        <?php
+          $orderLayoutCurrent = empty($config['order_modern_print_enabled']) ? 'legacy'
+            : (['72MM'=>'modern_72mm','DUPLICATA'=>'duplicata'][strtoupper((string)($config['order_modern_print_default'] ?? 'A4'))] ?? 'modern_a4');
+          $orderDuplicataCfg = function_exists('config_store_get') ? (config_store_get($pdo, $cid, 'pedido_duplicata') ?: []) : [];
+        ?>
+        <div><label>Layout de impressão do pedido</label><select name="order_print_layout">
+          <?php foreach (['legacy'=>'Modelo atual (cupom)','modern_a4'=>'Moderno A4','modern_72mm'=>'Moderno 70 mm','duplicata'=>'Duplicata de Venda Mercantil (A4)'] as $layoutKey=>$layoutLabel): ?>
+            <option value="<?= $layoutKey ?>" <?= $orderLayoutCurrent===$layoutKey?'selected':'' ?>><?= fiscal_h($layoutLabel) ?></option>
+          <?php endforeach; ?>
+        </select></div>
+        <div class="span-2"><label>Garantia e orientações (aparece na Duplicata)</label><textarea name="order_duplicata_terms" rows="4" maxlength="2000" placeholder="Ex.: *Armações possuem garantia de 6 meses..."><?= fiscal_h((string)($orderDuplicataCfg['terms'] ?? '')) ?></textarea></div>
+        <div class="span-3 fiscal-muted" style="font-weight:700;line-height:1.5">O layout escolhido abre ao clicar em Imprimir no pedido. Na tela de impressão dá para alternar entre os modelos (70 mm, A4, Duplicata e o modelo atual).</div>
         <?php else: ?>
         <div class="span-3" style="padding:10px 12px;border:1px solid #f59e0b;background:#fffbeb;border-radius:12px;color:#92400e;font-weight:800">Novos modelos do Pedido ainda não disponíveis. Aplique a migration <b>V11.45.18</b> pelo Atualizador do Banco.</div>
         <?php endif; ?>
