@@ -6,6 +6,11 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit; }
 require_once __DIR__ . '/../config/pdo.php';
 require_once __DIR__ . '/../config/saas_whatsapp_service.php';
 
+// Com o motor novo instalado o serviço antigo (Chrome) não é mais usado e o
+// motor reabre as sessões sozinho: este cron não tem mais o que fazer.
+require_once __DIR__ . '/../config/whatsapp_engine.php';
+if (whatsapp_engine_ready(whatsapp_engine_config($pdo))) exit(0);
+
 $lock = fopen(sys_get_temp_dir() . '/nexa_whatsapp_keepalive.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) exit(0);
 

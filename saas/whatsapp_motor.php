@@ -193,7 +193,7 @@ saas_layout_start('Motor WhatsApp • Central SaaS', 'Motor de WhatsApp leve', '
             <input type="hidden" name="company_id" value="<?= $r['id'] ?>">
             <?php if ($r['on_engine']): ?>
               <a class="btn2 btn2-ghost" href="/saas/whatsapp_motor.php?qr=<?= $r['id'] ?>&t=<?= time() ?>#wamQr">QR Code</a>
-              <button class="btn2 btn2-ghost" name="action" value="revert">Voltar ao antigo</button>
+              <?php if ($legacyOnline): ?><button class="btn2 btn2-ghost" name="action" value="revert">Voltar ao antigo</button><?php endif; ?>
             <?php else: ?>
               <button class="btn2" name="action" value="migrate" <?= empty($health['ok']) ? 'disabled' : '' ?>>Passar para o motor novo</button>
             <?php endif; ?>

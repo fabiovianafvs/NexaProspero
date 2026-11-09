@@ -255,10 +255,16 @@ function whatsapp_default_templates(): array {
   ];
 }
 
+/** Serviço padrão para configurações novas: o motor novo (leve) quando instalado. */
+function whatsapp_service_default_url(): string {
+  if (!function_exists('whatsapp_default_service_url')) require_once __DIR__ . '/whatsapp_engine.php';
+  return whatsapp_default_service_url();
+}
+
 function whatsapp_default_config(): array {
   return [
     'enabled' => false,
-    'service_url' => getenv('WHATSAPP_SERVICE_URL') ?: 'http://127.0.0.1:3333',
+    'service_url' => whatsapp_service_default_url(),
     'api_token' => getenv('WHATSAPP_API_TOKEN') ?: '',
     'store_phone' => '',
     'send_order_to_store' => false,
@@ -345,7 +351,7 @@ function whatsapp_save_config(PDO $pdo, int $companyId, array $cfg): void {
     ],
     'templates' => $templates,
   ];
-  if ($clean['service_url'] === '') $clean['service_url'] = 'http://127.0.0.1:3333';
+  if ($clean['service_url'] === '') $clean['service_url'] = whatsapp_service_default_url();
   config_store_set($pdo, $companyId, 'whatsapp', $clean);
 }
 

@@ -93,11 +93,15 @@ if (!function_exists('whatsapp_engine_health')) {
  * O token da empresa e o identificador da sessão são mantidos.
  */
 if (!function_exists('whatsapp_engine_migrate_company')) {
-  function whatsapp_engine_migrate_company(PDO $pdo, int $companyId, int $userId = 0): array {
+  function whatsapp_engine_migrate_company(PDO $pdo, int $companyId, int $userId = 0, bool $logoutOld = true, bool $startSession = true): array {
     $engine = whatsapp_engine_config($pdo);
     if (!whatsapp_engine_ready($engine)) throw new RuntimeException('O motor novo ainda não foi instalado.');
-    $health = whatsapp_engine_health($engine);
-    if (empty($health['ok'])) throw new RuntimeException('O motor novo não respondeu: ' . (string)($health['error'] ?? 'sem resposta'));
+    static $healthOk = false;
+    if (!$healthOk) {
+      $health = whatsapp_engine_health($engine);
+      if (empty($health['ok'])) throw new RuntimeException('O motor novo não respondeu: ' . (string)($health['error'] ?? 'sem resposta'));
+      $healthOk = true;
+    }
 
     $cfg = whatsapp_load_config($pdo, $companyId, false);
     if (whatsapp_engine_is_url($engine, (string)$cfg['service_url'])) throw new RuntimeException('Esta empresa já está no motor novo.');
@@ -108,12 +112,14 @@ if (!function_exists('whatsapp_engine_migrate_company')) {
 
     whatsapp_engine_request($engine, 'POST', '/tokens/upsert', ['company_id' => $sid, 'token' => $token]);
 
-    $oldLogout = '';
-    try {
-      whatsapp_api_request(array_merge($cfg, ['timeout_seconds' => 15]), 'POST', '/logout', ['company_id' => $sid]);
-      $oldLogout = 'ok';
-    } catch (Throwable $e) {
-      $oldLogout = $e->getMessage();
+    $oldLogout = 'não solicitado';
+    if ($logoutOld) {
+      try {
+        whatsapp_api_request(array_merge($cfg, ['timeout_seconds' => 15]), 'POST', '/logout', ['company_id' => $sid]);
+        $oldLogout = 'ok';
+      } catch (Throwable $e) {
+        $oldLogout = $e->getMessage();
+      }
     }
 
     $cfg['service_url'] = $engine['url'];
@@ -128,7 +134,9 @@ if (!function_exists('whatsapp_engine_migrate_company')) {
     ]);
 
     // Já deixa o QR Code sendo gerado no motor novo.
-    try { whatsapp_engine_request($engine, 'POST', '/admin/session/start', ['company_id' => $sid], 10); } catch (Throwable $e) {}
+    if ($startSession) {
+      try { whatsapp_engine_request($engine, 'POST', '/admin/session/start', ['company_id' => $sid], 10); } catch (Throwable $e) {}
+    }
     return ['session_company_id' => $sid, 'old_logout' => $oldLogout];
   }
 }
@@ -155,5 +163,81 @@ if (!function_exists('whatsapp_engine_revert_company')) {
     $migration['reverted_by'] = $userId;
     config_store_set($pdo, $companyId, 'whatsapp_engine_migration', $migration);
     return ['session_company_id' => $sid, 'service_url' => $back];
+  }
+}
+
+/** URL padrão do serviço para configurações novas: o motor novo, quando instalado. */
+if (!function_exists('whatsapp_default_service_url')) {
+  function whatsapp_default_service_url(): string {
+    $pdo = $GLOBALS['pdo'] ?? null;
+    if ($pdo instanceof PDO) {
+      $engine = whatsapp_engine_config($pdo);
+      if (whatsapp_engine_ready($engine)) return $engine['url'];
+    }
+    return (string)(getenv('WHATSAPP_SERVICE_URL') ?: WHATSAPP_LEGACY_SERVICE_URL);
+  }
+}
+
+/**
+ * Passa TODOS os WhatsApps não oficiais para o motor novo: empresas, Central
+ * SaaS e revendas. Não desconecta o serviço antigo (ele será desligado) e não
+ * abre sessões: cada um lê o QR Code quando abrir a tela do WhatsApp.
+ */
+if (!function_exists('whatsapp_engine_migrate_all')) {
+  function whatsapp_engine_migrate_all(PDO $pdo, int $userId = 0): array {
+    $engine = whatsapp_engine_config($pdo);
+    if (!whatsapp_engine_ready($engine)) throw new RuntimeException('O motor novo ainda não foi instalado.');
+    $health = whatsapp_engine_health($engine);
+    if (empty($health['ok'])) throw new RuntimeException('O motor novo não respondeu: ' . (string)($health['error'] ?? 'sem resposta'));
+    $out = ['companies' => 0, 'saas' => 0, 'resellers' => 0, 'errors' => []];
+
+    $st = $pdo->query("SELECT ac.company_id, ac.cfg_json FROM app_config ac JOIN companies c ON c.id = ac.company_id WHERE ac.cfg_key = 'whatsapp'");
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+      $cfg = json_decode((string)$r['cfg_json'], true);
+      if (!is_array($cfg) || whatsapp_engine_is_url($engine, (string)($cfg['service_url'] ?? ''))) continue;
+      try {
+        whatsapp_engine_migrate_company($pdo, (int)$r['company_id'], $userId, false, false);
+        $out['companies']++;
+      } catch (Throwable $e) {
+        $out['errors'][] = 'Empresa #' . (int)$r['company_id'] . ': ' . $e->getMessage();
+      }
+    }
+
+    // Central SaaS (instância técnica própria).
+    try {
+      require_once __DIR__ . '/saas_whatsapp_service.php';
+      $saas = saas_whatsapp_load_config($pdo);
+      if ($saas['provider'] === 'unofficial' && !whatsapp_engine_is_url($engine, (string)$saas['service_url'])) {
+        $token = $saas['api_token'] !== '' ? $saas['api_token'] : whatsapp_generate_service_token();
+        whatsapp_engine_request($engine, 'POST', '/tokens/upsert', ['company_id' => saas_whatsapp_unofficial_instance_id($saas), 'token' => $token]);
+        $pdo->prepare('UPDATE saas_whatsapp_config SET service_url = ?, api_token = ? WHERE id = 1')->execute([$engine['url'], $token]);
+        $out['saas']++;
+      }
+    } catch (Throwable $e) {
+      $out['errors'][] = 'Central SaaS: ' . $e->getMessage();
+    }
+
+    // Revendas.
+    try {
+      require_once __DIR__ . '/reseller_integrations.php';
+      $rs = $pdo->query("SELECT reseller_company_id, service_url, api_token, unofficial_instance_id FROM saas_reseller_whatsapp_config WHERE COALESCE(provider,'unofficial') = 'unofficial'");
+      foreach ($rs->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if (whatsapp_engine_is_url($engine, (string)$r['service_url'])) continue;
+        $resellerId = (int)$r['reseller_company_id'];
+        try {
+          $sid = preg_replace('/\D+/', '', (string)($r['unofficial_instance_id'] ?? '')) ?: '';
+          if ($sid === '' || $sid === '0') $sid = reseller_whatsapp_default_instance_id($resellerId);
+          $token = trim((string)$r['api_token']) !== '' ? trim((string)$r['api_token']) : whatsapp_generate_service_token();
+          whatsapp_engine_request($engine, 'POST', '/tokens/upsert', ['company_id' => $sid, 'token' => $token]);
+          $pdo->prepare('UPDATE saas_reseller_whatsapp_config SET service_url = ?, api_token = ? WHERE reseller_company_id = ?')->execute([$engine['url'], $token, $resellerId]);
+          $out['resellers']++;
+        } catch (Throwable $e) {
+          $out['errors'][] = 'Revenda #' . $resellerId . ': ' . $e->getMessage();
+        }
+      }
+    } catch (Throwable $e) {
+      $out['errors'][] = 'Revendas: ' . $e->getMessage();
+    }
+    return $out;
   }
 }
