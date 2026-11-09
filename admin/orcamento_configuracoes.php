@@ -19,6 +19,13 @@ $marginSettingsReady = orc_schema_has_column($pdo, 'orcamento_settings', 'minimu
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   try {
     $action = (string)($_POST['action'] ?? '');
+    if ($action === 'save_sequence') {
+      if (empty($_SESSION['nexa_orc_seq_csrf']) || !hash_equals((string)$_SESSION['nexa_orc_seq_csrf'], (string)($_POST['seq_csrf'] ?? ''))) throw new RuntimeException('Sessão expirada. Atualize a página e tente novamente.');
+      $nextNumber = (int)preg_replace('/\D+/', '', (string)($_POST['next_number'] ?? ''));
+      orc_sequence_set_next($pdo, $companyId, $nextNumber);
+      header('Location: orcamento_configuracoes.php?ok=' . rawurlencode('Numeração atualizada: o próximo orçamento será o nº ' . $nextNumber . '.'));
+      exit;
+    }
     if ($action !== 'save_settings') throw new RuntimeException('Ação inválida.');
 
     $defaultReserve = isset($_POST['default_reserve_product']) ? 1 : 0;
@@ -50,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $settings = orc_settings($pdo, $companyId);
+if (empty($_SESSION['nexa_orc_seq_csrf'])) $_SESSION['nexa_orc_seq_csrf'] = bin2hex(random_bytes(20));
+$orcSeq = orc_sequence_info($pdo, $companyId);
 $orcPrintDefault = 'a4';
 try { require_once __DIR__ . '/../config/config_store.php'; $orcPrintCfg = config_store_get($pdo, $companyId, 'orcamento_print'); if (is_array($orcPrintCfg) && ($orcPrintCfg['default_model'] ?? '') === '72mm') $orcPrintDefault = '72mm'; } catch (Throwable $e) {}
 orc_page_start('Configurações do Orçamento', 'orcamento_configuracoes');
@@ -104,6 +113,23 @@ orc_page_start('Configurações do Orçamento', 'orcamento_configuracoes');
         <?php endif; ?>
       </div>
       <div class="orc-actions"><button class="orc-btn primary" type="submit">Salvar configurações</button></div>
+    </form>
+  </div>
+</div>
+<div class="orc-card">
+  <div class="orc-card-head">Numeração do orçamento</div>
+  <div class="orc-card-body">
+    <form method="post" onsubmit="return confirm('Alterar a numeração? Os próximos orçamentos seguirão a partir do número informado.')">
+      <input type="hidden" name="action" value="save_sequence">
+      <input type="hidden" name="seq_csrf" value="<?= orc_e((string)$_SESSION['nexa_orc_seq_csrf']) ?>">
+      <div class="orc-grid">
+        <div class="orc-c4">
+          <label>Próximo número do orçamento</label>
+          <input type="number" name="next_number" min="<?= (int)$orcSeq['max_used'] + 1 ?>" max="999999999" step="1" required value="<?= (int)$orcSeq['next'] ?>">
+          <div class="orc-hint">Use para continuar a sequência de outro sistema. Maior orçamento já lançado: nº <?= (int)$orcSeq['max_used'] ?>.</div>
+        </div>
+      </div>
+      <div class="orc-actions"><button class="orc-btn primary" type="submit">Salvar numeração</button></div>
     </form>
   </div>
 </div>

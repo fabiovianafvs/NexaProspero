@@ -35,6 +35,12 @@ function os_cfg_redirect($tab, $msg)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = isset($_POST['action']) ? $_POST['action'] : '';
     try {
+        if ($action === 'save_sequence') {
+            if (empty($_SESSION['nexa_os_seq_csrf']) || !hash_equals((string)$_SESSION['nexa_os_seq_csrf'], (string)($_POST['seq_csrf'] ?? ''))) throw new RuntimeException('Sessão expirada. Atualize a página e tente novamente.');
+            $nextNumber = (int)preg_replace('/\D+/', '', (string)($_POST['next_number'] ?? ''));
+            os_sequence_set_next($pdo, (int)$companyId, $nextNumber);
+            os_cfg_redirect('geral', 'Numeração atualizada: a próxima O.S. será a nº '.$nextNumber.'.');
+        }
         if ($action === 'save_settings') {
             if (!$stepVisibility['migration_ready']) throw new RuntimeException('Aplique a migration de etapas opcionais pelo Atualizador do Banco antes de salvar.');
             $reserve = isset($_POST['default_reserve_product']) ? 1 : 0;
@@ -317,6 +323,11 @@ if($error) echo '<div class="alert alert-error">'.os_e($error).'</div>';
 echo '<div class="tabs"><a '.($tab==='geral'?'class="active"':'').' href="?tab=geral">Geral e impressão</a><a '.($tab==='status'?'class="active"':'').' href="?tab=status">Status</a><a '.($tab==='campos'?'class="active"':'').' href="?tab=campos">Campos personalizados</a></div>';
 
 if($tab==='geral'){
+    if (empty($_SESSION['nexa_os_seq_csrf'])) $_SESSION['nexa_os_seq_csrf'] = bin2hex(random_bytes(20));
+    $osSeq = os_sequence_info($pdo, (int)$companyId);
+    echo '<div class="card"><div class="card-head">Numeração da O.S.</div><div class="card-body"><form method="post" onsubmit="return confirm(\'Alterar a numeração? As próximas O.S. seguirão a partir do número informado.\')"><input type="hidden" name="action" value="save_sequence"><input type="hidden" name="seq_csrf" value="'.os_e((string)$_SESSION['nexa_os_seq_csrf']).'"><div class="grid">';
+    echo '<div class="c4"><label>Próximo número da O.S.</label><input type="number" name="next_number" min="'.((int)$osSeq['max_used']+1).'" max="999999999" step="1" required value="'.(int)$osSeq['next'].'"><div class="hint">Use para continuar a sequência de outro sistema. Maior O.S. já lançada: nº '.(int)$osSeq['max_used'].'.</div></div>';
+    echo '<div class="c3" style="display:flex;align-items:flex-end"><button class="btn btn-primary">Salvar numeração</button></div></div></form></div></div>';
     echo '<div class="card"><div class="card-head">Comportamento padrão</div><div class="card-body"><form method="post"><input type="hidden" name="action" value="save_settings"><div class="grid">';
     echo '<div class="c5"><label>Modelo padrão de impressão</label><select name="default_print_model"><option value="72mm" '.($settings['default_print_model']==='72mm'?'selected':'').'>72 mm</option><option value="a4_half" '.($settings['default_print_model']==='a4_half'?'selected':'').'>A4 - meia folha</option><option value="a4_full" '.($settings['default_print_model']==='a4_full'?'selected':'').'>A4 - folha inteira</option><option value="a4_landscape_dual" '.($settings['default_print_model']==='a4_landscape_dual'?'selected':'').'>A4 paisagem - 2 vias</option></select><div class="hint">Modelo usado ao imprimir a O.S. quando nenhum formato diferente for escolhido.</div></div>';
     echo '<div class="c4"><label>Layout do modelo A4 - 2 vias</label><a class="btn btn-outline" style="width:100%" href="os_layout_modelo.php">✎ Editar layout</a><div class="hint">Edite posição, tamanho, visibilidade e textos dos blocos. A logo é lida das Configurações Gerais do Nexa.</div></div>';

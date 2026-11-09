@@ -280,6 +280,34 @@ if (!function_exists('orc_settings')) {
     return $st->fetch(PDO::FETCH_ASSOC) ?: [];
   }
 }
+if (!function_exists('orc_sequence_info')) {
+  /** Numeração do orçamento: último número usado e o maior já gravado. */
+  function orc_sequence_info(PDO $pdo, int $companyId): array {
+    $st=$pdo->prepare('SELECT last_number FROM orcamento_sequences WHERE company_id=?'); $st->execute([$companyId]);
+    $last=(int)$st->fetchColumn();
+    $st=$pdo->prepare('SELECT COALESCE(MAX(quote_number),0) FROM orcamentos WHERE company_id=?'); $st->execute([$companyId]);
+    $max=(int)$st->fetchColumn();
+    return ['last'=>$last,'max_used'=>$max,'next'=>max($last,$max)+1];
+  }
+}
+
+if (!function_exists('orc_sequence_set_next')) {
+  /** Define o próximo número de orçamento (ex.: continuar a numeração de outro sistema). */
+  function orc_sequence_set_next(PDO $pdo, int $companyId, int $next): void {
+    if ($next < 1 || $next > 999999999) throw new RuntimeException('Informe um número entre 1 e 999.999.999.');
+    $started=!$pdo->inTransaction(); if($started) $pdo->beginTransaction();
+    try {
+      $pdo->prepare('INSERT IGNORE INTO orcamento_sequences(company_id,last_number) VALUES (?,0)')->execute([$companyId]);
+      $pdo->prepare('SELECT last_number FROM orcamento_sequences WHERE company_id=? FOR UPDATE')->execute([$companyId]);
+      $st=$pdo->prepare('SELECT COALESCE(MAX(quote_number),0) FROM orcamentos WHERE company_id=?'); $st->execute([$companyId]);
+      $max=(int)$st->fetchColumn();
+      if ($next <= $max) throw new RuntimeException('O próximo número precisa ser maior que '.$max.', que é o maior orçamento já lançado.');
+      $pdo->prepare('UPDATE orcamento_sequences SET last_number=? WHERE company_id=?')->execute([$next-1,$companyId]);
+      if($started) $pdo->commit();
+    } catch (Throwable $e) { if($started && $pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+  }
+}
+
 if (!function_exists('orc_next_number')) {
   function orc_next_number(PDO $pdo, int $companyId): int {
     $pdo->prepare('INSERT IGNORE INTO orcamento_sequences(company_id,last_number) VALUES (?,0)')->execute([$companyId]);

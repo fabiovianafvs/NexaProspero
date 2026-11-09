@@ -647,6 +647,38 @@ if (!function_exists('os_ensure_defaults')) {
     }
 }
 
+if (!function_exists('os_sequence_info')) {
+    /** Numeração da O.S.: último número usado e o maior já gravado. */
+    function os_sequence_info(PDO $pdo, $companyId)
+    {
+        $companyId = (int)$companyId;
+        $st = $pdo->prepare('SELECT last_number FROM os_sequences WHERE company_id=?'); $st->execute(array($companyId));
+        $last = (int)$st->fetchColumn();
+        $st = $pdo->prepare('SELECT COALESCE(MAX(os_number),0) FROM os_orders WHERE company_id=?'); $st->execute(array($companyId));
+        $max = (int)$st->fetchColumn();
+        return array('last'=>$last,'max_used'=>$max,'next'=>max($last,$max)+1);
+    }
+}
+
+if (!function_exists('os_sequence_set_next')) {
+    /** Define o próximo número de O.S. (ex.: continuar a numeração de outro sistema). */
+    function os_sequence_set_next(PDO $pdo, $companyId, $next)
+    {
+        $companyId = (int)$companyId; $next = (int)$next;
+        if ($next < 1 || $next > 999999999) throw new RuntimeException('Informe um número entre 1 e 999.999.999.');
+        $started = !$pdo->inTransaction(); if ($started) $pdo->beginTransaction();
+        try {
+            $pdo->prepare('INSERT IGNORE INTO os_sequences (company_id,last_number) VALUES (?,0)')->execute(array($companyId));
+            $pdo->prepare('SELECT last_number FROM os_sequences WHERE company_id=? FOR UPDATE')->execute(array($companyId));
+            $st = $pdo->prepare('SELECT COALESCE(MAX(os_number),0) FROM os_orders WHERE company_id=?'); $st->execute(array($companyId));
+            $max = (int)$st->fetchColumn();
+            if ($next <= $max) throw new RuntimeException('O próximo número precisa ser maior que '.$max.', que é a maior O.S. já lançada.');
+            $pdo->prepare('UPDATE os_sequences SET last_number=? WHERE company_id=?')->execute(array($next-1,$companyId));
+            if ($started) $pdo->commit();
+        } catch (Throwable $e) { if ($started && $pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+    }
+}
+
 if (!function_exists('os_next_number')) {
     function os_next_number(PDO $pdo, $companyId)
     {
