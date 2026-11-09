@@ -673,7 +673,16 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
 
     nfse_emitter_xml_add($dom,$inf,'tpAmb',$environment === 'PRODUCAO' ? '1' : '2');
     $timezone = new DateTimeZone(date_default_timezone_get() ?: 'America/Sao_Paulo');
-    $now = new DateTimeImmutable('now',$timezone);
+    $realNow = new DateTimeImmutable('now',$timezone);
+    // Rejeição "data de emissão da DPS não pode ser posterior à data do seu
+    // processamento": basta o relógio do servidor estar alguns segundos à frente
+    // do relógio da Receita. Emite com 2 minutos de folga, sem ficar antes do dia
+    // de competência (dCompet não pode ser posterior à data de emissão).
+    $now = $realNow->modify('-2 minutes');
+    $competenceDay = substr((string)($doc['competence_date'] ?? ''), 0, 10);
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $competenceDay) && $now->format('Y-m-d') < $competenceDay && $realNow->format('Y-m-d') >= $competenceDay) {
+      $now = new DateTimeImmutable($competenceDay . ' 00:00:00', $timezone);
+    }
     nfse_emitter_xml_add($dom,$inf,'dhEmi',$now->format('Y-m-d\TH:i:sP'));
     nfse_emitter_xml_add($dom,$inf,'verAplic','NEXA-1.01');
     nfse_emitter_xml_add($dom,$inf,'serie',(string)(int)nfse_emitter_digits($series));
