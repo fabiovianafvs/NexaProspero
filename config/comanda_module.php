@@ -1155,8 +1155,13 @@ if (!function_exists('comanda_print_agent_touch')) {
       $version = substr($version, 0, 40);
     }
     $ip = substr($ip, 0, 64);
-    $pdo->prepare("UPDATE comanda_print_agents SET machine_name=NULLIF(?,''), agent_version=NULLIF(?,''), last_ip=NULLIF(?,''), last_seen_at=NOW(), updated_at=NOW() WHERE company_id=? AND id=?")
-      ->execute([$machineName, $version, $ip, (int)$agent['company_id'], (int)$agent['id']]);
+    // O agente consulta a fila várias vezes por minuto: só grava o "visto por último"
+    // a cada 20s (a tela considera o agente online por 90s), salvo se algo mudou.
+    // A comparação fica no próprio MySQL (mesmo relógio do NOW()).
+    $pdo->prepare("UPDATE comanda_print_agents SET machine_name=NULLIF(?,''), agent_version=NULLIF(?,''), last_ip=NULLIF(?,''), last_seen_at=NOW(), updated_at=NOW()
+      WHERE company_id=? AND id=? AND (last_seen_at IS NULL OR last_seen_at < NOW() - INTERVAL 20 SECOND
+        OR NOT (machine_name <=> NULLIF(?,'')) OR NOT (agent_version <=> NULLIF(?,'')) OR NOT (last_ip <=> NULLIF(?,'')))")
+      ->execute([$machineName, $version, $ip, (int)$agent['company_id'], (int)$agent['id'], $machineName, $version, $ip]);
   }
 }
 
