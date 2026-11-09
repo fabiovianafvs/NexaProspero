@@ -195,8 +195,8 @@ table{border-collapse:collapse;width:100%}
 .receipts{margin-top:2mm;width:60mm}.receipts th{font-family:"Times New Roman",Times,serif;font-size:8.5pt;text-align:left;padding:0 1mm}.receipts td{font-size:7.8pt;padding:0 1mm}
 .inst-title{font-family:"Times New Roman",Times,serif;font-weight:700;font-size:8.5pt}
 .inst{border-collapse:collapse}.inst thead th{border:1px solid #000;font-family:"Times New Roman",Times,serif;font-size:8.5pt;padding:.4mm 1.5mm}.inst td{font-size:7.8pt;padding:.4mm 1.5mm}
-.declare{margin-top:6mm;font-size:8pt;max-width:95mm}
-.sign{margin-top:9mm;width:95mm;border-top:1px solid #000;font-family:"Times New Roman",Times,serif;font-size:9pt;padding-top:.5mm}
+.declare{margin-top:6mm;font-size:8pt;max-width:100%}
+.sign{margin-top:9mm;width:68mm;max-width:100%;border-top:1px solid #000;font-family:"Times New Roman",Times,serif;font-size:9pt;padding-top:.5mm}
 .sign b{display:block}
 .terms{margin-top:3mm;font-size:8pt;font-weight:700;white-space:pre-wrap;line-height:1.3}
 .terms h4{margin:0 0 1mm;font-size:8.5pt}
