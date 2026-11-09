@@ -161,7 +161,7 @@ if (function_exists('multi_company_context_url')) {
 <title>Duplicata - Pedido #<?= pedido_dup_h($dupDocNumber) ?></title>
 <link rel="stylesheet" href="../assets/nexa-print-actions.css?v=1145197">
 <style>
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
 body{margin:0;background:#eef2f7;color:#000;font-family:Arial,Helvetica,sans-serif}
 @page{size:A4 portrait;margin:8mm}
 .sheet{width:194mm;margin:0 auto;background:#fff;padding:4mm;box-shadow:0 12px 30px rgba(15,23,42,.12);font-size:8.6pt}
