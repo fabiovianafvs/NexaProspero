@@ -136,12 +136,20 @@ if (!function_exists('saas_whatsapp_ensure_schema')) {
   }
 }
 
+if (!function_exists('saas_whatsapp_default_service_url')) {
+  /** Motor novo (leve) quando instalado; senão o serviço local antigo. */
+  function saas_whatsapp_default_service_url(): string {
+    if (!function_exists('whatsapp_default_service_url')) require_once __DIR__ . '/whatsapp_engine.php';
+    return whatsapp_default_service_url();
+  }
+}
+
 if (!function_exists('saas_whatsapp_default_config')) {
   function saas_whatsapp_default_config(): array {
     return [
       'enabled' => false,
       'provider' => 'unofficial',
-      'service_url' => getenv('SAAS_WHATSAPP_SERVICE_URL') ?: (getenv('WHATSAPP_SERVICE_URL') ?: 'http://127.0.0.1:3333'),
+      'service_url' => getenv('SAAS_WHATSAPP_SERVICE_URL') ?: saas_whatsapp_default_service_url(),
       'api_token' => getenv('SAAS_WHATSAPP_API_TOKEN') ?: (getenv('WHATSAPP_API_TOKEN') ?: ''),
       'unofficial_company_id' => (int)(getenv('SAAS_WHATSAPP_COMPANY_ID') ?: saas_whatsapp_default_unofficial_instance_id()),
       'official_graph_version' => getenv('SAAS_WHATSAPP_GRAPH_VERSION') ?: 'v20.0',
@@ -172,7 +180,7 @@ if (!function_exists('saas_whatsapp_load_config')) {
     $cfg['enabled'] = !empty($cfg['enabled']);
     $cfg['provider'] = in_array((string)($cfg['provider'] ?? ''), ['unofficial','official'], true) ? (string)$cfg['provider'] : 'unofficial';
     $cfg['service_url'] = rtrim(trim((string)($cfg['service_url'] ?? '')), '/');
-    if ($cfg['service_url'] === '') $cfg['service_url'] = 'http://127.0.0.1:3333';
+    if ($cfg['service_url'] === '') $cfg['service_url'] = saas_whatsapp_default_service_url();
     $cfg['api_token'] = trim((string)($cfg['api_token'] ?? ''));
     $cfg['unofficial_company_id'] = max(1, (int)($cfg['unofficial_company_id'] ?? saas_whatsapp_default_unofficial_instance_id()));
     $cfg['official_graph_version'] = trim((string)($cfg['official_graph_version'] ?? 'v20.0')) ?: 'v20.0';
@@ -199,7 +207,7 @@ if (!function_exists('saas_whatsapp_save_config')) {
     if (!in_array($provider, ['unofficial','official'], true)) $provider = 'unofficial';
 
     $serviceUrl = rtrim(trim((string)($input['service_url'] ?? '')), '/');
-    if ($serviceUrl === '') $serviceUrl = 'http://127.0.0.1:3333';
+    if ($serviceUrl === '') $serviceUrl = saas_whatsapp_default_service_url();
 
     $graphVersion = trim((string)($input['official_graph_version'] ?? 'v20.0')) ?: 'v20.0';
     if ($graphVersion[0] !== 'v') $graphVersion = 'v' . $graphVersion;
@@ -500,6 +508,10 @@ if (!function_exists('saas_whatsapp_register_unofficial_token')) {
   function saas_whatsapp_register_unofficial_token(array $currentCfg, int $instanceId, string $newToken): array {
     $newToken = trim($newToken);
     if ($newToken === '') return ['ok' => false, 'error' => 'Token vazio.'];
+    // Motor novo (outra VPS): o registro usa o token administrativo do motor.
+    if (!function_exists('whatsapp_engine_admin_token_for_url')) require_once __DIR__ . '/whatsapp_engine.php';
+    $engineToken = whatsapp_engine_admin_token_for_url((string)($currentCfg['service_url'] ?? ''));
+    if ($engineToken !== '') $currentCfg['api_token'] = $engineToken;
     try {
       return saas_whatsapp_unofficial_request($currentCfg, 'POST', '/tokens/upsert', [
         'company_id' => (string)$instanceId,

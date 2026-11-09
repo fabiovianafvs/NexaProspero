@@ -23,7 +23,9 @@ const SUPPORT_WA_DEFAULT_SERVICE = 'http://127.0.0.1:3333';
 
 function support_wa_normalize_service_url(string $url): string {
   $url = rtrim(trim($url), '/');
-  return $url !== '' ? $url : SUPPORT_WA_DEFAULT_SERVICE;
+  // Sem URL salva (ex.: revenda que nunca configurou o WhatsApp) = serviço padrão,
+  // que é o motor novo quando instalado.
+  return $url !== '' ? $url : whatsapp_default_service_url();
 }
 
 function support_wa_valid_session_id(string $value): bool {

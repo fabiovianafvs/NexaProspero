@@ -200,7 +200,7 @@ if (!function_exists('reseller_whatsapp_default_config')) {
       'reseller_company_id' => $resellerCompanyId,
       'enabled' => false,
       'provider' => 'unofficial',
-      'service_url' => getenv('SAAS_WHATSAPP_SERVICE_URL') ?: (getenv('WHATSAPP_SERVICE_URL') ?: 'http://127.0.0.1:3333'),
+      'service_url' => getenv('SAAS_WHATSAPP_SERVICE_URL') ?: (function_exists('saas_whatsapp_default_service_url') ? saas_whatsapp_default_service_url() : (getenv('WHATSAPP_SERVICE_URL') ?: 'http://127.0.0.1:3333')),
       'api_token' => '',
       'unofficial_instance_id' => reseller_whatsapp_default_instance_id($resellerCompanyId),
       'official_graph_version' => 'v20.0',
@@ -230,6 +230,7 @@ if (!function_exists('reseller_whatsapp_load_config')) {
     $cfg['enabled'] = !empty($cfg['enabled']);
     $cfg['provider'] = in_array((string)$cfg['provider'], ['unofficial','official'], true) ? (string)$cfg['provider'] : 'unofficial';
     $cfg['service_url'] = rtrim(trim((string)$cfg['service_url']), '/');
+    if ($cfg['service_url'] === '') $cfg['service_url'] = (string)reseller_whatsapp_default_config($resellerCompanyId)['service_url'];
     $rawInstanceId = preg_replace('/\D+/', '', trim((string)$cfg['unofficial_instance_id'])) ?: '';
     $cfg['unofficial_instance_id'] = ($rawInstanceId !== '' && $rawInstanceId !== '0') ? $rawInstanceId : reseller_whatsapp_default_instance_id($resellerCompanyId);
     $cfg['auto_send_credentials'] = !empty($cfg['auto_send_credentials']);
