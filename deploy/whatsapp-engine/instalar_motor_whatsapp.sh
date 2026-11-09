@@ -29,6 +29,7 @@ KEY=/root/.ssh/nexa_wa_ed25519
 SSHO=(-i "$KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
 SCPO=(-i "$KEY" -P "$SSH_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
 step() { echo; echo "== $* =="; }
+trap 'echo; echo "ERRO (linha $LINENO): $BASH_COMMAND"; echo "Mande um print desta tela para o Claude."' ERR
 
 step "Acesso à VPS do WhatsApp ($WA_IP)"
 [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -f "$KEY" -C "nexa-sistema->whatsapp"
@@ -71,6 +72,7 @@ API_TOKEN=$API_TOKEN
 WEBHOOK_SECRET=$WEBHOOK_SECRET
 ATUALIZAR_BAILEYS=${ATUALIZAR_BAILEYS:-0}
 BAILEYS_VERSION=${BAILEYS_VERSION:-}
+SSH_PORT=$SSH_PORT
 EOF
 umask 022
 cp "$REPO/whatsapp-engine/server.mjs" "$REPO/whatsapp-engine/package.json" "$DIR/remoto_vps_whatsapp.sh" "$DIR/nexa-wa-engine.service" "$TMP/"

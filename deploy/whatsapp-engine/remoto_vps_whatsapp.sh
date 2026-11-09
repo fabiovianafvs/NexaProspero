@@ -15,6 +15,7 @@ WG_IF=wg-nexawa
 WA_TUN_IP=10.77.0.2
 MAIN_TUN_IP=10.77.0.1
 step() { echo; echo "== $* =="; }
+trap 'echo; echo "ERRO na VPS do WhatsApp (linha $LINENO): $BASH_COMMAND"' ERR
 
 step "Pacotes do sistema"
 apt-get update -qq
@@ -90,7 +91,7 @@ systemctl enable "wg-quick@$WG_IF" >/dev/null 2>&1
 systemctl restart "wg-quick@$WG_IF"
 
 step "Firewall (só SSH e o túnel)"
-SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
+# A porta do SSH vem da VPS do sistema (é a mesma usada para chegar aqui).
 SSH_PORT="${SSH_PORT:-22}"
 ufw allow "$SSH_PORT/tcp" >/dev/null
 ufw allow from "$MAIN_IP" to any port 51820 proto udp >/dev/null
