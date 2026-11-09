@@ -550,6 +550,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'bb42fb0df39e5e91951017c8acf157fdd89d3a8139e5bc73ccf1371364d2f84a',
         'order' => 202611090100,
       ],
+      [
+        'id' => '20261110_whatsapp_atendimento_v1',
+        'module' => 'whatsapp_chatbot',
+        'version' => 202611100100,
+        'label' => 'WhatsApp - Atendimento (fluxo, setores e conversas)',
+        'description' => 'Cria o fluxo do chatbot em árvore (menus e submenus), os setores de atendimento com seus usuários e prepara as conversas para a tela de atendimento (fila, atendente, arquivos).',
+        'file' => __DIR__ . '/../db/20261110_whatsapp_atendimento_v1.sql',
+        'sha256' => '39935eabc4904c0981fdb568fb534a87f64f7da223daecb0fdd2814a0454cec3',
+        'order' => 202611100100,
+      ],
     ];
   }
 }

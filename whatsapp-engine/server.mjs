@@ -31,12 +31,13 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.1';
+const SERVICE_VERSION = 'engine-1.2';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
 const AUTH_DIR = path.join(DATA_DIR, 'auth');
 const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
+const MEDIA_DIR = path.join(DATA_DIR, 'media');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const GLOBAL_TOKEN = String(process.env.API_TOKEN || '').trim();
 const SEND_MIN_INTERVAL_MS = Math.max(300, Number(process.env.SEND_MIN_INTERVAL_MS || 1500));
@@ -46,7 +47,8 @@ const WEBHOOK_URL = String(process.env.INBOUND_WEBHOOK_URL || '').trim();
 const WEBHOOK_HOST = String(process.env.INBOUND_WEBHOOK_HOST || '').trim();
 const WEBHOOK_SECRET = String(process.env.INBOUND_WEBHOOK_SECRET || '').trim();
 const MAX_BODY_BYTES = 20 * 1024 * 1024;
-const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 const WAIT_READY_MS = 25000;
 
 const log = (...args) => console.log(new Date().toISOString(), ...args);
@@ -81,6 +83,7 @@ const initAuthCreds = pick('initAuthCreds');
 const makeCacheableSignalKeyStore = pick('makeCacheableSignalKeyStore');
 const fetchLatestBaileysVersion = pick('fetchLatestBaileysVersion');
 const proto = pick('proto');
+const downloadMediaMessage = pick('downloadMediaMessage');
 const BAILEYS_VERSION = (() => {
   try {
     const pkgFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node_modules', BAILEYS_PKG, 'package.json');
@@ -449,7 +452,7 @@ async function startSession(sid) {
   sock.ev.on('messages.upsert', ({ messages, type }) => {
     if (type !== 'notify' || !settings.inbound[sid] || !WEBHOOK_URL) return;
     for (const msg of messages || []) {
-      try { handleInbound(state, msg); } catch (error) { warn(`[empresa ${sid}] Falha ao tratar mensagem recebida:`, error?.message || error); }
+      handleInboundOrdered(state, msg);
     }
   });
 
@@ -565,28 +568,72 @@ function unwrapMessage(message) {
   return m;
 }
 
-function handleInbound(state, msg) {
+// Mídia recebida: o motor baixa e guarda por pouco tempo em DATA_DIR/media; o
+// sistema busca o arquivo por GET /media (pelo túnel) assim que recebe o aviso.
+const MEDIA_TYPES = { imageMessage: 'image', audioMessage: 'audio', videoMessage: 'video', documentMessage: 'document', stickerMessage: 'sticker' };
+
+function mediaFile(sid, id) {
+  return path.join(MEDIA_DIR, safeId(sid), String(id).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 80));
+}
+
+async function storeMedia(state, msg, m, type) {
+  const node = m[Object.keys(MEDIA_TYPES).find((k) => MEDIA_TYPES[k] === type)] || {};
+  const mimetype = String(node.mimetype || '').split(';')[0].trim() || 'application/octet-stream';
+  const declared = Number(node.fileLength?.low ?? node.fileLength ?? 0) || 0;
+  const filename = String(node.fileName || '').slice(0, 150);
+  const id = String(msg?.key?.id || '');
+  if (!id || typeof downloadMediaMessage !== 'function') return { mimetype, filename, size: declared, error: 'indisponivel' };
+  if (declared > MAX_MEDIA_BYTES) return { mimetype, filename, size: declared, error: 'grande' };
+  try {
+    const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: baileysLogger, reuploadRequest: state.sock?.updateMediaMessage });
+    if (!buffer?.length) return { mimetype, filename, size: declared, error: 'vazio' };
+    if (buffer.length > MAX_MEDIA_BYTES) return { mimetype, filename, size: buffer.length, error: 'grande' };
+    const file = mediaFile(state.sid, id);
+    await fsp.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    await fsp.writeFile(file, buffer, { mode: 0o600 });
+    await fsp.writeFile(file + '.json', JSON.stringify({ mimetype, filename }), { mode: 0o600 });
+    return { id, mimetype, filename, size: buffer.length };
+  } catch (error) {
+    warn(`[empresa ${state.sid}] Não foi possível baixar a mídia ${id}:`, error?.message || error);
+    return { mimetype, filename, size: declared, error: 'falha' };
+  }
+}
+
+// Apaga mídias com mais de 1 dia (o sistema já copiou para a pasta dele).
+async function cleanupMedia() {
+  const limit = Date.now() - 24 * 3600 * 1000;
+  let dirs = [];
+  try { dirs = await fsp.readdir(MEDIA_DIR); } catch (_) { return; }
+  for (const dir of dirs) {
+    const full = path.join(MEDIA_DIR, dir);
+    let files = [];
+    try { files = await fsp.readdir(full); } catch (_) { continue; }
+    for (const f of files) {
+      try { const st = await fsp.stat(path.join(full, f)); if (st.mtimeMs < limit) await fsp.unlink(path.join(full, f)); } catch (_) {}
+    }
+  }
+}
+
+// Mantém a ordem das mensagens de cada conversa (a mídia demora para baixar).
+const inboundChains = new Map();
+function handleInboundOrdered(state, msg) {
+  const k = `${state.sid}|${msg?.key?.remoteJid || ''}`;
+  const next = (inboundChains.get(k) || Promise.resolve())
+    .then(() => handleInbound(state, msg))
+    .catch((error) => warn(`[empresa ${state.sid}] Falha ao tratar mensagem recebida:`, error?.message || error));
+  inboundChains.set(k, next);
+  next.finally(() => { if (inboundChains.get(k) === next) inboundChains.delete(k); });
+}
+
+async function handleInbound(state, msg) {
   const key = msg?.key || {};
   const remote = String(key.remoteJid || '');
   if (!remote || remote.endsWith('@g.us') || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) return;
-  if (key.fromMe) {
-    // Mensagem digitada por uma pessoa no celular/WhatsApp Web da empresa (as
-    // enviadas pela API ficam em state.recent): avisa o sistema para o chatbot
-    // ficar em silêncio nessa conversa.
-    const id = String(key.id || '');
-    if (!id || state.recent.has(id) || !msg.message || msg.message.protocolMessage || msg.message.reactionMessage) return;
-    const altOwn = String(key.remoteJidAlt || '');
-    const pnOwn = remote.endsWith('@s.whatsapp.net') ? remote : (altOwn.endsWith('@s.whatsapp.net') ? altOwn : '');
-    deliverWebhook({
-      event: 'human_reply',
-      company_id: state.sid,
-      message_id: id,
-      from: pnOwn ? digits(pnOwn.split('@')[0].split(':')[0]) : '',
-      reply_jid: remote,
-      timestamp: Number(msg.messageTimestamp?.low ?? msg.messageTimestamp ?? 0) || Math.floor(Date.now() / 1000),
-    });
-    return;
-  }
+  const id = String(key.id || '');
+  // Mensagem própria: só interessa a digitada por uma pessoa no celular/WhatsApp
+  // Web da empresa (as enviadas pela API ficam em state.recent).
+  if (key.fromMe && (!id || state.recent.has(id))) return;
+  if (!msg.message || msg.message.protocolMessage || msg.message.reactionMessage) return;
   const m = unwrapMessage(msg.message);
   let type = 'text';
   let text = m.conversation || m.extendedTextMessage?.text || '';
@@ -594,29 +641,30 @@ function handleInbound(state, msg) {
   if (!text && m.listResponseMessage) { type = 'list'; text = m.listResponseMessage.singleSelectReply?.selectedRowId || m.listResponseMessage.title || ''; }
   if (!text && m.templateButtonReplyMessage) { type = 'button'; text = m.templateButtonReplyMessage.selectedId || ''; }
   if (m.imageMessage) { type = 'image'; text = text || m.imageMessage.caption || ''; }
-  else if (m.documentMessage) { type = 'document'; text = text || m.documentMessage.caption || m.documentMessage.fileName || ''; }
+  else if (m.documentMessage) { type = 'document'; text = text || m.documentMessage.caption || ''; }
   else if (m.audioMessage) type = 'audio';
   else if (m.videoMessage) { type = 'video'; text = text || m.videoMessage.caption || ''; }
   else if (m.stickerMessage) type = 'sticker';
-  else if (m.locationMessage) type = 'location';
-  else if (m.contactMessage) type = 'contact';
-  if (!text && type === 'text') return; // protocolo, reação, etc.
+  else if (m.locationMessage) { type = 'location'; text = `https://maps.google.com/?q=${m.locationMessage.degreesLatitude},${m.locationMessage.degreesLongitude}`; }
+  else if (m.contactMessage) { type = 'contact'; text = String(m.contactMessage.displayName || '') + (m.contactMessage.vcard ? '\n' + String(m.contactMessage.vcard).slice(0, 1000) : ''); }
+  if (!text && type === 'text') return; // reação, enquete etc.
 
   // Contatos novos podem vir como LID; o número real vem em remoteJidAlt/senderPn.
   const alt = String(key.remoteJidAlt || key.senderPn || msg.senderPn || '');
   const pnJid = remote.endsWith('@s.whatsapp.net') ? remote : (alt.endsWith('@s.whatsapp.net') ? alt : '');
-  const ts = Number(msg.messageTimestamp?.low ?? msg.messageTimestamp ?? 0) || Math.floor(Date.now() / 1000);
-  deliverWebhook({
-    event: 'message',
+  const payload = {
+    event: key.fromMe ? 'human_reply' : 'message',
     company_id: state.sid,
-    message_id: String(key.id || ''),
+    message_id: id,
     from: pnJid ? digits(pnJid.split('@')[0].split(':')[0]) : '',
     reply_jid: remote,
-    push_name: String(msg.pushName || ''),
+    push_name: key.fromMe ? '' : String(msg.pushName || ''),
     type,
     text: String(text).slice(0, 4000),
-    timestamp: ts,
-  });
+    timestamp: Number(msg.messageTimestamp?.low ?? msg.messageTimestamp ?? 0) || Math.floor(Date.now() / 1000),
+  };
+  if (['image', 'audio', 'video', 'document', 'sticker'].includes(type)) payload.media = await storeMedia(state, msg, m, type);
+  deliverWebhook(payload);
 }
 
 function postJson(urlString, body) {
@@ -809,11 +857,33 @@ const routes = {
     if (!b64) return sendJson(res, 400, { ok: false, error: 'Arquivo Base64 não informado.' });
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return sendJson(res, 400, { ok: false, error: 'Arquivo Base64 inválido.' });
     const buffer = Buffer.from(b64, 'base64');
-    if (!buffer.length || buffer.length > MAX_DOCUMENT_BYTES) return sendJson(res, 413, { ok: false, error: 'O documento deve possuir no máximo 8 MB.' });
-    const content = { document: buffer, mimetype, fileName: filename };
-    if (caption) content.caption = caption;
+    if (!buffer.length || buffer.length > MAX_DOCUMENT_BYTES) return sendJson(res, 413, { ok: false, error: 'O arquivo deve possuir no máximo 16 MB.' });
+    // kind: document (padrão), image, video ou audio.
+    const kind = String(body.kind || 'document');
+    let content;
+    if (kind === 'image') content = { image: buffer, mimetype };
+    else if (kind === 'video') content = { video: buffer, mimetype };
+    else if (kind === 'audio') content = { audio: buffer, mimetype, ptt: Boolean(body.ptt) };
+    else content = { document: buffer, mimetype, fileName: filename };
+    if (caption && kind !== 'audio') content.caption = caption;
     const sent = await sendContent(sid, to, body.jid, content);
     sendJson(res, 200, { ok: true, company_id: sid, to, filename, size: buffer.length, jid: sent.jid, message_id: sent.id });
+  },
+
+  'GET /media': async (req, res, _body, query) => {
+    const sid = safeId(query.get('company_id'));
+    if (!isCompany(req, sid)) return denied(res);
+    const file = mediaFile(sid, String(query.get('id') || ''));
+    let meta = {};
+    let data;
+    try {
+      data = await fsp.readFile(file);
+      meta = JSON.parse(await fsp.readFile(file + '.json', 'utf8'));
+    } catch (_) {
+      return sendJson(res, 404, { ok: false, error: 'Mídia não encontrada.' });
+    }
+    res.writeHead(200, { 'Content-Type': String(meta.mimetype || 'application/octet-stream'), 'Content-Length': data.length, 'Cache-Control': 'no-store' });
+    res.end(data);
   },
 
   'POST /logout': async (req, res, body) => {
@@ -958,6 +1028,8 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 server.listen(PORT, HOST, async () => {
   log(`Motor WhatsApp Nexa (${SERVICE_VERSION}, ${BAILEYS_PKG} ${BAILEYS_VERSION}) ouvindo em http://${HOST}:${PORT}`);
   if (!GLOBAL_TOKEN) warn('ATENÇÃO: API_TOKEN não definido; rotas administrativas ficam bloqueadas.');
+  cleanupMedia().catch(() => {});
+  setInterval(() => cleanupMedia().catch(() => {}), 3600 * 1000).unref();
   const ids = storedIds().filter((sid) => !settings.stopped[sid]);
   log(`Reabrindo ${ids.length} sessão(ões) salvas, uma a cada ${STARTUP_STAGGER_MS} ms.`);
   for (const sid of ids) {
