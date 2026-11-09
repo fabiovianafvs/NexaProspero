@@ -2,9 +2,11 @@
 declare(strict_types=1);
 
 // Motor de WhatsApp leve (Baileys, sem Chrome) rodando na VPS própria do
-// WhatsApp. A URL, o token administrativo e o segredo do webhook ficam no banco
-// (app_config da plataforma, company_id = 0, chave 'whatsapp_engine'), gravados
-// pelo instalador deploy/whatsapp-engine/instalar_motor_whatsapp.sh.
+// WhatsApp. A URL, o token administrativo e o segredo do webhook são da
+// infraestrutura (não de uma empresa) e ficam em /etc/nexa/whatsapp_engine.env
+// (root:www-data 640), gravado pelo instalador
+// deploy/whatsapp-engine/instalar_motor_whatsapp.sh. Na homologação o motor
+// nunca é usado (WhatsApp fica sem configuração lá).
 //
 // A troca é feita empresa por empresa: a empresa passa a usar o motor novo
 // quando o seu service_url (config 'whatsapp') aponta para a URL do motor.
@@ -12,18 +14,29 @@ declare(strict_types=1);
 require_once __DIR__ . '/config_store.php';
 require_once __DIR__ . '/whatsapp_service.php';
 
-const WHATSAPP_ENGINE_CFG_KEY = 'whatsapp_engine';
 const WHATSAPP_LEGACY_SERVICE_URL = 'http://127.0.0.1:3333';
+
+if (!function_exists('whatsapp_engine_env_file')) {
+  function whatsapp_engine_env_file(): string {
+    return (string)(getenv('NEXA_WA_ENGINE_FILE') ?: '/etc/nexa/whatsapp_engine.env');
+  }
+}
 
 if (!function_exists('whatsapp_engine_config')) {
   function whatsapp_engine_config(PDO $pdo): array {
     static $cache = null;
     if ($cache !== null) return $cache;
     $cfg = ['url' => '', 'token' => '', 'webhook_secret' => '', 'installed_at' => ''];
-    try {
-      $saved = config_store_get($pdo, 0, WHATSAPP_ENGINE_CFG_KEY);
-      if (is_array($saved)) $cfg = array_merge($cfg, $saved);
-    } catch (Throwable $e) {}
+    if (strtolower(trim((string)(getenv('NEXA_AMBIENTE') ?: ''))) === 'homologacao') return $cache = $cfg;
+    $file = whatsapp_engine_env_file();
+    $lines = is_file($file) && is_readable($file) ? @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : false;
+    $map = ['NEXA_WA_URL' => 'url', 'NEXA_WA_TOKEN' => 'token', 'NEXA_WA_SECRET' => 'webhook_secret', 'NEXA_WA_INSTALLED_AT' => 'installed_at'];
+    foreach (is_array($lines) ? $lines : [] as $line) {
+      $pos = strpos((string)$line, '=');
+      if ($pos === false) continue;
+      $name = trim(substr((string)$line, 0, $pos));
+      if (isset($map[$name])) $cfg[$map[$name]] = trim(trim(substr((string)$line, $pos + 1)), "\"'");
+    }
     $cfg['url'] = rtrim(trim((string)$cfg['url']), '/');
     $cfg['token'] = trim((string)$cfg['token']);
     $cfg['webhook_secret'] = trim((string)$cfg['webhook_secret']);

@@ -119,7 +119,23 @@ case "$HEALTH" in
 esac
 
 step "Registrando o motor no sistema"
-NEXA_WA_URL="http://10.77.0.2:3333" NEXA_WA_TOKEN="$API_TOKEN" NEXA_WA_SECRET="$WEBHOOK_SECRET" php "$REPO/workers/whatsapp_engine_config.php"
+ENGINE_FILE=/etc/nexa/whatsapp_engine.env
+INSTALLED_AT="$(sed -n 's/^NEXA_WA_INSTALLED_AT=//p' "$ENGINE_FILE" 2>/dev/null | head -1 || true)"
+[ -n "$INSTALLED_AT" ] || INSTALLED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
+install -d -m 0755 /etc/nexa
+umask 027
+{
+  echo "# Motor de WhatsApp leve (gerado pelo instalador; não editar à mão)"
+  echo "NEXA_WA_URL=http://10.77.0.2:3333"
+  echo "NEXA_WA_TOKEN=$API_TOKEN"
+  echo "NEXA_WA_SECRET=$WEBHOOK_SECRET"
+  echo "NEXA_WA_INSTALLED_AT=$INSTALLED_AT"
+} > "$ENGINE_FILE.tmp"
+umask 022
+chown root:www-data "$ENGINE_FILE.tmp"
+chmod 0640 "$ENGINE_FILE.tmp"
+mv "$ENGINE_FILE.tmp" "$ENGINE_FILE"
+php "$REPO/workers/whatsapp_engine_config.php" --mostrar
 
 echo
 echo "Pronto! Agora, na Central SaaS > WhatsApp > Motor novo (leve), passe as empresas"
