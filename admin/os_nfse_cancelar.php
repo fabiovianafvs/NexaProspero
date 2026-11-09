@@ -65,6 +65,6 @@ try{
     throw new RuntimeException('Somente NFS-e autorizada ou cancelada pode ser processada.');
   }
   $result=nexa_cancel_order($pdo,$cid,$pedidoId,$reason,'MANUAL',$docId,(int)(auth_user_id()??0));
-  if(strtoupper((string)($result['status']??'COMPLETED'))!=='COMPLETED' && empty($result['already_processed']))throw new RuntimeException('Cancelamento fiscal concluído; estorno comercial pendente. Verifique os lançamentos antes de refaturar.');
+  if(strtoupper((string)($result['status']??'COMPLETED'))!=='COMPLETED' && empty($result['already_processed']))throw new RuntimeException('Cancelamento fiscal concluído; estorno comercial pendente: '.trim((string)($result['warning']??'verifique os lançamentos')).' Depois de ajustar, clique novamente em Cancelar NFS-e / pedido para concluir o estorno.');
   $redirect('ok','NFS-e cancelada e pedido estornado. A(s) O.S. vinculada(s) foram liberadas para novo faturamento.');
 }catch(Throwable $e){error_log('[Nexa OS cancelar NFS-e] '.$e->getMessage());$redirect('err',$e->getMessage());}

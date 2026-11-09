@@ -148,7 +148,12 @@ if (!function_exists('nexa_cancel_reverse_stock')) {
     if (!$rows) {
       $hasItems = false;
       if (nexa_cancel_table_exists($pdo, 'pedido_itens')) {
-        $stItems = $pdo->prepare('SELECT COUNT(*) FROM pedido_itens WHERE company_id=? AND pedido_id=? AND produto_id IS NOT NULL AND qtd>0');
+        // Serviços (ex.: pedido de O.S. só com serviços / NFS-e) não movimentam
+        // estoque: não podem deixar o estorno "pendente" por falta de baixa.
+        $serviceFilter = nexa_cancel_column_exists($pdo, 'produtos', 'is_service')
+          ? ' AND NOT EXISTS (SELECT 1 FROM produtos pr WHERE pr.company_id=pedido_itens.company_id AND pr.id=pedido_itens.produto_id AND COALESCE(pr.is_service,0)=1)'
+          : '';
+        $stItems = $pdo->prepare('SELECT COUNT(*) FROM pedido_itens WHERE company_id=? AND pedido_id=? AND produto_id IS NOT NULL AND qtd>0' . $serviceFilter);
         $stItems->execute([$companyId, $orderId]);
         $hasItems = (int)$stItems->fetchColumn() > 0;
       }
