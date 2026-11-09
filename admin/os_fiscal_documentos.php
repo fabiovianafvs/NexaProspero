@@ -138,8 +138,9 @@ foreach($orders as $o){
         echo '<details style="margin-top:7px"><summary style="color:#b42318;cursor:pointer;font-weight:800">Cancelar NFS-e / pedido</summary>';
         echo '<form method="post" action="os_nfse_cancelar.php" style="display:grid;gap:5px;margin-top:8px">';
         echo '<input type="hidden" name="csrf" value="'.os_e($csrf).'"><input type="hidden" name="os_id" value="'.$oid.'"><input type="hidden" name="doc_id" value="'.(int)$nfseD['id'].'">';
-        echo '<label class="small">Motivo (mínimo 15 caracteres)<input name="motivo" maxlength="255" minlength="15" required placeholder="Motivo do cancelamento"></label><label class="small">Digite CANCELAR<input name="confirmacao" required autocomplete="off" placeholder="CANCELAR"></label>';
-        echo '<button class="btn btn-danger btn-sm" onclick="return confirm(\'Confirmar solicitação de cancelamento FISCAL e estorno COMERCIAL?\')">Confirmar cancelamento</button></form><div class="small muted">A O.S. só será liberada após a confirmação fiscal e o estorno comercial. Ambiente Nacional não possui cancelamento automático neste fluxo.</div></details>';
+        echo '<label class="small">Motivo fiscal<select name="motivo_codigo"><option value="1">1 - Erro na emissão</option><option value="2">2 - Serviço não prestado</option><option value="9" selected>9 - Outros</option></select></label>';
+        echo '<label class="small">Justificativa (mínimo 15 caracteres)<input name="motivo" maxlength="255" minlength="15" required placeholder="Motivo do cancelamento"></label><label class="small">Digite CANCELAR<input name="confirmacao" required autocomplete="off" placeholder="CANCELAR"></label>';
+        echo '<button class="btn btn-danger btn-sm" onclick="return confirm(\'Confirmar solicitação de cancelamento FISCAL e estorno COMERCIAL?\')">Confirmar cancelamento</button></form><div class="small muted">A O.S. só será liberada após a confirmação fiscal e o estorno comercial.</div></details>';
     }
     echo '</td><td class="nowrap"><a class="btn btn-outline btn-sm" href="os_faturar.php?id='.$oid.'">Gerenciar fiscal</a></td></tr>';
 }

@@ -131,7 +131,7 @@ $incomplete = is_array($readiness['incomplete_products'] ?? null) ? $readiness['
 $profiles = is_array($readiness['profiles'] ?? null) ? $readiness['profiles'] : [];
 $docVersion = is_array($readiness['documentation'] ?? null) ? $readiness['documentation'] : [];
 $environment = strtoupper((string)($readiness['environment'] ?? 'HOMOLOGACAO'));
-$productionRequiresConfirmation = !$nfseF11 && $environment === 'PRODUCAO' && $providerCode === 'PRONIM';
+$productionRequiresConfirmation = !$nfseF11 && $environment === 'PRODUCAO';
 $productionLocked = $nfseF11
   ? $environment !== 'HOMOLOGACAO'
   : ($environment === 'PRODUCAO' && $providerCode !== 'PRONIM' && !nfse_provider_production_enabled($pdo, $cid));
@@ -322,10 +322,10 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
         <?php endif; ?>
 
 
-        <?php if ($status === 'AUTORIZADA' && ((!$nfseF11 && $providerCode === 'PRONIM') || $nfseCancelF11Allowed)): ?>
+        <?php if ($status === 'AUTORIZADA' && (!$nfseF11 || $nfseCancelF11Allowed)): ?>
           <details style="width:100%;margin-top:8px">
             <summary class="btn" style="display:inline-flex;cursor:pointer"><?= $nfseF11 ? 'Cancelar NFS-e · Homologação' : 'Cancelar NFS-e' ?></summary>
-            <form method="post" action="<?= fiscal_h($nfseActionUrl) ?>" style="margin-top:12px;display:grid;grid-template-columns:minmax(180px,260px) minmax(300px,1fr);gap:10px;align-items:end" onsubmit="return confirm('ATENÇÃO: o cancelamento será enviado ao ISS Digital e terá efeito fiscal. Confirma o cancelamento da NFS-e <?= fiscal_h((string)($existingDocument['nfse_number'] ?? '')) ?>?');">
+            <form method="post" action="<?= fiscal_h($nfseActionUrl) ?>" style="margin-top:12px;display:grid;grid-template-columns:minmax(180px,260px) minmax(300px,1fr);gap:10px;align-items:end" onsubmit="return confirm('ATENÇÃO: o cancelamento será enviado à <?= $existingDocProvider === 'PRONIM' ? 'prefeitura (ISS Digital)' : 'Receita (Ambiente Nacional)' ?> e terá efeito fiscal. Confirma o cancelamento da NFS-e <?= fiscal_h((string)($existingDocument['nfse_number'] ?? '')) ?>?');">
               <input type="hidden" name="csrf_token" value="<?= fiscal_h($csrf) ?>">
             <?php if ($nfseF11): ?><input type="hidden" name="mc_csrf" value="<?= fiscal_h($nfseMcCsrf) ?>"><?php endif; ?>
               <input type="hidden" name="action" value="cancel">

@@ -24,7 +24,7 @@ try{
   $reason=trim((string)($_POST['motivo']??''));
   $reasonLength=function_exists('mb_strlen')?mb_strlen($reason,'UTF-8'):strlen($reason);
   if($reasonLength<15||$reasonLength>255)throw new RuntimeException('Informe um motivo entre 15 e 255 caracteres.');
-  $reasonCode='9';
+  $reasonCode=in_array((string)($_POST['motivo_codigo']??'9'),['1','2','9'],true)?(string)$_POST['motivo_codigo']:'9';
   $s=$pdo->prepare("SELECT * FROM fiscal_documents WHERE company_id=? AND id=? AND model='NFSE' AND direction='SAIDA' LIMIT 1");
   $s->execute([$cid,$docId]);$doc=$s->fetch(PDO::FETCH_ASSOC)?:null;
   if(!$doc)throw new RuntimeException('NFS-e não encontrada nesta empresa.');
@@ -58,7 +58,6 @@ try{
   // Só libera a O.S. após cancelamento confirmado no provedor e estorno comercial concluído.
   $status=strtoupper(trim((string)$doc['status']));
   if($status==='AUTORIZADA'){
-    if(nfse_provider_document_code($pdo,$cid,$docId)!=='PRONIM')throw new RuntimeException('Cancelamento automático ainda não implementado para o Ambiente Nacional. Nenhum dado foi alterado. Regularize a nota pelo procedimento fiscal permitido.');
     if(strtoupper((string)$doc['environment'])==='PRODUCAO' && !defined('NEXA_NFSE_PRONIM_PRODUCTION_CONFIRMED'))define('NEXA_NFSE_PRONIM_PRODUCTION_CONFIRMED',true);
     $result=nfse_provider_cancel_document($pdo,$cid,$docId,$reasonCode,$reason);
     if(empty($result['ok']))throw new RuntimeException((string)($result['message']??'Provedor fiscal não confirmou o cancelamento. Consulte a situação antes de repetir.'));

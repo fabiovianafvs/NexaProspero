@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/nfse_emitter.php';
 require_once __DIR__ . '/nfse_pronim.php';
+require_once __DIR__ . '/nfse_nacional_cancel.php';
 
 if (!function_exists('nfse_provider_normalize')) {
   function nfse_provider_normalize($value): string {
@@ -161,7 +162,8 @@ if (!function_exists('nfse_provider_query_by_key')) {
 if (!function_exists('nfse_provider_cancel_document')) {
   function nfse_provider_cancel_document(PDO $pdo, int $companyId, int $docId, string $reasonCode, string $reason): array {
     $provider = nfse_provider_document_code($pdo, $companyId, $docId);
-    if ($provider !== 'PRONIM') throw new RuntimeException('O cancelamento implementado nesta etapa é exclusivo do provider Pronim/GOVBR; o emissor Nacional permanece inalterado.');
-    return nfse_pronim_cancel_document($pdo, $companyId, $docId, $reasonCode, $reason);
+    return $provider === 'PRONIM'
+      ? nfse_pronim_cancel_document($pdo, $companyId, $docId, $reasonCode, $reason)
+      : nfse_nacional_cancel_document($pdo, $companyId, $docId, $reasonCode, $reason);
   }
 }

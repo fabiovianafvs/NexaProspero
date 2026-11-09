@@ -276,9 +276,6 @@ try {
       if (strtoupper(trim((string)($fiscalDoc['model'] ?? ''))) !== 'NFSE') continue;
       $docId = (int)($fiscalDoc['id'] ?? 0);
       if ($docId <= 0) continue;
-      if (nfse_provider_document_code($pdo,(int)COMPANY_ID,$docId) !== 'PRONIM') {
-        throw new RuntimeException('O pedido possui NFS-e autorizada por um provedor cujo cancelamento automático ainda não está habilitado. Cancele a NFS-e primeiro e tente novamente.');
-      }
       if (!$autoCancelFiscalConfirmed) {
         throw new RuntimeException('Confirme o cancelamento fiscal automático da NFS-e antes de cancelar o pedido.');
       }

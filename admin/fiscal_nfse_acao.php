@@ -232,7 +232,7 @@ try {
     if ($docId <= 0) throw new RuntimeException('Documento NFS-e não informado para cancelamento.');
     $doc = nfse_emitter_document_by_id($pdo, $cid, $docId);
     if (!$doc) throw new RuntimeException('Documento NFS-e não encontrado.');
-    if (nfse_provider_document_code($pdo,$cid,$docId) !== 'PRONIM') throw new RuntimeException('Cancelamento desta etapa disponível somente para Pronim/GOVBR.');
+    $cancelProvider = nfse_provider_document_code($pdo,$cid,$docId);
     $env = strtoupper(trim((string)($doc['environment'] ?? '')));
     if ($env === 'PRODUCAO') {
       $confirmation = strtoupper(trim((string)($_POST['cancel_confirmation'] ?? '')));
@@ -242,7 +242,7 @@ try {
     $reasonCode = trim((string)($_POST['cancel_reason_code'] ?? ''));
     $reason = trim((string)($_POST['cancel_reason'] ?? ''));
     $result = nfse_provider_cancel_document($pdo,$cid,$docId,$reasonCode,$reason);
-    if (!empty($result['ok'])) nfse_action_redirect($returnTo,'ok','NFS-e cancelada com sucesso no Pronim / GOVBR - ISS Digital. O XML do evento foi armazenado no histórico fiscal.');
+    if (!empty($result['ok'])) nfse_action_redirect($returnTo,'ok',($cancelProvider === 'PRONIM' ? 'NFS-e cancelada com sucesso no Pronim / GOVBR - ISS Digital.' : 'NFS-e cancelada com sucesso no Ambiente Nacional.') . ' O XML do evento foi armazenado no histórico fiscal.');
     $message = (string)($result['message'] ?? 'O cancelamento não foi confirmado.');
     if (!empty($result['ambiguous'])) $message .= ' Não repita o cancelamento sem consultar a situação no provedor/portal.';
     nfse_action_redirect($returnTo,'err',$message);
