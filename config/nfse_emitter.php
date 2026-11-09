@@ -276,6 +276,25 @@ if (!function_exists('nfse_emitter_order_context')) {
           'bairro'=>['district','bairro'], 'cidade'=>['city','cidade'], 'city_ibge'=>['city_ibge','codigo_ibge'],
           'uf'=>['state','uf'], 'municipal_registration'=>['municipal_registration','inscricao_municipal']
         ];
+        // Endereço do tomador: o cadastro de Pessoas é a fonte oficial. O pedido
+        // guarda uma cópia do endereço do dia em que foi feito; se o cadastro foi
+        // corrigido depois (ex.: CEP geral 33200-000 trocado pelo CEP da rua), a
+        // DPS continuava saindo com o endereço antigo do pedido. Quando o cadastro
+        // tem endereço completo (CEP + município IBGE), usa o bloco inteiro dele,
+        // sem misturar com o do pedido (CEP de uma cidade e município de outra).
+        $personZip = nfse_emitter_digits(nfse_emitter_value($person, ['zip_code','cep'], ''));
+        $personIbge = nfse_emitter_digits(nfse_emitter_value($person, ['city_ibge','codigo_ibge'], ''));
+        if (strlen($personZip) === 8 && strlen($personIbge) === 7) {
+          $addressAliases = [
+            'zip_code'=>['cep'], 'endereco'=>['address','logradouro'], 'numero'=>['number'],
+            'complemento'=>['complement'], 'bairro'=>['district'], 'cidade'=>['city'],
+            'city_ibge'=>['codigo_ibge'], 'uf'=>['state'],
+          ];
+          foreach ($addressAliases as $target => $aliases) {
+            foreach ($aliases as $alias) unset($order[$alias]);
+            $order[$target] = (string)nfse_emitter_value($person, $personMap[$target], '');
+          }
+        }
         foreach ($personMap as $target => $sources) {
           if (trim((string)($order[$target] ?? '')) !== '') continue;
           $value = nfse_emitter_value($person, $sources, '');
