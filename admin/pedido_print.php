@@ -727,7 +727,8 @@ $itemNotesPrintByRow = build_item_note_map_admin($itens, $itemNotesPrintQueues, 
     document.addEventListener('keydown', function(e){
       if(e.key === 'Escape'){
         e.preventDefault();
-        window.location.href = <?= json_encode($returnTo) ?>;
+        try{if(window.opener||window.history.length<=1){window.close();}}catch(err){}
+        setTimeout(function(){ window.location.href = <?= json_encode($returnTo) ?>; }, 250);
       }
     });
   </script>

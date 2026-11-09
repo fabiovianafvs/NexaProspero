@@ -40,6 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $st = $pdo->prepare('UPDATE orcamento_settings SET default_reserve_product=?,allow_out_of_stock_reservation=?,delivery_enabled=?,updated_at=NOW() WHERE company_id=?');
       $st->execute([$defaultReserve, $allowOut, $delivery, $companyId]);
     }
+    require_once __DIR__ . '/../config/config_store.php';
+    config_store_set($pdo, $companyId, 'orcamento_print', ['default_model' => ((string)($_POST['print_default_model'] ?? 'a4') === '72mm') ? '72mm' : 'a4']);
     header('Location: orcamento_configuracoes.php?ok=' . rawurlencode('Configurações do Orçamento salvas.'));
     exit;
   } catch (Throwable $e) {
@@ -48,6 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $settings = orc_settings($pdo, $companyId);
+$orcPrintDefault = 'a4';
+try { require_once __DIR__ . '/../config/config_store.php'; $orcPrintCfg = config_store_get($pdo, $companyId, 'orcamento_print'); if (is_array($orcPrintCfg) && ($orcPrintCfg['default_model'] ?? '') === '72mm') $orcPrintDefault = '72mm'; } catch (Throwable $e) {}
 orc_page_start('Configurações do Orçamento', 'orcamento_configuracoes');
 ?>
 <div class="orc-head">
@@ -65,6 +69,11 @@ orc_page_start('Configurações do Orçamento', 'orcamento_configuracoes');
     <form method="post">
       <input type="hidden" name="action" value="save_settings">
       <div class="orc-grid">
+        <div class="orc-c12">
+          <label style="display:block;font-weight:800;margin-bottom:4px">Layout padrão de impressão</label>
+          <select name="print_default_model" style="max-width:260px"><option value="a4" <?= $orcPrintDefault === 'a4' ? 'selected' : '' ?>>A4</option><option value="72mm" <?= $orcPrintDefault === '72mm' ? 'selected' : '' ?>>Bobina 70 mm</option></select>
+          <div class="orc-hint">Formato que abre ao clicar em Imprimir. Na tela de impressão ainda dá para trocar entre 70 mm e A4.</div>
+        </div>
         <div class="orc-c12">
           <label class="orc-check"><input type="checkbox" name="default_reserve_product" value="1" <?= !empty($settings['default_reserve_product']) ? 'checked' : '' ?>> Marcar “Reservar” por padrão ao adicionar produtos</label>
           <div class="orc-hint">O usuário ainda poderá desmarcar a reserva em cada produto do orçamento.</div>

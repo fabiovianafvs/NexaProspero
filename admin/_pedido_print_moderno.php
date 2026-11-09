@@ -149,7 +149,7 @@ if (function_exists('multi_company_context_url')) {
       <a class="nexa-print-action" title="Enviar pedido por e-mail" aria-label="Enviar pedido por e-mail" href="<?= pedido_moderno_h($emailUrl) ?>"><span class="nexa-print-action-icon" aria-hidden="true">✉</span><span class="nexa-print-action-label">E-mail</span></a>
     <?php endif; ?>
     <a class="nexa-print-action is-muted" title="Abrir modelo anterior do pedido" aria-label="Abrir modelo anterior do pedido" href="<?= pedido_moderno_h($urlLegacy) ?>"><span class="nexa-print-action-icon" aria-hidden="true">↶</span><span class="nexa-print-action-label">Anterior</span></a>
-    <a class="nexa-print-action" title="Voltar" aria-label="Voltar" href="<?= pedido_moderno_h($returnTo) ?>"><span class="nexa-print-action-icon" aria-hidden="true">↩</span><span class="nexa-print-action-label">Voltar</span></a>
+    <a class="nexa-print-action" title="Voltar" aria-label="Voltar" href="<?= pedido_moderno_h($returnTo) ?>" onclick="event.preventDefault();nexaPrintBack(this.href)"><span class="nexa-print-action-icon" aria-hidden="true">↩</span><span class="nexa-print-action-label">Voltar</span></a>
   </div>
 </div>
 <main class="sheet">
@@ -203,7 +203,9 @@ if (function_exists('multi_company_context_url')) {
 </main>
 <?php if($autoPrint):?><script>window.addEventListener('load',function(){setTimeout(function(){try{window.print();}catch(e){}},250);});</script><?php endif;?>
 <script>
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();window.location.href=<?= json_encode($returnTo, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;}});
+// Voltar: se a impressão abriu numa aba nova, fecha a aba (não deixa outra tela do sistema aberta).
+function nexaPrintBack(url){try{if(window.opener||window.history.length<=1){window.close();}}catch(e){}setTimeout(function(){window.location.href=url;},250);}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();nexaPrintBack(<?= json_encode($returnTo, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>);}});
 </script>
 </body>
 </html>
