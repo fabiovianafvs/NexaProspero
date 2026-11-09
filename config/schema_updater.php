@@ -540,6 +540,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'b9b9ce2242a3f15c4c95f7d7deaef68a3d1580708c80f93ce20d706c53446612',
         'order' => 202610085290,
       ],
+      [
+        'id' => '20261109_whatsapp_chatbot_v1',
+        'module' => 'whatsapp_chatbot',
+        'version' => 202611090100,
+        'label' => 'WhatsApp - Chatbot (atendimento automático)',
+        'description' => 'Cria as tabelas de conversas e mensagens do chatbot do WhatsApp e cadastra o módulo "Chatbot WhatsApp" no SaaS (fica desligado até a plataforma liberar para a empresa).',
+        'file' => __DIR__ . '/../db/20261109_whatsapp_chatbot_v1.sql',
+        'sha256' => 'bb42fb0df39e5e91951017c8acf157fdd89d3a8139e5bc73ccf1371364d2f84a',
+        'order' => 202611090100,
+      ],
     ];
   }
 }

@@ -258,6 +258,7 @@ function admin_topbar(string $title, string $active=''): void {
       'whatsapp' => ['WhatsApp', 'whatsapp.php'],
       'whatsapp_modelos' => ['Modelo de Mensagens', 'whatsapp_modelos.php'],
       'whatsapp_fila' => ['Fila de Envio', 'whatsapp_fila.php'],
+      'whatsapp_chatbot' => ['Chatbot', 'whatsapp_chatbot.php'],
     ]],
     'orcamento' => ['Orçamento','orcamentos.php', [
       'orcamentos' => ['Lista de Orçamentos', 'orcamentos.php'],

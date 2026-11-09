@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.0';
+const SERVICE_VERSION = 'engine-1.1';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -567,9 +567,26 @@ function unwrapMessage(message) {
 
 function handleInbound(state, msg) {
   const key = msg?.key || {};
-  if (key.fromMe) return;
   const remote = String(key.remoteJid || '');
   if (!remote || remote.endsWith('@g.us') || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) return;
+  if (key.fromMe) {
+    // Mensagem digitada por uma pessoa no celular/WhatsApp Web da empresa (as
+    // enviadas pela API ficam em state.recent): avisa o sistema para o chatbot
+    // ficar em silêncio nessa conversa.
+    const id = String(key.id || '');
+    if (!id || state.recent.has(id) || !msg.message || msg.message.protocolMessage || msg.message.reactionMessage) return;
+    const altOwn = String(key.remoteJidAlt || '');
+    const pnOwn = remote.endsWith('@s.whatsapp.net') ? remote : (altOwn.endsWith('@s.whatsapp.net') ? altOwn : '');
+    deliverWebhook({
+      event: 'human_reply',
+      company_id: state.sid,
+      message_id: id,
+      from: pnOwn ? digits(pnOwn.split('@')[0].split(':')[0]) : '',
+      reply_jid: remote,
+      timestamp: Number(msg.messageTimestamp?.low ?? msg.messageTimestamp ?? 0) || Math.floor(Date.now() / 1000),
+    });
+    return;
+  }
   const m = unwrapMessage(msg.message);
   let type = 'text';
   let text = m.conversation || m.extendedTextMessage?.text || '';
