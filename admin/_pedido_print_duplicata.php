@@ -180,8 +180,10 @@ table{border-collapse:collapse;width:100%}
 .parties>tbody>tr>td{width:50%;vertical-align:top;padding:0}
 .parties>tbody>tr>td+td{border-left:1px solid #000}
 .bar{background:#bfbfbf;font-weight:700;padding:.3mm 1.5mm;font-family:"Times New Roman",Times,serif;font-size:8.5pt}
-.party{padding:1mm 1.5mm;font-family:"Times New Roman",Times,serif;font-size:9.5pt;line-height:1.25}
-.party .row{display:flex;gap:2mm}.party .row b{min-width:20mm}
+.party{padding:.6mm 1.5mm;font-family:"Times New Roman",Times,serif;font-size:8.2pt;line-height:1.18}
+.party>div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.party .row{display:flex;gap:1.5mm;min-width:0}.party .row b{min-width:15mm;flex:none}.party .row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.party .row .half{display:flex;gap:1.5mm;flex:1 1 50%;min-width:0}
 .items{border:1px solid #000;border-top:0}
 .items th{font-family:"Times New Roman",Times,serif;font-size:8.5pt;text-align:left;border-bottom:1px solid #000;padding:.4mm 1mm}
 .items td{font-size:7.8pt;padding:.4mm 1mm;border-bottom:1px solid #000;vertical-align:top}
@@ -255,10 +257,8 @@ table{border-collapse:collapse;width:100%}
         <div class="row"><b>Cliente:</b><span><?= pedido_dup_h(mb_strtoupper($dupCustomer['name'], 'UTF-8')) ?></span></div>
         <div class="row"><b>Endereço:</b><span><?= pedido_dup_h(mb_strtoupper($dupCustomer['address'], 'UTF-8')) ?></span></div>
         <div class="row"><b>Cidade:</b><span style="flex:1"><?= pedido_dup_h(mb_strtoupper($dupCustomer['city'], 'UTF-8')) ?></span><b style="min-width:0">UF</b><span style="min-width:10mm"><?= pedido_dup_h(mb_strtoupper($dupCustomer['uf'], 'UTF-8')) ?></span></div>
-        <div class="row"><b>CPF/CNPJ:</b><span><?= pedido_dup_h($dupCustomer['doc']) ?></span></div>
-        <div class="row"><b>Bairro:</b><span><?= pedido_dup_h(mb_strtoupper($dupCustomer['district'], 'UTF-8')) ?></span></div>
-        <div class="row"><b>Telefone:</b><span><?= pedido_dup_h($dupCustomer['phone']) ?></span></div>
-        <div class="row"><b>RG/I.E.:</b><span><?= pedido_dup_h($dupCustomer['rg_ie']) ?></span></div>
+        <div class="row"><div class="half"><b>CPF/CNPJ:</b><span><?= pedido_dup_h($dupCustomer['doc']) ?></span></div><div class="half"><b style="min-width:0">RG/I.E.:</b><span><?= pedido_dup_h($dupCustomer['rg_ie']) ?></span></div></div>
+        <div class="row"><div class="half"><b>Bairro:</b><span><?= pedido_dup_h(mb_strtoupper($dupCustomer['district'], 'UTF-8')) ?></span></div><div class="half"><b style="min-width:0">Telefone:</b><span><?= pedido_dup_h($dupCustomer['phone']) ?></span></div></div>
       </div>
     </td>
   </tr></table>
