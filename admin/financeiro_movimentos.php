@@ -366,6 +366,7 @@ if ($q !== '') {
   $like = nexa_search_like($q);
   array_push($params, $like, $like, $like, $like, $like, $like);
 }
+$allowedBankIds = null; // null = todos os caixas/bancos
 if ($bankFilter > 0) {
   if ($financeCrossMovementScope) {
     if (!function_exists('finance_validate_bank_account') || !finance_validate_bank_account($pdo, $cid, $bankFilter)) {
@@ -414,16 +415,37 @@ if ($adjustMovement && (!finance_mov_date_adjustable_origin($adjustMovement['ori
 $cancelMovement = $cancelId ? finance_query_one($pdo, 'SELECT m.*, p.name AS person_name, ca.code, ca.name AS account_name FROM finance_movements m LEFT JOIN finance_people p ON p.company_id=m.company_id AND p.id=m.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=m.company_id AND ca.id=m.chart_account_id WHERE m.company_id=? AND m.id=?', [$cid, $cancelId]) : null;
 if ($showCancel && !$cancelMovement) { $showCancel = false; if ($err === '') $err = 'Movimento não encontrado para cancelamento.'; }
 
-$creditos = 0; $debitos = 0;
-foreach ($rows as $r) {
-  $status = (string)($r['status'] ?? 'ATIVO');
-  if ($status === '') $status = 'ATIVO';
-  if ($status === 'CANCELADO') continue;
-  if ((string)$r['type'] === 'CREDITO') $creditos += (float)$r['amount']; else $debitos += (float)$r['amount'];
-}
+// Créditos/débitos somados no banco (a lista mostra no máximo 700 linhas;
+// antes a soma era feita só sobre as linhas exibidas).
+$totalsRow = finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN m.type='CREDITO' THEN m.amount ELSE 0 END),0) AS cred, COALESCE(SUM(CASE WHEN m.type='DEBITO' THEN m.amount ELSE 0 END),0) AS deb FROM finance_movements m LEFT JOIN finance_people p ON p.company_id=m.company_id AND p.id=m.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=m.company_id AND ca.id=m.chart_account_id WHERE " . implode(' AND ', $where) . " AND (m.status IS NULL OR m.status='' OR m.status='ATIVO')", $params) ?: [];
+$creditos = round((float)($totalsRow['cred'] ?? 0), 2);
+$debitos = round((float)($totalsRow['deb'] ?? 0), 2);
 
-$saldoInicialBancos = (float)(finance_query_one($pdo, 'SELECT COALESCE(SUM(initial_balance),0) AS total FROM finance_bank_accounts WHERE company_id=? AND active=1', [$cid])['total'] ?? 0);
-$saldoAnteriorMov = (float)(finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN type='CREDITO' THEN amount WHEN type='DEBITO' THEN -amount ELSE 0 END),0) AS total FROM finance_movements WHERE company_id=? AND movement_date < ? AND (status IS NULL OR status='' OR status='ATIVO')", [$cid, $ini])['total'] ?? 0);
+// Saldo inicial no MESMO caixa/banco da consulta. Antes somava todos os bancos,
+// então o saldo final de um dia não batia com o saldo inicial do dia seguinte
+// quando um banco estava selecionado.
+$balanceAccountSql = 'company_id=? AND active=1';
+$balanceAccountParams = [$cid];
+$balanceMovSql = '';
+$balanceMovParams = [];
+if ($bankFilter > 0) {
+  $balanceAccountSql = 'company_id=? AND id=?';
+  $balanceAccountParams = [$cid, $bankFilter];
+  $balanceMovSql = ' AND bank_account_id = ?';
+  $balanceMovParams = [$bankFilter];
+} elseif (is_array($allowedBankIds)) {
+  if (!$allowedBankIds) {
+    $balanceAccountSql .= ' AND 0=1';
+    $balanceMovSql = ' AND 0=1';
+  } else {
+    $ph = implode(',', array_fill(0, count($allowedBankIds), '?'));
+    $balanceAccountSql .= ' AND id IN (' . $ph . ')';
+    $balanceMovSql = ' AND bank_account_id IN (' . $ph . ')';
+    foreach ($allowedBankIds as $allowedBankId) { $balanceAccountParams[] = (int)$allowedBankId; $balanceMovParams[] = (int)$allowedBankId; }
+  }
+}
+$saldoInicialBancos = (float)(finance_query_one($pdo, 'SELECT COALESCE(SUM(initial_balance),0) AS total FROM finance_bank_accounts WHERE ' . $balanceAccountSql, $balanceAccountParams)['total'] ?? 0);
+$saldoAnteriorMov = (float)(finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN type='CREDITO' THEN amount WHEN type='DEBITO' THEN -amount ELSE 0 END),0) AS total FROM finance_movements WHERE company_id=? AND movement_date < ? AND (status IS NULL OR status='' OR status='ATIVO')" . $balanceMovSql, array_merge([$cid, $ini], $balanceMovParams))['total'] ?? 0);
 $saldoInicialPeriodo = round($saldoInicialBancos + $saldoAnteriorMov, 2);
 $saldoFinalPeriodo = round($saldoInicialPeriodo + $creditos - $debitos, 2);
 

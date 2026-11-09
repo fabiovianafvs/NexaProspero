@@ -697,9 +697,15 @@ if ($personFilter > 0) {
 // A tela abre sem consultar: a lista só é carregada ao clicar em Filtrar (ou ao
 // voltar de uma ação com os filtros lembrados). Deixa a entrada leve.
 $receivableListRequested = isset($_GET['filtrar']);
+// Endereço de volta com a mesma consulta (ex.: depois de enviar o boleto pelo WhatsApp).
+$receivableReturnParams = ['filtrar' => '1'];
 foreach (['status','q','person_id','issue_ini','issue_fim','due_ini','due_fim','settle_ini','settle_fim'] as $receivableFilterKey) {
   if (array_key_exists($receivableFilterKey, $_GET)) $receivableListRequested = true;
+  if (isset($_GET[$receivableFilterKey]) && is_scalar($_GET[$receivableFilterKey]) && (string)$_GET[$receivableFilterKey] !== '') {
+    $receivableReturnParams[$receivableFilterKey] = mb_substr((string)$_GET[$receivableFilterKey], 0, 120);
+  }
 }
+$receivableReturnUrl = 'financeiro_contas_receber.php?' . http_build_query($receivableReturnParams);
 $rows = $receivableListRequested ? finance_query_all($pdo, 'SELECT r.*, p.name AS person_name, ca.code, ca.name AS account_name FROM finance_receivables r LEFT JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=r.company_id AND ca.id=r.chart_account_id WHERE ' . implode(' AND ', $where) . ' ORDER BY r.due_date ASC, r.id DESC LIMIT 500', $params) : [];
 
 // Carrega os boletos vinculados em lote para exibir as ações sem gerar N+1 consultas.
@@ -1033,12 +1039,12 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         <td class="ntg-actions"><div class="ntg-icons">
             <button type="button" class="ntg-icon" data-view-products data-title-id="<?= (int)$r['id'] ?>" title="Ver produtos do pedido que originou este título" aria-label="Ver produtos"><?= nexa_grid_icon('products') ?></button>
             <?php if($rowChargeReady && !$financeCrossContext): ?>
-              <a class="ntg-icon" href="financeiro_boleto_imprimir.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" target="_blank" title="Imprimir ou visualizar o boleto" aria-label="Boleto"><?= nexa_grid_icon('boleto') ?></a>
-              <a class="ntg-icon ntg-wa" href="financeiro_boleto_whatsapp.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" title="Enviar boleto em PDF pelo WhatsApp" aria-label="WhatsApp"><?= nexa_grid_icon('whatsapp') ?></a>
-              <a class="ntg-icon" href="email_documento.php?type=boleto&receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode('financeiro_contas_receber.php') ?>" title="Enviar boleto em PDF por e-mail" aria-label="E-mail"><?= nexa_grid_icon('mail') ?></a>
+              <a class="ntg-icon" href="financeiro_boleto_imprimir.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode($receivableReturnUrl) ?>" target="_blank" title="Imprimir ou visualizar o boleto" aria-label="Boleto"><?= nexa_grid_icon('boleto') ?></a>
+              <a class="ntg-icon ntg-wa" href="financeiro_boleto_whatsapp.php?receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode($receivableReturnUrl) ?>" title="Enviar boleto em PDF pelo WhatsApp" aria-label="WhatsApp"><?= nexa_grid_icon('whatsapp') ?></a>
+              <a class="ntg-icon" href="email_documento.php?type=boleto&receivable_id=<?= (int)$r['id'] ?>&return_to=<?= rawurlencode($receivableReturnUrl) ?>" title="Enviar boleto em PDF por e-mail" aria-label="E-mail"><?= nexa_grid_icon('mail') ?></a>
             <?php elseif($rowChargeReady && $financeCrossContext && $canViewBilling): ?>
               <?php
-                $boletoReturn='financeiro_contas_receber.php';
+                $boletoReturn=$receivableReturnUrl;
                 $boletoHref=function_exists('multi_company_context_url')?multi_company_context_url('financeiro_boleto_imprimir.php?receivable_id='.(int)$r['id'].'&return_to='.rawurlencode($boletoReturn)):'financeiro_boleto_imprimir.php?receivable_id='.(int)$r['id'];
                 $boletoWaHref=function_exists('multi_company_context_url')?multi_company_context_url('financeiro_boleto_whatsapp.php?receivable_id='.(int)$r['id'].'&return_to='.rawurlencode($boletoReturn)):'financeiro_boleto_whatsapp.php?receivable_id='.(int)$r['id'];
                 $boletoEmailHref=function_exists('multi_company_context_url')?multi_company_context_url('email_documento.php?type=boleto&receivable_id='.(int)$r['id'].'&return_to='.rawurlencode($boletoReturn)):'email_documento.php?type=boleto&receivable_id='.(int)$r['id'];
