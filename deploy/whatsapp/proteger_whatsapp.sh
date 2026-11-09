@@ -34,8 +34,11 @@ fi
 CORES="$(nproc)"
 MEM_MB="$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)"
 QUOTA=$(( CORES * 60 ))          # no máximo 60% de todo o processamento
-HIGH=$(( MEM_MB * 45 / 100 ))     # acima disso a memória do WhatsApp é comprimida
-MAX=$(( MEM_MB * 60 / 100 ))      # teto: acima disso o próprio WhatsApp é encerrado e o PM2 reabre
+# Com 18+ empresas os Chromes passaram de 45% e o sistema ficava "espremendo" a
+# memória sem parar (CPU de sistema alta = lentidão geral). Folga maior, mas
+# sempre deixando pelo menos ~4,5 GB para MySQL, PHP e o resto.
+HIGH=$(( MEM_MB * 62 / 100 ))     # acima disso a memória do WhatsApp é comprimida
+MAX=$(( MEM_MB * 72 / 100 ))      # teto: acima disso o próprio WhatsApp é encerrado e o PM2 reabre
 echo "== Limites: CPU ${QUOTA}% de $((CORES*100))% · memória ${HIGH}-${MAX} MB de ${MEM_MB} MB · prioridade baixa =="
 systemctl set-property "$UNIT" CPUWeight=20 CPUQuota="${QUOTA}%" MemoryHigh="${HIGH}M" MemoryMax="${MAX}M"
 

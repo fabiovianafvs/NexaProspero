@@ -2,7 +2,8 @@
 # Nexa Próspero - atualiza o serviço de WhatsApp (NEXA-R9):
 #  - sessões salvas voltam depois de reinícios (tempo maior para abrir o Chrome,
 #    reabertura sem logout e fechamento calmo antes de reiniciar);
-#  - instala o reinício diário atualizado.
+#  - instala o reinício diário atualizado;
+#  - Chrome mais leve (menos processos e memória por empresa).
 # Uso (como root): bash /var/www/nexa/deploy/whatsapp/atualizar_servico_whatsapp.sh
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,8 +13,8 @@ SOURCE="$REPO/tools/whatsapp-service-server-com-pdf.js"
 SERVICE_DIR="/opt/nexa-whatsapp-service"
 TARGET="$SERVICE_DIR/server.js"
 # Versão que estava no repositório antes desta atualização e a nova.
-OLD_SHA="cf04b503c876f983d5fced0f990e9509dd62321921a7511ae008d653d70b7cf9"
-NEW_SHA="46af4f1dd51f763a6d3731fd7da699df28981e95e237f4cb1ffbc715210c1a5b"
+OLD_SHA="46af4f1dd51f763a6d3731fd7da699df28981e95e237f4cb1ffbc715210c1a5b"
+NEW_SHA="c3f45faf2d9aa223071fa1ca27cbafe12cbfce8f3af8d04466022038400c92fe"
 
 [ -f "$TARGET" ] || { echo "ERRO: $TARGET não encontrado."; exit 1; }
 CUR_SHA="$(sha256sum "$TARGET" | cut -d' ' -f1)"
@@ -22,7 +23,7 @@ if [ "$CUR_SHA" = "$NEW_SHA" ]; then
 elif [ "$CUR_SHA" != "$OLD_SHA" ]; then
   echo "ATENÇÃO: o server.js instalado é diferente da versão conhecida do repositório."
   echo "Nada foi alterado. Mande para o Claude o resultado de:"
-  echo "  diff <(git -C $REPO show ba70ebb:tools/whatsapp-service-server-com-pdf.js) $TARGET | head -80"
+  echo "  diff <(git -C $REPO show d3692e4:tools/whatsapp-service-server-com-pdf.js) $TARGET | head -80"
   exit 1
 else
   PKG="$SERVICE_DIR/node_modules/whatsapp-web.js/package.json"

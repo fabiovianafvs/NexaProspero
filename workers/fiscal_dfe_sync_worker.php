@@ -22,11 +22,13 @@ fiscal_ensure_dfe_distribution_schema($pdo);
 if ($companyId > 0) {
     $companyIds = [$companyId];
 } else {
-    $sql = "SELECT DISTINCT company_id
+    // GROUP BY + MIN(): o MySQL recusa DISTINCT ordenando por coluna fora do SELECT (erro 3065).
+    $sql = "SELECT company_id
             FROM fiscal_dfe_sync_state
             WHERE auto_check_enabled=1
               AND (next_allowed_at IS NULL OR next_allowed_at<=NOW())
-            ORDER BY COALESCE(next_allowed_at,'1000-01-01 00:00:00'), company_id
+            GROUP BY company_id
+            ORDER BY MIN(COALESCE(next_allowed_at,'1000-01-01 00:00:00')), company_id
             LIMIT " . $maxCompanies;
     $companyIds = array_map('intval', $pdo->query($sql)->fetchAll(PDO::FETCH_COLUMN) ?: []);
 }
