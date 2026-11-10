@@ -6,6 +6,11 @@ $root = dirname(__DIR__);
 require_once $root . '/config/nexa_env.php';
 require $root . '/config/pdo.php';
 require_once $root . '/config/os_fiscal_processor.php';
+require_once $root . '/config/helpers.php';
+// Mesmo horário do site (Brasília) no PHP e na sessão do MySQL: sem isso as datas
+// gravadas pelo worker ficavam 3 horas adiantadas e um item em transmissão pela tela
+// parecia "abandonado" e era transmitido de novo.
+app_apply_company_timezone($pdo, 'America/Sao_Paulo');
 
 $options = getopt('', ['once','batch::','company::','help']);
 if (isset($options['help'])) {
@@ -28,7 +33,8 @@ function osfq_log(string $level,string $message): void
 $processed=0;
 do {
     // Recupera apenas processamento abandonado há mais de 10 minutos.
-    $pdo->exec("UPDATE os_fiscal_queue SET status='PENDENTE',started_at=NULL,scheduled_at=NOW(),updated_at=NOW(),error_message=CONCAT('Recuperado após interrupção. ',COALESCE(error_message,'')) WHERE status='PROCESSANDO' AND started_at < NOW() - INTERVAL 10 MINUTE");
+    // Nunca recupera item cuja trava ainda está ativa (transmissão em andamento).
+    $pdo->exec("UPDATE os_fiscal_queue SET status='PENDENTE',started_at=NULL,scheduled_at=NOW(),updated_at=NOW(),error_message=CONCAT('Recuperado após interrupção. ',COALESCE(error_message,'')) WHERE status='PROCESSANDO' AND started_at < NOW() - INTERVAL 10 MINUTE AND IS_FREE_LOCK(CONCAT('nexa_osfq_',company_id,'_',os_order_id,'_',UPPER(TRIM(document_type))))=1");
 
     $where="status='PENDENTE' AND (scheduled_at IS NULL OR scheduled_at<=NOW())";
     $params=array();

@@ -157,7 +157,7 @@ if (!function_exists('access_permissions_catalog')) {
       'conferencia_estoque' => ['label' => 'Conferência de estoque', 'group' => 'Entradas', 'module' => 'conferencia_estoque', 'pages' => ['estoque_conferencias.php','estoque_conferencia_form.php','estoque_conferencia_processar.php'], 'nav' => ['estoque_conferencias']],
 
       // Fiscal
-      'fiscal_documentos' => ['label' => 'Documentos fiscais', 'group' => 'Fiscal', 'module' => 'fiscal', 'pages' => ['fiscal_documentos.php','fiscal_nfce_pedido.php','fiscal_nfce_imprimir.php','fiscal_nfce_acao.php','fiscal_nfse_nacional.php','fiscal_nfse_acao.php','fiscal_emissao_lote.php','fiscal_lote_contingencia.php'], 'nav' => ['fiscal_documentos']],
+      'fiscal_documentos' => ['label' => 'Documentos fiscais', 'group' => 'Fiscal', 'module' => 'fiscal', 'pages' => ['fiscal_documentos.php','fiscal_nfse_cancelar.php','fiscal_nfce_pedido.php','fiscal_nfce_imprimir.php','fiscal_nfce_acao.php','fiscal_nfse_nacional.php','fiscal_nfse_acao.php','fiscal_emissao_lote.php','fiscal_lote_contingencia.php'], 'nav' => ['fiscal_documentos']],
       'fiscal_inutilizacao' => ['label' => 'Inutilização de numeração', 'group' => 'Fiscal', 'module' => 'fiscal', 'pages' => ['fiscal_inutilizacao.php'], 'nav' => ['fiscal_inutilizacao']],
       'fiscal_saidas' => ['label' => 'Saídas fiscais', 'group' => 'Fiscal', 'module' => 'fiscal', 'pages' => ['fiscal_saidas.php'], 'nav' => ['fiscal_saidas']],
       'fiscal_contadores' => ['label' => 'Cadastro de contadores', 'group' => 'Fiscal', 'module' => 'fiscal', 'pages' => ['fiscal_contadores.php'], 'nav' => ['fiscal_contadores']],

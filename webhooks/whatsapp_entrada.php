@@ -19,6 +19,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 require_once __DIR__ . '/../config/pdo.php';
 require_once __DIR__ . '/../config/whatsapp_engine.php';
 require_once __DIR__ . '/../config/whatsapp_chatbot.php';
+require_once __DIR__ . '/../config/helpers.php';
+// Mesmo horário das telas (Brasília) nas datas das conversas.
+app_apply_company_timezone($pdo, 'America/Sao_Paulo');
 
 $raw = (string)file_get_contents('php://input');
 $engine = whatsapp_engine_config($pdo);

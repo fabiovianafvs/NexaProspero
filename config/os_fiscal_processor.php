@@ -182,19 +182,52 @@ if (!function_exists('os_fiscal_process_queue_job')) {
      * Executa UMA emissão da O.S. imediatamente. Não agenda tentativas automáticas.
      * Em falha, grava ERRO e aguarda nova ação explícita do usuário.
      */
+    function os_fiscal_queue_lock_name($companyId, $osId, $documentType)
+    {
+        // Mesmo nome é usado pelo worker (IS_FREE_LOCK) para não "recuperar" um item em transmissão.
+        return 'nexa_osfq_'.(int)$companyId.'_'.(int)$osId.'_'.strtoupper(trim((string)$documentType));
+    }
+
     function os_fiscal_process_queue_job(PDO $pdo, $companyId, $queueId)
     {
         os_fiscal_queue_ensure_schema($pdo);
         $companyId=(int)$companyId;
         $queueId=(int)$queueId;
         if($companyId<=0 || $queueId<=0) throw new RuntimeException('Documento fiscal inválido para processamento.');
+        $st=$pdo->prepare("SELECT * FROM os_fiscal_queue WHERE company_id=? AND id=? LIMIT 1");
+        $st->execute(array($companyId,$queueId));
+        $peek=$st->fetch(PDO::FETCH_ASSOC);
+        if(!$peek) throw new RuntimeException('Item da fila fiscal da O.S. não encontrado.');
+        // Trava por O.S. + tipo de documento: a tela (após faturar) e o processamento
+        // automático nunca transmitem o mesmo documento ao mesmo tempo (evita nota em dobro).
+        $lock=os_fiscal_queue_lock_name($companyId,(int)$peek['os_order_id'],(string)$peek['document_type']);
+        $lk=$pdo->prepare('SELECT GET_LOCK(?,0)');
+        $lk->execute(array($lock));
+        $got=(int)$lk->fetchColumn();
+        $lk->closeCursor();
+        if($got!==1){
+            $r=os_fiscal_processor_result_payload($pdo,$peek,false,'Este documento já está sendo transmitido (por outra tela ou pelo processamento automático). Aguarde alguns segundos e atualize a tela.');
+            $r['busy']=true;
+            return $r;
+        }
+        try {
+            return os_fiscal_process_queue_job_run($pdo,$companyId,$queueId);
+        } finally {
+            try { $rl=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $rl->execute(array($lock)); $rl->fetchColumn(); $rl->closeCursor(); } catch (Throwable $ignore) {}
+        }
+    }
 
+    function os_fiscal_process_queue_job_run(PDO $pdo, $companyId, $queueId)
+    {
         $pdo->beginTransaction();
         try {
-            $st=$pdo->prepare("SELECT * FROM os_fiscal_queue WHERE company_id=? AND id=? LIMIT 1 FOR UPDATE");
+            // "recente" é calculado no próprio banco (mesmo relógio de started_at).
+            $st=$pdo->prepare("SELECT *, (started_at IS NOT NULL AND started_at >= NOW() - INTERVAL 10 MINUTE) AS osfq_recent FROM os_fiscal_queue WHERE company_id=? AND id=? LIMIT 1 FOR UPDATE");
             $st->execute(array($companyId,$queueId));
             $job=$st->fetch(PDO::FETCH_ASSOC);
             if(!$job) throw new RuntimeException('Item da fila fiscal da O.S. não encontrado.');
+            $recent=!empty($job['osfq_recent']);
+            unset($job['osfq_recent']);
             $status=strtoupper((string)$job['status']);
             if($status==='CONCLUIDO'){
                 $pdo->commit();
@@ -202,8 +235,7 @@ if (!function_exists('os_fiscal_process_queue_job')) {
                 return os_fiscal_processor_result_payload($pdo,$job,true,'Documento já processado.');
             }
             if($status==='PROCESSANDO'){
-                $started=!empty($job['started_at'])?strtotime((string)$job['started_at']):0;
-                if($started && $started >= time()-600){
+                if($recent){
                     $pdo->commit();
                     $r=os_fiscal_processor_result_payload($pdo,$job,false,'Documento já está sendo processado em outra requisição.');
                     $r['busy']=true;

@@ -21,7 +21,7 @@ function nfse_action_safe_return(string $returnTo, string $fallback = 'fiscal_nf
   if ($parts === false) return $fallback;
   $path = (string)($parts['path'] ?? '');
   if ($path === '' || str_contains($path, '..') || str_starts_with($path, '/')) return $fallback;
-  $allowed = ['fiscal_nfse_nacional.php','pedidos.php','fiscal_documentos.php'];
+  $allowed = ['fiscal_nfse_nacional.php','pedidos.php','fiscal_documentos.php','fiscal_nfse_cancelar.php'];
   if (!in_array(basename($path), $allowed, true)) return $fallback;
   return $returnTo;
 }

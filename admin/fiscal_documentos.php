@@ -418,6 +418,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                     <a class="btn btn-sm" data-no-processing href="fiscal_documento_whatsapp.php?doc_id=<?= $docId ?>&return_to=<?= rawurlencode($returnTo) ?>">WhatsApp</a>
                     <a class="btn btn-sm" data-no-processing href="email_documento.php?type=fiscal&doc_id=<?= $docId ?>&return_to=<?= rawurlencode($returnTo) ?>">E-mail</a>
                   <?php endif; ?>
+                  <?php if ($statusDoc === 'AUTORIZADA' && !$fiscalReadOnlyF11): ?><a class="btn btn-sm" href="fiscal_nfse_cancelar.php?doc_id=<?= $docId ?>">Cancelar NFS-e</a><?php endif; ?>
                   <a class="btn btn-sm" data-no-processing href="fiscal_nfse_acao.php?action=download_dps&doc_id=<?= $docId ?>&pedido_id=<?= $pedidoId ?>">Baixar DPS</a>
                   <?php if (in_array($statusDoc,['AUTORIZADA','CANCELADA'],true)): ?><a class="btn btn-sm" data-no-processing href="fiscal_nfse_acao.php?action=download_nfse&doc_id=<?= $docId ?>&pedido_id=<?= $pedidoId ?>">Baixar XML NFS-e</a><?php endif; ?>
                   <?php if ($statusDoc==='CANCELADA'): ?><a class="btn btn-sm" data-no-processing href="fiscal_nfse_acao.php?action=download_cancel_event&doc_id=<?= $docId ?>&pedido_id=<?= $pedidoId ?>">Baixar cancelamento</a><?php endif; ?>
