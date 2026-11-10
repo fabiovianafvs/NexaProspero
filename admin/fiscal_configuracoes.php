@@ -119,6 +119,7 @@ try {
         $snRate = is_numeric($snRateInput) ? max(0.0, min(100.0, round((float)$snRateInput, 2))) : 0.0;
         $nfseExtra = config_store_get($pdo, $cid, 'nfse_nacional') ?: [];
         $nfseExtra['sn_total_tax_rate'] = $snRate;
+        $nfseExtra['send_iss_rate_outside_sn'] = !empty($_POST['nfse_send_iss_rate_outside_sn']);
         config_store_set($pdo, $cid, 'nfse_nacional', $nfseExtra);
       }
       header('Location: ' . $fiscalSettingsUrl('fiscal_configuracoes.php?ok=' . rawurlencode('Configuração fiscal salva.')));
@@ -701,6 +702,8 @@ if ($err): ?><div class="msg err"><?= fiscal_h($err) ?></div><?php endif; ?>
         <?php $nfseSnRate = (float)((config_store_get($pdo, $cid, 'nfse_nacional') ?: [])['sn_total_tax_rate'] ?? 0); ?>
         <div><label>% aproximado de tributos do Simples Nacional</label><input name="nfse_sn_total_tax_rate" inputmode="decimal" value="<?= $nfseSnRate > 0 ? fiscal_h(number_format($nfseSnRate, 2, ',', '')) : '' ?>" placeholder="Ex.: 6,00"></div>
         <div class="span-2 fiscal-muted" style="font-weight:700;line-height:1.5">NFS-e Nacional para ME/EPP do Simples: alíquota efetiva do DAS da empresa (percentual informado na nota como total aproximado de tributos). Confirme o valor com o contador; ele muda conforme a faixa de faturamento.</div>
+        <?php $nfseSendIssOutside = !empty((config_store_get($pdo, $cid, 'nfse_nacional') ?: [])['send_iss_rate_outside_sn']); ?>
+        <label class="fiscal-checkline span-3"><input type="checkbox" name="nfse_send_iss_rate_outside_sn" value="1" <?= $nfseSendIssOutside ? 'checked' : '' ?>> ME/EPP com ISS fora do Simples: enviar a alíquota do ISS na nota (marque só se o município do serviço NÃO tiver convênio com o Ambiente Nacional)</label>
         <div><label>Perfil Pronim</label><input name="nfse_pronim_profile" value="<?= fiscal_h($config['nfse_pronim_profile'] ?? 'ITABIRA_MG') ?>" placeholder="ITABIRA_MG"></div>
         <div class="span-3"><label>URL homologação Pronim</label><input name="nfse_pronim_hom_base" value="<?= fiscal_h($config['nfse_pronim_hom_base'] ?? 'https://reformatributaria.govbr.cloud/NFSe.Api.Teste/NotaNacional') ?>"></div>
         <div class="span-3"><label>URL produção Pronim</label><input name="nfse_pronim_prod_base" value="<?= fiscal_h($config['nfse_pronim_prod_base'] ?? 'https://webapp1-itabira.cidade360.cloud/NFSe.Api/NotaNacional') ?>"></div>

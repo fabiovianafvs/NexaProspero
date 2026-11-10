@@ -413,6 +413,12 @@ if (!function_exists('nfse_emitter_order_context')) {
     $tax = $serviceItems[0] ?? [];
     $cfg = fiscal_company_config($pdo, $companyId);
     $cfg['nfse_sn_total_tax_rate'] = nfse_emitter_sn_total_tax_rate($pdo, $companyId);
+    try {
+      require_once __DIR__ . '/config_store.php';
+      $cfg['nfse_send_iss_rate_outside_sn'] = !empty((config_store_get($pdo, $companyId, 'nfse_nacional') ?: [])['send_iss_rate_outside_sn']);
+    } catch (Throwable $e) {
+      $cfg['nfse_send_iss_rate_outside_sn'] = false;
+    }
     $environment = strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO')));
     if (!in_array($environment, ['HOMOLOGACAO','PRODUCAO'], true)) $environment = 'HOMOLOGACAO';
 
@@ -775,7 +781,13 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
     // Regra E0625 do Sistema Nacional: ME/EPP do Simples (opSimpNac=3) com ISSQN
     // apurado pelo Simples (regApTribSN=1) e SEM retenção (tpRetISSQN=1) não pode
     // informar alíquota: o ISS é recolhido no DAS. Com retenção, a alíquota segue.
-    $omitIssRate = $simpleStatus === '3' && $simpleRegime === '1' && !$issWithheld;
+    // Mesma regra do Nacional para ME/EPP com ISSQN FORA do Simples (regApTribSN=2 ou 3)
+    // quando o município de incidência tem convênio: a alíquota vem do cadastro do
+    // município. Só envia se a empresa marcar a opção (município sem convênio).
+    $omitIssRate = $simpleStatus === '3' && (
+      ($simpleRegime === '1' && !$issWithheld)
+      || (in_array($simpleRegime, ['2', '3'], true) && empty($cfg['nfse_send_iss_rate_outside_sn']))
+    );
     if (!$omitIssRate && (float)($tax['iss_rate'] ?? 0) > 0) nfse_emitter_xml_add($dom,$tribMun,'pAliq',nfse_emitter_percent($tax['iss_rate']));
 
     $net = max(0.0,(float)$context['net']);
