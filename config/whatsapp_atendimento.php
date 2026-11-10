@@ -137,6 +137,10 @@ if (!function_exists('whatsapp_att_chat_info')) {
     if (!$r) return [];
     $row = whatsapp_att_row($r);
     $row['crm_attendance_id'] = (int)($r['crm_attendance_id'] ?? 0);
+    $row['answers'] = [];
+    if (function_exists('whatsapp_bot_chat_answers')) {
+      foreach (whatsapp_bot_chat_answers($r) as $a) $row['answers'][] = ['label' => (string)($a['l'] ?? $a['k'] ?? ''), 'value' => (string)($a['v'] ?? '')];
+    }
     return $row;
   }
 }

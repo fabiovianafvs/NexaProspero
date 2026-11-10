@@ -54,7 +54,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-b.in{align-self:flex-start;background:#fff}.waa-b.out{align-self:flex-end;background:#d9fdd3}.waa-b.bot{background:#e7f0ff}.waa-b.fail{border:1px solid #ef4444}
 .waa-b small{display:block;text-align:right;font-size:11px;color:var(--mut);margin-top:2px}
 .waa-who{font-size:12px;font-weight:800;color:#008069;margin-bottom:2px}.waa-b.bot .waa-who{color:#2454d6}
-.waa-sys{align-self:center;background:#fff8c5;color:#54656f;font-size:12px;border-radius:8px;padding:4px 10px;margin:4px 0;text-align:center}
+.waa-sys{white-space:pre-wrap;align-self:center;background:#fff8c5;color:#54656f;font-size:12px;border-radius:8px;padding:4px 10px;margin:4px 0;text-align:center}
 .waa-day{align-self:center;background:#fff;color:#54656f;font-size:12px;border-radius:8px;padding:3px 10px;margin:8px 0;box-shadow:0 1px .5px rgba(11,20,26,.13)}
 .waa-b img,.waa-b video{max-width:280px;max-height:320px;border-radius:6px;display:block;cursor:pointer}.waa-b audio{width:260px}
 .waa-doc{display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.05);border-radius:6px;padding:8px;text-decoration:none;color:inherit}
@@ -70,6 +70,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-card{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:420px;display:grid;gap:10px}
 .waa-card h3{margin:0;color:#0b1f5b}.waa-card label{font-size:12px;font-weight:700;color:#334155}.waa-card select,.waa-card input,.waa-card textarea{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font:inherit}
 .waa-rt{font-size:11px;color:var(--mut)}
+.waa-answers{background:#eef6ff;border-bottom:1px solid var(--line);padding:8px 14px;font-size:13px;color:#1e3a5f;display:flex;gap:6px 16px;flex-wrap:wrap}.waa-answers b{color:#0b1f5b}
 .waa-back{display:none}
 @media(max-width:860px){.waa{grid-template-columns:1fr;height:calc(100vh - 120px)}.waa.chat-open .waa-side{display:none}.waa:not(.chat-open) .waa-main{display:none}.waa-back{display:inline-block}.waa-b{max-width:85%}.waa-msgs{padding:12px}}
 </style>
@@ -112,6 +113,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
         </div>
       </div>
       <div class="waa-banner" id="waaBanner" style="display:none"></div>
+      <div class="waa-answers" id="waaAnswers" style="display:none"></div>
       <div class="waa-msgs" id="waaMsgs"></div>
       <div class="waa-filebar" id="waaFileBar"><span id="waaFileName"></span><input id="waaCaption" placeholder="Legenda (opcional)"><button class="waa-btn g" type="button" id="waaFileSend">Enviar</button><button class="waa-btn" type="button" id="waaFileCancel">✕</button></div>
       <form class="waa-compose" id="waaForm">
@@ -253,6 +255,9 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     else if (c.status === 'BOT') { b.style.display = ''; b.textContent = 'O robô está atendendo. Se você responder, a conversa passa para você.'; }
     else b.style.display = 'none';
     $('waaText').disabled = other && !SUP;
+    const ans = Array.isArray(c.answers) ? c.answers : [];
+    $('waaAnswers').style.display = ans.length ? '' : 'none';
+    $('waaAnswers').innerHTML = ans.length ? '<span>📝 Respostas do fluxo:</span>' + ans.map((a) => '<span><b>' + esc(a.label) + ':</b> ' + esc(a.value) + '</span>').join('') : '';
   }
 
   async function openChat(id) {

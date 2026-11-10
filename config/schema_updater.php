@@ -560,6 +560,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '39935eabc4904c0981fdb568fb534a87f64f7da223daecb0fdd2814a0454cec3',
         'order' => 202611100100,
       ],
+      [
+        'id' => '20261110_whatsapp_fluxos_v1',
+        'module' => 'whatsapp_chatbot',
+        'version' => 202611100200,
+        'label' => 'WhatsApp - Fluxos e repetir pedido',
+        'description' => 'Cria os fluxos do chatbot com frase de gatilho (campanhas/anúncios), perguntas em sequência com as respostas para o atendente, e a opção "repetir meu último pedido".',
+        'file' => __DIR__ . '/../db/20261110_whatsapp_fluxos_v1.sql',
+        'sha256' => '26ece734af31ba39200b0471ac3bf182c86c04d0f9918fa26d7c835fbcf86df9',
+        'order' => 202611100200,
+      ],
     ];
   }
 }

@@ -70,7 +70,7 @@ if (!function_exists('access_permissions_catalog')) {
       'whatsapp_modelos' => ['label' => 'Modelo de Mensagens', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp_modelos.php'], 'nav' => ['whatsapp_modelos']],
       'whatsapp_fila' => ['label' => 'Fila de Envio', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp_fila.php'], 'nav' => ['whatsapp_fila']],
       'whatsapp_atendimento' => ['label' => 'Atendimento (conversas)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_atendimento.php', 'whatsapp_atendimento_api.php', 'whatsapp_midia.php'], 'nav' => ['whatsapp_atendimento']],
-      'whatsapp_chatbot' => ['label' => 'Chatbot (configurar fluxo e setores; vê todas as conversas)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_chatbot.php'], 'nav' => ['whatsapp_chatbot']],
+      'whatsapp_chatbot' => ['label' => 'Chatbot (configurar fluxo e setores; vê todas as conversas)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_chatbot.php', 'whatsapp_chatbot_fluxo.php'], 'nav' => ['whatsapp_chatbot']],
 
       // Compras: autorização individual por submenu e URL (sem liberação implícita).
       'compras_assistente' => ['label' => 'Assistente de Compras', 'group' => 'Compras', 'module' => 'compras', 'pages' => ['compras_assistente.php'], 'nav' => ['compras_assistente']],

@@ -20,6 +20,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config_store.php';
 require_once __DIR__ . '/whatsapp_service.php';
 require_once __DIR__ . '/whatsapp_engine.php';
+require_once __DIR__ . '/whatsapp_bot_flows.php';
 
 const WHATSAPP_BOT_SESSION_MINUTES = 30;
 const WHATSAPP_BOT_DOC_ATTEMPTS_PER_HOUR = 5;
@@ -311,6 +312,8 @@ if (!function_exists('whatsapp_bot_node_actions')) {
       'boleto' => '2ª via de boleto (pede CPF/CNPJ)',
       'pedido' => 'Consultar pedido',
       'crm' => 'Abrir atendimento no CRM',
+      'repetir_pedido' => 'Repetir o último pedido do cliente',
+      'fluxo' => 'Iniciar um fluxo (perguntas em sequência)',
     ];
   }
 }
@@ -375,6 +378,9 @@ if (!function_exists('whatsapp_bot_node_save')) {
       }
     }
     $departmentId = $action === 'setor' ? ((int)($in['department_id'] ?? 0) ?: null) : null;
+    $flowId = $action === 'fluxo' ? ((int)($in['flow_id'] ?? 0) ?: null) : null;
+    if ($action === 'fluxo' && (!$flowId || !whatsapp_bot_flows_ready($pdo) || !whatsapp_bot_flow($pdo, $companyId, $flowId))) throw new RuntimeException('Escolha o fluxo que esta opção vai iniciar.');
+    $hasFlowCol = whatsapp_bot_flows_ready($pdo);
     if ($departmentId && whatsapp_department_name($pdo, $companyId, $departmentId) === '') throw new RuntimeException('Setor não encontrado.');
     $active = !empty($in['active']) ? 1 : 0;
     if ($id > 0) {
@@ -387,11 +393,14 @@ if (!function_exists('whatsapp_bot_node_save')) {
       if ((int)($current['parent_id'] ?? 0) !== (int)($parentId ?? 0)) $sort = whatsapp_bot_node_next_sort($pdo, $companyId, $parentId);
       $pdo->prepare('UPDATE whatsapp_bot_nodes SET parent_id=?, sort_order=?, label=?, action=?, message=?, department_id=?, active=? WHERE company_id=? AND id=?')
         ->execute([$parentId, $sort, $label, $action, $message !== '' ? $message : null, $departmentId, $active, $companyId, $id]);
+      if ($hasFlowCol) $pdo->prepare('UPDATE whatsapp_bot_nodes SET flow_id=? WHERE company_id=? AND id=?')->execute([$flowId, $companyId, $id]);
       return $id;
     }
     $pdo->prepare('INSERT INTO whatsapp_bot_nodes (company_id, parent_id, sort_order, label, action, message, department_id, active, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
       ->execute([$companyId, $parentId, whatsapp_bot_node_next_sort($pdo, $companyId, $parentId), $label, $action, $message !== '' ? $message : null, $departmentId, $active, date('Y-m-d H:i:s')]);
-    return (int)$pdo->lastInsertId();
+    $newId = (int)$pdo->lastInsertId();
+    if ($hasFlowCol && $flowId) $pdo->prepare('UPDATE whatsapp_bot_nodes SET flow_id=? WHERE company_id=? AND id=?')->execute([$flowId, $companyId, $newId]);
+    return $newId;
   }
 }
 
@@ -577,7 +586,7 @@ if (!function_exists('whatsapp_chat_find_or_create')) {
 
 if (!function_exists('whatsapp_chat_update')) {
   function whatsapp_chat_update(PDO $pdo, int $companyId, int $chatId, array $fields): void {
-    $allowed = ['contact','phone','push_name','state','status','data_json','paused_until','doc_attempts','doc_attempts_since','department_id','user_id','person_id','unread','queued_at','accepted_at','closed_at','human_at','crm_attendance_id','last_message_at'];
+    $allowed = ['contact','phone','push_name','state','status','data_json','paused_until','doc_attempts','doc_attempts_since','department_id','user_id','person_id','unread','queued_at','accepted_at','closed_at','human_at','crm_attendance_id','last_message_at','answers_json'];
     $sets = []; $params = [];
     foreach ($fields as $k => $v) {
       if ($k === 'data') { $k = 'data_json'; $v = json_encode($v ?: new stdClass(), JSON_UNESCAPED_UNICODE); }
@@ -873,6 +882,49 @@ if (!function_exists('whatsapp_bot_open_crm')) {
   }
 }
 
+if (!function_exists('whatsapp_bot_run_action')) {
+  /** Ações comuns ao menu e aos fluxos: boleto, pedido, crm, setor, repetir_pedido, fluxo. */
+  function whatsapp_bot_run_action(PDO $pdo, int $companyId, array $ctx, array $cfg, array $chat, string $action, string $msg, ?array $node): string {
+    $chatId = (int)$chat['id'];
+    switch ($action) {
+      case 'boleto':
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg !== '' ? $msg : "Para enviar a 2ª via, informe o *CPF ou CNPJ* do titular (só os números).");
+        whatsapp_chat_update($pdo, $companyId, $chatId, ['state' => 'ASK_DOC']);
+        return 'opção boleto';
+      case 'pedido':
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg !== '' ? $msg : "Informe o *número do pedido*.");
+        whatsapp_chat_update($pdo, $companyId, $chatId, ['state' => 'ASK_ORDER']);
+        return 'opção pedido';
+      case 'crm':
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg !== '' ? $msg : "Descreva em *uma mensagem* o que você precisa, que eu abro um atendimento para a nossa equipe.");
+        whatsapp_chat_update($pdo, $companyId, $chatId, ['state' => 'ASK_CRM']);
+        return 'opção crm';
+      case 'setor':
+        whatsapp_chat_enqueue($pdo, $companyId, $ctx, $cfg, $node ? (((int)($node['department_id'] ?? 0)) ?: null) : null, $msg);
+        return 'fila setor ' . (int)($node['department_id'] ?? 0);
+      case 'repetir_pedido':
+        if ($msg !== '') whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg);
+        $personId = (int)($chat['person_id'] ?? 0);
+        if ($personId <= 0 && $ctx['phone'] !== '') { $p = whatsapp_bot_find_person($pdo, $companyId, $ctx['phone']); $personId = $p ? (int)$p['id'] : 0; }
+        if ($personId > 0 || whatsapp_bot_last_order($pdo, $companyId, null, $ctx['phone'])) {
+          return whatsapp_bot_repeat_offer($pdo, $companyId, $ctx, $chat, $personId ?: null);
+        }
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, "Para localizar seu último pedido, informe o *CPF ou CNPJ* do cadastro (só os números).");
+        whatsapp_chat_update($pdo, $companyId, $chatId, ['state' => 'ASK_DOC_REPEAT']);
+        return 'repetir: pede documento';
+      case 'fluxo':
+        $flowId = (int)($node['flow_id'] ?? 0);
+        if ($flowId > 0 && whatsapp_bot_flows_ready($pdo) && whatsapp_bot_flow($pdo, $companyId, $flowId)) {
+          if ($msg !== '') whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg);
+          return whatsapp_bot_flow_start($pdo, $companyId, $ctx, $cfg, $chat, $flowId);
+        }
+        whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, false);
+        return 'fluxo inexistente';
+    }
+    return 'sem ação';
+  }
+}
+
 if (!function_exists('whatsapp_chat_enqueue')) {
   /** Transfere a conversa para a fila de um setor (null = qualquer atendente). */
   function whatsapp_chat_enqueue(PDO $pdo, int $companyId, array $ctx, array $cfg, ?int $departmentId, string $customText = ''): void {
@@ -884,7 +936,9 @@ if (!function_exists('whatsapp_chat_enqueue')) {
       'status' => 'PENDENTE', 'state' => 'MENU', 'data' => [], 'department_id' => $departmentId, 'user_id' => null,
       'queued_at' => $now, 'accepted_at' => null, 'closed_at' => null, 'unread' => 1,
     ]);
-    whatsapp_chat_log($pdo, $companyId, $ctx['chat'], 'OUT', 'sistema', 'Conversa transferida pelo robô para ' . $name . '.');
+    $fresh = whatsapp_chat_get($pdo, $companyId, (int)$ctx['chat']['id']) ?? $ctx['chat'];
+    $answers = function_exists('whatsapp_bot_chat_answers') ? whatsapp_bot_chat_answers($fresh) : [];
+    whatsapp_chat_log($pdo, $companyId, $ctx['chat'], 'OUT', 'sistema', 'Conversa transferida pelo robô para ' . $name . '.' . ($answers ? "\nRespostas do cliente:\n" . whatsapp_bot_answers_summary($answers) : ''));
   }
 }
 
@@ -1056,7 +1110,13 @@ if (!function_exists('whatsapp_bot_step')) {
     $restart = $status === 'FINALIZADO' || in_array($state, ['NOVA', 'FIM', 'ATENDENTE'], true)
       || $prevAt === '' || strtotime($prevAt) < $now - WHATSAPP_BOT_SESSION_MINUTES * 60;
     if ($restart) {
-      $save(['status' => 'BOT', 'state' => 'MENU', 'data' => [], 'department_id' => null, 'user_id' => null, 'closed_at' => null, 'unread' => 0, 'crm_attendance_id' => null]);
+      $reset = ['status' => 'BOT', 'state' => 'MENU', 'data' => [], 'department_id' => null, 'user_id' => null, 'closed_at' => null, 'unread' => 0, 'crm_attendance_id' => null];
+      if (whatsapp_bot_flows_ready($pdo)) $reset['answers_json'] = null;
+      $save($reset);
+      $chat = array_merge($chat, $reset, ['answers_json' => null, 'state' => 'MENU', 'data' => []]);
+      // Frase de gatilho (ex.: mensagem pronta de anúncio) inicia o fluxo direto.
+      $flow = whatsapp_bot_flow_match($pdo, $companyId, $text);
+      if ($flow) return whatsapp_bot_flow_start($pdo, $companyId, $ctx, $cfg, $chat, (int)$flow['id']);
       $menu = whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, true);
       if ($menu === '') { // empresa sem nenhuma opção cadastrada: vai direto para a fila
         whatsapp_chat_enqueue($pdo, $companyId, $ctx, $cfg, null);
@@ -1064,22 +1124,76 @@ if (!function_exists('whatsapp_bot_step')) {
       }
       return 'boas-vindas';
     }
-    if (in_array($norm, ['menu', 'inicio', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite'], true)) {
+    if ($state === 'MENU' && ($flow = whatsapp_bot_flow_match($pdo, $companyId, $text))) {
+      return whatsapp_bot_flow_start($pdo, $companyId, $ctx, $cfg, $chat, (int)$flow['id']);
+    }
+    // Durante as perguntas de um fluxo, "oi"/"obrigado" podem ser respostas: só "menu" interrompe.
+    $menuWords = $state === 'FLOW' ? ['menu', 'inicio'] : ['menu', 'inicio', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite'];
+    if (in_array($norm, $menuWords, true)) {
       $save(['state' => 'MENU', 'data' => []]);
       whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, false);
       return 'menu';
     }
-    if (in_array($norm, ['sair', 'encerrar', 'tchau', 'obrigado', 'obrigada'], true)) {
+    if (in_array($norm, $state === 'FLOW' ? ['sair'] : ['sair', 'encerrar', 'tchau', 'obrigado', 'obrigada'], true)) {
       whatsapp_chat_send_text($pdo, $companyId, $ctx, "Obrigado pelo contato! Quando precisar, é só mandar uma mensagem. 👋");
       $save(['state' => 'FIM', 'data' => []]);
       return 'encerrado';
     }
-    if (!in_array($type, ['text', 'button', 'list'], true) && $state !== 'ASK_CRM') {
+    if (!in_array($type, ['text', 'button', 'list'], true) && !in_array($state, ['ASK_CRM', 'FLOW'], true)) {
       whatsapp_chat_send_text($pdo, $companyId, $ctx, "Recebi seu arquivo. 🙂 Para eu entender, responda com o *número* de uma opção ou digite *menu*.");
       return 'mídia';
     }
 
     switch ($state) {
+      case 'FLOW':
+        return whatsapp_bot_flow_answer($pdo, $companyId, $ctx, $cfg, $chat, $text, $type);
+
+      case 'ASK_DOC_REPEAT':
+        $doc = whatsapp_bot_digits($text);
+        if (!whatsapp_bot_valid_cpf($doc) && !whatsapp_bot_valid_cnpj($doc)) {
+          whatsapp_chat_send_text($pdo, $companyId, $ctx, "CPF/CNPJ inválido. Digite novamente só os números, ou *menu* para voltar.");
+          return 'documento inválido';
+        }
+        $attempts = (int)$chat['doc_attempts'];
+        $since = !empty($chat['doc_attempts_since']) ? strtotime((string)$chat['doc_attempts_since']) : 0;
+        $sinceStr = (string)($chat['doc_attempts_since'] ?? '');
+        if ($since < $now - 3600) { $attempts = 0; $sinceStr = date('Y-m-d H:i:s'); }
+        $attempts++;
+        $save(['doc_attempts' => $attempts, 'doc_attempts_since' => $sinceStr, 'state' => 'MENU']);
+        if ($attempts > WHATSAPP_BOT_DOC_ATTEMPTS_PER_HOUR) {
+          whatsapp_chat_send_text($pdo, $companyId, $ctx, "Muitas consultas seguidas. Tente novamente mais tarde ou fale com um atendente pelo menu. Digite *menu*.");
+          return 'limite de consultas';
+        }
+        $q = $pdo->prepare("SELECT id FROM finance_people WHERE company_id=? AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(document,''),'.',''),'-',''),'/',''),' ','')=? ORDER BY id LIMIT 1");
+        $q->execute([$companyId, $doc]);
+        $pid = (int)$q->fetchColumn();
+        if ($pid <= 0) {
+          whatsapp_chat_send_text($pdo, $companyId, $ctx, "Não encontrei cadastro com este CPF/CNPJ. Digite *menu* e escolha falar com um atendente, se preferir.");
+          return 'repetir: sem cadastro';
+        }
+        return whatsapp_bot_repeat_offer($pdo, $companyId, $ctx, $chat, $pid);
+
+      case 'CONFIRM_REPEAT':
+        if (trim($text) === '1' || in_array($norm, ['sim', 's', 'confirmo', 'confirmar'], true)) {
+          $save(['state' => 'MENU', 'data' => []]);
+          try {
+            $new = whatsapp_bot_repeat_create($pdo, $companyId, $ctx, (int)($data['order'] ?? 0));
+            whatsapp_chat_send_text($pdo, $companyId, $ctx, "Pedido nº *" . $new['number'] . "* recebido! ✅\nTotal: *" . whatsapp_bot_money($new['total']) . "*\nA loja vai confirmar e avisar por aqui.\n\nDigite *menu* para ver as outras opções.");
+            whatsapp_chat_log($pdo, $companyId, $chat, 'OUT', 'sistema', 'Pedido nº ' . $new['number'] . ' criado pelo robô (repetição do último pedido), aguardando confirmação da loja.');
+            return 'repetir: pedido ' . $new['id'];
+          } catch (Throwable $e) {
+            whatsapp_chat_enqueue($pdo, $companyId, $ctx, $cfg, null, "Não consegui registrar o pedido agora, mas já encaminhei para *{setor}*. Em instantes alguém fala com você por aqui.");
+            return 'repetir: erro ' . $e->getMessage();
+          }
+        }
+        if (trim($text) === '2' || in_array($norm, ['nao', 'n', 'cancelar'], true)) {
+          $save(['state' => 'MENU', 'data' => []]);
+          whatsapp_chat_send_text($pdo, $companyId, $ctx, "Tudo bem, não fiz o pedido. Digite *menu* para ver as outras opções.");
+          return 'repetir: recusado';
+        }
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, "Responda *1* para fazer o pedido ou *2* para não fazer.");
+        return 'repetir: aguardando';
+
       case 'ASK_DOC':
         $doc = whatsapp_bot_digits($text);
         if (!whatsapp_bot_valid_cpf($doc) && !whatsapp_bot_valid_cnpj($doc)) {
@@ -1144,30 +1258,16 @@ if (!function_exists('whatsapp_bot_step')) {
       return 'opção inválida';
     }
     $msg = trim((string)($item['message'] ?? ''));
-    switch ((string)$item['action']) {
-      case 'submenu':
-        $save(['state' => 'MENU', 'data' => ['node' => (int)$item['id']]]);
-        whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, (int)$item['id'], false);
-        return 'submenu ' . $item['id'];
-      case 'text':
-        whatsapp_chat_send_text($pdo, $companyId, $ctx, ($msg !== '' ? $msg : $item['label']) . "\n\nDigite *menu* para ver as outras opções" . ($node ? ' ou *0* para voltar.' : '.'));
-        return 'texto ' . $item['id'];
-      case 'boleto':
-        whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg !== '' ? $msg : "Para enviar a 2ª via, informe o *CPF ou CNPJ* do titular (só os números).");
-        $save(['state' => 'ASK_DOC']);
-        return 'opção boleto';
-      case 'pedido':
-        whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg !== '' ? $msg : "Informe o *número do pedido*.");
-        $save(['state' => 'ASK_ORDER']);
-        return 'opção pedido';
-      case 'crm':
-        whatsapp_chat_send_text($pdo, $companyId, $ctx, $msg !== '' ? $msg : "Descreva em *uma mensagem* o que você precisa, que eu abro um atendimento para a nossa equipe.");
-        $save(['state' => 'ASK_CRM']);
-        return 'opção crm';
-      case 'setor':
-        whatsapp_chat_enqueue($pdo, $companyId, $ctx, $cfg, ((int)($item['department_id'] ?? 0)) ?: null, $msg);
-        return 'fila setor ' . (int)($item['department_id'] ?? 0);
+    if ((string)$item['action'] === 'submenu') {
+      $save(['state' => 'MENU', 'data' => ['node' => (int)$item['id']]]);
+      whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, (int)$item['id'], false);
+      return 'submenu ' . $item['id'];
     }
+    if ((string)$item['action'] === 'text') {
+      whatsapp_chat_send_text($pdo, $companyId, $ctx, ($msg !== '' ? $msg : $item['label']) . "\n\nDigite *menu* para ver as outras opções" . ($node ? ' ou *0* para voltar.' : '.'));
+      return 'texto ' . $item['id'];
+    }
+    return whatsapp_bot_run_action($pdo, $companyId, $ctx, $cfg, $chat, (string)$item['action'], $msg, $item);
     return 'sem ação';
   }
 }

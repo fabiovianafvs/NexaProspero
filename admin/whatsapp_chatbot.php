@@ -48,6 +48,9 @@ if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
       case 'dep_save':
         whatsapp_department_save($pdo, $cid, (int)($_POST['id'] ?? 0), (string)($_POST['name'] ?? ''), !empty($_POST['active']), (array)($_POST['users'] ?? []));
         $go('Setor salvo.', '#setores');
+      case 'flow_delete':
+        whatsapp_bot_flow_delete($pdo, $cid, (int)($_POST['id'] ?? 0));
+        $go('Fluxo excluído.', '#fluxos');
       case 'dep_delete':
         whatsapp_department_delete($pdo, $cid, (int)($_POST['id'] ?? 0));
         $go('Setor excluído.', '#setores');
@@ -69,6 +72,11 @@ if ($ready) {
   $members = whatsapp_department_members($pdo, $cid);
 }
 $actions = whatsapp_bot_node_actions();
+$flowsReady = $ready && whatsapp_bot_flows_ready($pdo);
+$flows = $flowsReady ? whatsapp_bot_flows($pdo, $cid) : [];
+$flowNames = [];
+foreach ($flows as $f) $flowNames[(int)$f['id']] = (string)$f['name'];
+if (!$flowsReady) unset($actions['fluxo']);
 $depNames = [];
 foreach ($departments as $d) $depNames[(int)$d['id']] = (string)$d['name'];
 $submenus = array_values(array_filter($tree, static fn($n) => $n['action'] === 'submenu'));
@@ -129,10 +137,10 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
           <tr>
             <td class="wab-num" style="padding-left:<?= 8 + (int)$n['depth'] * 22 ?>px"><?= wab_h($n['number']) ?></td>
             <td><?= (int)$n['depth'] > 0 ? '<span class="wab-muted">↳ </span>' : '' ?><?= wab_h($n['label']) ?><?= (int)$n['active'] ? '' : ' <span class="wab-chip off">inativa</span>' ?></td>
-            <td><span class="wab-chip"><?= wab_h($actions[$n['action']] ?? $n['action']) ?></span><?php if ($n['action'] === 'setor'): ?> <span class="wab-muted"><?= wab_h($depNames[(int)$n['department_id']] ?? 'Fila geral') ?></span><?php endif; ?></td>
+            <td><span class="wab-chip"><?= wab_h($actions[$n['action']] ?? $n['action']) ?></span><?php if ($n['action'] === 'setor'): ?> <span class="wab-muted"><?= wab_h($depNames[(int)$n['department_id']] ?? 'Fila geral') ?></span><?php endif; ?><?php if ($n['action'] === 'fluxo'): ?> <span class="wab-muted"><?= wab_h($flowNames[(int)($n['flow_id'] ?? 0)] ?? '(fluxo excluído)') ?></span><?php endif; ?></td>
             <td><div class="wab-row-actions">
               <?php foreach (['node_up' => '↑', 'node_down' => '↓'] as $a => $lbl): ?><form method="post"><input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="<?= $a ?>"><input type="hidden" name="id" value="<?= (int)$n['id'] ?>"><button class="btn wab-mini" type="submit" title="<?= $a === 'node_up' ? 'Subir' : 'Descer' ?>"><?= $lbl ?></button></form><?php endforeach; ?>
-              <button class="btn wab-mini" type="button" onclick='wabNode(<?= wab_h(json_encode(['id' => (int)$n['id'], 'parent_id' => (int)($n['parent_id'] ?? 0), 'label' => $n['label'], 'action' => $n['action'], 'message' => (string)($n['message'] ?? ''), 'department_id' => (int)($n['department_id'] ?? 0), 'active' => (int)$n['active']], JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
+              <button class="btn wab-mini" type="button" onclick='wabNode(<?= wab_h(json_encode(['id' => (int)$n['id'], 'parent_id' => (int)($n['parent_id'] ?? 0), 'label' => $n['label'], 'action' => $n['action'], 'message' => (string)($n['message'] ?? ''), 'department_id' => (int)($n['department_id'] ?? 0), 'flow_id' => (int)($n['flow_id'] ?? 0), 'active' => (int)$n['active']], JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
               <?php if ($n['action'] === 'submenu'): ?><button class="btn wab-mini" type="button" onclick="wabNode({parent_id:<?= (int)$n['id'] ?>})">+ Dentro</button><?php endif; ?>
               <form method="post" onsubmit="return confirm('Excluir esta opção<?= $n['action'] === 'submenu' ? ' e tudo que está dentro dela' : '' ?>?');"><input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="node_delete"><input type="hidden" name="id" value="<?= (int)$n['id'] ?>"><button class="btn btn-danger wab-mini" type="submit">Excluir</button></form>
             </div></td>
@@ -144,6 +152,35 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     <div><div class="wab-muted" style="margin-bottom:6px;font-weight:700">Como o cliente vê o início:</div><div class="wab-phone"><pre><?= wab_h($preview) ?></pre></div></div>
   </div>
 </section>
+
+<?php if ($flowsReady): ?>
+<section class="wab-card" id="fluxos">
+  <div class="wab-head">
+    <div><h2>Fluxos (campanhas, anúncios e roteiros)</h2><div class="wab-muted">Um fluxo é uma sequência de perguntas e mensagens que termina numa ação (ex.: transferir para um setor). Ele começa quando o cliente manda uma <b>frase de gatilho</b> — por exemplo a mensagem pronta do seu anúncio "Olá, gostaria de conhecer melhor a solução" — ou por uma opção do menu com a ação <b>Iniciar um fluxo</b>. As respostas aparecem para o atendente na tela de Atendimento.</div></div>
+    <a class="btn btn-primary" href="whatsapp_chatbot_fluxo.php">+ Novo fluxo</a>
+  </div>
+  <table class="wab-table" style="margin-top:10px">
+    <thead><tr><th>Fluxo</th><th>Frases de gatilho</th><th>Passos</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    <?php if (!$flows): ?><tr><td colspan="5" class="wab-muted">Nenhum fluxo cadastrado.</td></tr><?php endif; ?>
+    <?php foreach ($flows as $f): $trig = array_values(array_filter(array_map('trim', preg_split('/\R/', (string)($f['triggers'] ?? '')) ?: []))); ?>
+      <tr>
+        <td><b><?= wab_h($f['name']) ?></b></td>
+        <td><?= $trig ? wab_h(mb_strimwidth(implode(' · ', $trig), 0, 120, '…')) : '<span class="wab-muted">Só pelo menu</span>' ?><?= $trig && $f['match_mode'] === 'exata' ? ' <span class="wab-chip off">exata</span>' : '' ?></td>
+        <td><?= (int)$f['steps_count'] ?></td>
+        <td><?= (int)$f['active'] ? '<span class="wab-chip">Ativo</span>' : '<span class="wab-chip off">Inativo</span>' ?></td>
+        <td><div class="wab-row-actions">
+          <a class="btn wab-mini" href="whatsapp_chatbot_fluxo.php?id=<?= (int)$f['id'] ?>">Editar</a>
+          <form method="post" onsubmit="return confirm('Excluir este fluxo e todos os passos? Opções do menu que o iniciavam ficam inativas.');"><input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="flow_delete"><input type="hidden" name="id" value="<?= (int)$f['id'] ?>"><button class="btn btn-danger wab-mini" type="submit">Excluir</button></form>
+        </div></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+</section>
+<?php else: ?>
+<section class="wab-card"><div class="wab-muted">Para usar <b>fluxos com frase de gatilho</b> e <b>repetir último pedido</b>, aplique "WhatsApp - Fluxos e repetir pedido" no Atualizador do Banco.</div></section>
+<?php endif; ?>
 
 <section class="wab-card" id="setores">
   <div class="wab-head">
@@ -199,6 +236,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <div class="wab-field"><label>Fica em</label><select name="parent_id" id="nParent"><option value="0">Menu inicial</option><?php foreach ($submenus as $s): ?><option value="<?= (int)$s['id'] ?>">Dentro de <?= wab_h($s['number'] . ' - ' . $s['label']) ?></option><?php endforeach; ?></select></div>
   <div class="wab-field"><label>Texto da opção (o que o cliente vê no menu)</label><input type="text" name="label" id="nLabel" maxlength="80" required></div>
   <div class="wab-field"><label>O que acontece ao escolher</label><select name="action" id="nAction" onchange="wabNodeAction()"><?php foreach ($actions as $k => $lbl): ?><option value="<?= wab_h($k) ?>"><?= wab_h($lbl) ?></option><?php endforeach; ?></select></div>
+  <div class="wab-field" id="nFlowBox"><label>Fluxo que esta opção inicia</label><select name="flow_id" id="nFlow"><option value="0">— escolha —</option><?php foreach ($flows as $f): ?><option value="<?= (int)$f['id'] ?>"><?= wab_h($f['name']) ?></option><?php endforeach; ?></select><?php if (!$flows): ?><div class="wab-muted">Cadastre um fluxo primeiro (seção Fluxos).</div><?php endif; ?></div>
   <div class="wab-field" id="nDepBox"><label>Setor</label><select name="department_id" id="nDep"><option value="0">Fila geral (qualquer atendente)</option><?php foreach ($departments as $d): ?><option value="<?= (int)$d['id'] ?>"><?= wab_h($d['name']) ?></option><?php endforeach; ?></select></div>
   <div class="wab-field"><label id="nMsgLabel">Mensagem</label><textarea name="message" id="nMsg" maxlength="3000"></textarea><div class="wab-muted" id="nMsgHint"></div></div>
   <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="active" value="1" id="nActive"> Opção ativa</label>
@@ -222,10 +260,13 @@ const WAB_HINTS = {
   boleto: ['Pergunta do robô (opcional)', 'Em branco: "Para enviar a 2ª via, informe o CPF ou CNPJ do titular".'],
   pedido: ['Pergunta do robô (opcional)', 'Em branco: "Informe o número do pedido".'],
   crm: ['Pergunta do robô (opcional)', 'Em branco: pede para o cliente descrever o que precisa e gera um atendimento no CRM com protocolo.'],
+  repetir_pedido: ['Mensagem antes (opcional)', 'O robô acha o último pedido do cliente (pelo WhatsApp ou CPF/CNPJ), mostra os itens com o preço de hoje e pede confirmação. Confirmado, cria um pedido EM ABERTO para a loja confirmar (igual pedido do catálogo online).'],
+  fluxo: ['Mensagem antes (opcional)', 'Inicia o fluxo escolhido (perguntas em sequência).'],
 };
 function wabNodeAction() {
   const a = document.getElementById('nAction').value;
   document.getElementById('nDepBox').style.display = a === 'setor' ? '' : 'none';
+  document.getElementById('nFlowBox').style.display = a === 'fluxo' ? '' : 'none';
   document.getElementById('nMsgLabel').textContent = (WAB_HINTS[a] || ['Mensagem'])[0];
   document.getElementById('nMsgHint').textContent = (WAB_HINTS[a] || ['', ''])[1];
 }
@@ -235,6 +276,7 @@ function wabNode(n) {
   document.getElementById('nLabel').value = n.label || '';
   document.getElementById('nAction').value = n.action || 'text';
   document.getElementById('nDep').value = String(n.department_id || 0);
+  document.getElementById('nFlow').value = String(n.flow_id || 0);
   document.getElementById('nMsg').value = n.message || '';
   document.getElementById('nActive').checked = n.id ? !!n.active : true;
   document.getElementById('nTitle').textContent = n.id ? 'Editar opção' : 'Nova opção';

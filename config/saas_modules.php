@@ -789,7 +789,7 @@ if (!function_exists('saas_admin_page_required_modules')) {
       'produtos.php', 'produto_form.php', 'estoque_consulta.php' => ['*'],
       'utilitarios_manutencao_produtos.php' => ['*'],
       'whatsapp.php', 'whatsapp_api.php', 'whatsapp_modelos.php', 'whatsapp_fila.php' => ['*'],
-      'whatsapp_chatbot.php', 'whatsapp_atendimento.php', 'whatsapp_atendimento_api.php', 'whatsapp_midia.php' => ['whatsapp_chatbot'],
+      'whatsapp_chatbot.php', 'whatsapp_chatbot_fluxo.php', 'whatsapp_atendimento.php', 'whatsapp_atendimento_api.php', 'whatsapp_midia.php' => ['whatsapp_chatbot'],
       'gestao_clientes.php', 'gestao_clientes_importar.php' => ['delivery', 'gestao', 'financeiro'],
       'financeiro_pessoas.php' => ['delivery', 'gestao', 'financeiro', 'orcamento'],
       'exportacao.php', 'firebird.php', 'firebird_run.php' => ['exportacao'],
