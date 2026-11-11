@@ -174,7 +174,7 @@ if (!function_exists('orc_proposta_logo_file')) {
       $src = $dir . $file;
       if ($file === '' || !is_file($src)) return '';
       if (!function_exists('imagecreatefromstring') || preg_match('/\.svg$/i', $file)) return $forPdf ? '' : $src;
-      $cache = $dir . 'proposta-' . md5($file . '|' . (string)filemtime($src) . '|v2' . ($forPdf ? '|pdf' : '')) . '.png';
+      $cache = $dir . 'proposta-' . md5($file . '|' . (string)filemtime($src) . '|v3') . '.png';
       if (is_file($cache)) return $cache;
       $im = @imagecreatefromstring((string)file_get_contents($src));
       if (!$im) return $src;
@@ -197,19 +197,30 @@ if (!function_exists('orc_proposta_logo_file')) {
       $minX = max(0, $minX - $pad); $minY = max(0, $minY - $pad);
       $maxX = min($w - 1, $maxX + $pad); $maxY = min($h - 1, $maxY + $pad);
       $cw = $maxX - $minX + 1; $ch = $maxY - $minY + 1;
+      // Fundo branco (o cabeçalho é branco e o PDF não aceita transparência).
       $out = imagecreatetruecolor($cw, $ch);
-      if ($forPdf) {
-        imagefill($out, 0, 0, imagecolorallocate($out, 255, 255, 255));
-        imagealphablending($out, true);
-        imagecopy($out, $im, 0, 0, $minX, $minY, $cw, $ch);
-        imagesavealpha($out, false);
-      } else {
-        imagealphablending($out, false);
-        imagesavealpha($out, true);
-        imagefill($out, 0, 0, imagecolorallocatealpha($out, 255, 255, 255, 127));
-        imagecopy($out, $im, 0, 0, $minX, $minY, $cw, $ch);
-      }
+      imagefill($out, 0, 0, imagecolorallocate($out, 255, 255, 255));
+      imagealphablending($out, true);
+      imagecopy($out, $im, 0, 0, $minX, $minY, $cw, $ch);
       imagedestroy($im);
+      // Limpa a "sujeira" de compressão JPEG no fundo: tons quase brancos viram branco,
+      // com transição suave para não serrilhar as bordas do desenho.
+      for ($y = 0; $y < $ch; $y++) {
+        for ($x = 0; $x < $cw; $x++) {
+          $c = imagecolorat($out, $x, $y);
+          $r = ($c >> 16) & 255; $g = ($c >> 8) & 255; $b = $c & 255;
+          $lo = min($r, $g, $b);
+          if ($lo < 200) continue;
+          $t = min(1.0, ($lo - 200) / 35);
+          imagesetpixel($out, $x, $y, (int)(($r + (255 - $r) * $t)) << 16 | (int)(($g + (255 - $g) * $t)) << 8 | (int)($b + (255 - $b) * $t));
+        }
+      }
+      // Logo pequena: amplia com filtro bicúbico para não ficar quadriculada no quadro.
+      if ($cw < 700) {
+        $nw = 700; $nh = max(1, (int)round($ch * 700 / $cw));
+        $big = imagescale($out, $nw, $nh, IMG_BICUBIC);
+        if ($big) { imagedestroy($out); $out = $big; }
+      }
       $ok = @imagepng($out, $cache, 6);
       imagedestroy($out);
       return $ok ? $cache : $src;
