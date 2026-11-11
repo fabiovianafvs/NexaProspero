@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.4';
+const SERVICE_VERSION = 'engine-1.5';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -261,7 +261,11 @@ let shuttingDown = false;
 const authDirFor = (sid) => path.join(AUTH_DIR, `company-${sid}`);
 function hasStoredCreds(sid) {
   const creds = readJsonSync(path.join(authDirFor(sid), 'creds.json'), null);
-  return Boolean(creds && creds.registered);
+  // Login por QR Code não marca creds.registered (só o login por código de
+  // pareamento marca): a sessão salva é reconhecida pelo creds.me (aparelho já
+  // vinculado). Antes só "registered" contava e, a cada reinício do motor, as
+  // empresas não eram reabertas e pareciam desconectadas.
+  return Boolean(creds && (creds.registered || creds.me?.id));
 }
 function storedIds() {
   const ids = [];
@@ -358,7 +362,7 @@ async function startSession(sid) {
 
   const { state: auth, saveCreds } = await fileAuthState(authDirFor(sid));
   if (generation !== state.generation) return state;
-  state.registered = Boolean(auth.creds?.registered);
+  state.registered = Boolean(auth.creds?.registered || auth.creds?.me?.id);
   const version = await currentWaVersion();
   if (generation !== state.generation) return state;
 
