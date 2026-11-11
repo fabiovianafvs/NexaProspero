@@ -262,6 +262,17 @@ $comandaPrinterGroups = $hasComandasModule ? comanda_printer_groups($pdo, (int)C
 $stCompany = $pdo->prepare('SELECT * FROM companies WHERE id = ? LIMIT 1');
 $stCompany->execute([COMPANY_ID]);
 $company = $stCompany->fetch(PDO::FETCH_ASSOC) ?: ['id'=>COMPANY_ID,'name'=>''];
+// Endereço do catálogo: o cadastro da empresa (tabela companies) é o que o sistema usa
+// para achar a empresa; a cópia em Parâmetros só vale se a coluna não existir.
+// (Na homologação o domínio é trocado só em companies; antes, salvar Parâmetros
+// gravava de volta o domínio antigo e a empresa deixava de ser encontrada.)
+$paramsDomainOf = static function (array $company, array $biz): array {
+  return [
+    array_key_exists('subdomain', $company) && trim((string)$company['subdomain']) !== '' ? (string)$company['subdomain'] : (string)($biz['domain']['subdomain'] ?? ($company['slug'] ?? '')),
+    array_key_exists('custom_domain', $company) ? (string)($company['custom_domain'] ?? '') : (string)($biz['domain']['custom_domain'] ?? ''),
+  ];
+};
+[$paramsCurrentSubdomain, $paramsCurrentCustomDomain] = $paramsDomainOf($company, (array)$biz);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $section = (string)($_POST['section'] ?? '');
@@ -321,10 +332,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $catalogTitle = params_limit_text((string)($_POST['catalog_title'] ?? ($company['name'] ?? $app['site_name'] ?? '')), 150);
     $catalogSubtitle = params_limit_text((string)($_POST['catalog_subtitle'] ?? ($biz['brand']['catalog_subtitle'] ?? '')), 250);
-    $subdomain = company_subdomain_normalize((string)($_POST['catalog_subdomain'] ?? ($biz['domain']['subdomain'] ?? ($company['subdomain'] ?? ''))));
+    $subdomain = company_subdomain_normalize((string)($_POST['catalog_subdomain'] ?? $paramsCurrentSubdomain));
     $subdomainValidation = company_subdomain_validate($subdomain);
     if (!$subdomainValidation['valid']) $erro = $subdomainValidation['message'];
-    $customDomain = strtolower(trim((string)($_POST['custom_domain'] ?? ($biz['domain']['custom_domain'] ?? ($company['custom_domain'] ?? '')))));
+    $customDomain = strtolower(trim((string)($_POST['custom_domain'] ?? $paramsCurrentCustomDomain)));
     $customDomain = preg_replace('/^https?:\/\//', '', $customDomain);
     $customDomain = params_limit_text(trim($customDomain, '/ '), 190);
 
@@ -1038,12 +1049,12 @@ admin_topbar('Central - Configurações','params');
           </div>
           <div>
             <label>Subdomínio</label>
-            <input class="field" name="catalog_subdomain" value="<?= e((string)($biz['domain']['subdomain'] ?? ($company['subdomain'] ?? COMPANY_SLUG))) ?>" placeholder="minhaloja">
+            <?php [$paramsCurrentSubdomain, $paramsCurrentCustomDomain] = $paramsDomainOf($company, (array)$biz); ?><input class="field" name="catalog_subdomain" value="<?= e($paramsCurrentSubdomain !== '' ? $paramsCurrentSubdomain : COMPANY_SLUG) ?>" placeholder="minhaloja">
             <div class="hint">Acentos, ç e caracteres especiais serão removidos automaticamente. Ex.: Sabor &amp; Art → sabor-e-art.</div>
           </div>
           <div>
             <label>Domínio personalizado</label>
-            <input class="field" name="custom_domain" value="<?= e((string)($biz['domain']['custom_domain'] ?? ($company['custom_domain'] ?? ''))) ?>" placeholder="catalogo.minhaloja.com.br">
+            <input class="field" name="custom_domain" value="<?= e($paramsCurrentCustomDomain) ?>" placeholder="catalogo.minhaloja.com.br">
             <div class="hint">Aponte o DNS para seu servidor antes de ativar.</div>
           </div>
         </div>
