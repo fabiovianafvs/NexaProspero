@@ -155,6 +155,64 @@ if (!function_exists('orc_proposta_data')) {
   }
 }
 
+if (!function_exists('orc_proposta_logo_file')) {
+  /**
+   * Logo da empresa recortada (sem a margem branca/transparente em volta) e em JPEG
+   * com fundo branco, para ocupar todo o quadro do cabeçalho. Fica em cache em
+   * uploads/logos/. Sem GD ou em erro, devolve o arquivo original. '' = sem logo.
+   */
+  function orc_proposta_logo_file(int $companyId): string {
+    if ($companyId <= 0) return '';
+    try {
+      if (!function_exists('load_business_config')) { $f = __DIR__ . '/load_config.php'; if (is_file($f)) require_once $f; }
+      if (!function_exists('load_business_config')) return '';
+      $logo = (array)(((array)load_business_config($companyId))['logo'] ?? []);
+      if (array_key_exists('enabled', $logo) && empty($logo['enabled'])) return '';
+      $file = basename(trim((string)($logo['file'] ?? '')));
+      $dir = __DIR__ . '/../uploads/logos/';
+      $src = $dir . $file;
+      if ($file === '' || !is_file($src)) return '';
+      if (!function_exists('imagecreatefromstring')) return $src;
+      $cache = $dir . 'proposta-' . md5($file . '|' . (string)filemtime($src) . '|v1') . '.jpg';
+      if (is_file($cache)) return $cache;
+      $im = @imagecreatefromstring((string)file_get_contents($src));
+      if (!$im) return $src;
+      $w = imagesx($im); $h = imagesy($im);
+      $flat = imagecreatetruecolor($w, $h);
+      imagefill($flat, 0, 0, imagecolorallocate($flat, 255, 255, 255));
+      imagecopy($flat, $im, 0, 0, 0, 0, $w, $h);
+      imagedestroy($im);
+      // Procura a área com desenho (pixels que não são quase brancos).
+      $step = max(1, (int)floor(max($w, $h) / 800));
+      $minX = $w; $minY = $h; $maxX = -1; $maxY = -1;
+      for ($y = 0; $y < $h; $y += $step) {
+        for ($x = 0; $x < $w; $x += $step) {
+          $c = imagecolorat($flat, $x, $y);
+          if ((($c >> 16) & 255) < 235 || (($c >> 8) & 255) < 235 || ($c & 255) < 235) {
+            if ($x < $minX) $minX = $x; if ($x > $maxX) $maxX = $x;
+            if ($y < $minY) $minY = $y; if ($y > $maxY) $maxY = $y;
+          }
+        }
+      }
+      if ($maxX >= $minX && $maxY >= $minY) {
+        $pad = (int)ceil(max($maxX - $minX, $maxY - $minY) * 0.02) + $step;
+        $minX = max(0, $minX - $pad); $minY = max(0, $minY - $pad);
+        $maxX = min($w - 1, $maxX + $pad); $maxY = min($h - 1, $maxY + $pad);
+        $cw = $maxX - $minX + 1; $ch = $maxY - $minY + 1;
+        $crop = imagecreatetruecolor($cw, $ch);
+        imagecopy($crop, $flat, 0, 0, $minX, $minY, $cw, $ch);
+        imagedestroy($flat);
+        $flat = $crop;
+      }
+      $ok = @imagejpeg($flat, $cache, 92);
+      imagedestroy($flat);
+      return $ok ? $cache : $src;
+    } catch (Throwable $e) {
+      return '';
+    }
+  }
+}
+
 if (!function_exists('orc_proposta_money')) {
   function orc_proposta_money($v): string { return number_format((float)$v, 2, ',', '.'); }
 }
@@ -182,13 +240,14 @@ if (!function_exists('orc_proposta_pdf_build')) {
     $top = $pdf->GetY(); $h = 34.0;
     $pdf->SetLineWidth(.3);
     $pdf->Rect($m, $top, $W, $h);
-    $pdf->Line($m + 38, $top, $m + 38, $top + $h);
+    $pdf->Line($m + 52, $top, $m + 52, $top + $h);
     $pdf->Line($m + 128, $top, $m + 128, $top + $h);
-    $logo = nexa_customer_pdf_logo_path($companyId);
+    $logo = orc_proposta_logo_file($companyId);
+    if ($logo !== '' && !preg_match('/\\.(jpe?g|png)$/i', $logo)) $logo = '';
     if ($logo !== '') {
       try {
         $info = @getimagesize($logo);
-        $bw = 34.0; $bh = 30.0;
+        $bw = 48.0; $bh = 30.0;
         if ($info && $info[0] > 0 && $info[1] > 0) {
           $ratio = $info[1] / $info[0];
           $w = $bw; $hh = $w * $ratio;
@@ -197,11 +256,11 @@ if (!function_exists('orc_proposta_pdf_build')) {
         }
       } catch (Throwable $e) {}
     }
-    $pdf->SetXY($m + 41, $top + 3);
-    $pdf->SetFont('Times', 'B', 10); $pdf->MultiCell(85, 4.2, $t(mb_strtoupper($c['name'], 'UTF-8')), 0, 'L');
+    $pdf->SetXY($m + 55, $top + 3);
+    $pdf->SetFont('Times', 'B', 10); $pdf->MultiCell(71, 4.2, $t(mb_strtoupper($c['name'], 'UTF-8')), 0, 'L');
     $pdf->SetFont('Times', '', 9);
     foreach (array_filter([$c['doc'] !== '' ? (strlen(preg_replace('/\D/', '', $c['doc'])) > 11 ? 'CNPJ: ' : 'CPF: ') . $c['doc'] : '', $c['ie'] !== '' ? 'I.E.: ' . $c['ie'] : '', $c['address'], $c['city'], $c['phone']]) as $ln) {
-      $pdf->SetX($m + 41); $pdf->MultiCell(85, 3.9, $t($ln), 0, 'L');
+      $pdf->SetX($m + 55); $pdf->MultiCell(71, 3.9, $t($ln), 0, 'L');
     }
     $x3 = $m + 131;
     $pdf->SetXY($x3, $top + 6); $pdf->SetFont('Times', 'B', 10); $pdf->Cell(40, 5, $t('Nº da Proposta/Orçamento :'), 0, 0, 'L');

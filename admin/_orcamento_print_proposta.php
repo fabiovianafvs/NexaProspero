@@ -10,6 +10,13 @@ $ppC = $pp['company'];
 $ppU = $pp['customer'];
 $ppT = $pp['totals'];
 $ppH = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+$ppLogo = '';
+$ppLogoFile = orc_proposta_logo_file($companyId);
+if ($ppLogoFile !== '' && is_file($ppLogoFile) && filesize($ppLogoFile) < 3 * 1024 * 1024) {
+  $ppMime = (string)(@getimagesize($ppLogoFile)['mime'] ?? '');
+  if (in_array($ppMime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) $ppLogo = 'data:' . $ppMime . ';base64,' . base64_encode((string)file_get_contents($ppLogoFile));
+}
+if ($ppLogo === '') $ppLogo = (string)$logo;
 $ppDocLabel = strlen(preg_replace('/\D/', '', $ppC['doc']) ?? '') > 11 ? 'CNPJ' : 'CPF';
 ?>
 <!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Proposta/Orçamento <?= $ppH($pp['number']) ?></title>
@@ -20,9 +27,9 @@ body{margin:0;background:#eef2f7;color:#000;font-family:"Times New Roman",Times,
 @page{size:A4 portrait;margin:8mm}
 .pp{width:194mm;min-height:281mm;margin:12px auto;background:#fff;padding:4mm;box-shadow:0 10px 28px rgba(15,23,42,.12);font-size:9.5pt}
 .pp-box{border:1px solid #000}
-.pp-head{display:grid;grid-template-columns:38mm 1fr 58mm;border:1.2px solid #000;min-height:34mm}
+.pp-head{display:grid;grid-template-columns:52mm 1fr 58mm;border:1.2px solid #000;min-height:34mm}
 .pp-head>div{padding:2mm}.pp-head>div+div{border-left:1px solid #000}
-.pp-logo{display:flex;align-items:center;justify-content:center}.pp-logo img{max-width:34mm;max-height:30mm;object-fit:contain}
+.pp-logo{display:flex;align-items:center;justify-content:center;padding:1.5mm!important}.pp-logo img{width:100%;height:100%;max-width:48mm;max-height:30mm;object-fit:contain}
 .pp-co{font-size:9pt;line-height:1.3}.pp-co strong{font-size:10pt;display:block;text-transform:uppercase}
 .pp-num{font-size:9pt}.pp-num .n{display:flex;gap:6px;align-items:baseline;font-weight:700;font-size:10pt;margin:3mm 0 2mm}.pp-num .n span:last-child{font-family:Arial,Helvetica,sans-serif;font-size:11pt}
 .pp-num .r{display:grid;grid-template-columns:30mm 1fr;margin-bottom:1.5mm}
@@ -53,7 +60,7 @@ body{margin:0;background:#eef2f7;color:#000;font-family:"Times New Roman",Times,
 <?= $orcToolbarHtml ?>
 <main class="pp">
   <div class="pp-head">
-    <div class="pp-logo"><?php if ($logo !== ''): ?><img src="<?= $ppH($logo) ?>" alt="Logo"><?php endif; ?></div>
+    <div class="pp-logo"><?php if ($ppLogo !== ''): ?><img src="<?= $ppH($ppLogo) ?>" alt="Logo"><?php endif; ?></div>
     <div class="pp-co">
       <strong><?= $ppH($ppC['name']) ?></strong>
       <?php if ($ppC['doc'] !== ''): ?><div><?= $ppDocLabel ?>: <?= $ppH($ppC['doc']) ?></div><?php endif; ?>
