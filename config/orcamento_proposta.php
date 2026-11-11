@@ -49,7 +49,7 @@ if (!function_exists('orc_proposta_data')) {
    * Monta tudo o que o modelo precisa a partir do orçamento já carregado
    * ($quote, $items, $payments) da empresa $companyId.
    */
-  function orc_proposta_data(PDO $pdo, int $companyId, array $quote, array $items, array $payments = []): array {
+  function orc_proposta_data(PDO $pdo, int $companyId, array $quote, array $items, array $payments = [], array $opts = []): array {
     $pick = 'orc_proposta_pick';
     $company = [];
     try { $st = $pdo->prepare('SELECT * FROM companies WHERE id=? LIMIT 1'); $st->execute([$companyId]); $company = $st->fetch(PDO::FETCH_ASSOC) ?: []; } catch (Throwable $e) {}
@@ -101,6 +101,7 @@ if (!function_exists('orc_proposta_data')) {
       'phone' => trim((string)($quote['person_phone_snapshot'] ?? '')) ?: $pick($person, ['phone', 'whatsapp']),
       'doc' => trim((string)($quote['person_document_snapshot'] ?? '')) ?: $pick($person, ['document']),
       'rg_ie' => $pick($person, ['state_registration', 'identity_document']),
+      'contact' => trim((string)($quote['contact_name'] ?? '')),
     ];
 
     $rows = [];
@@ -110,7 +111,7 @@ if (!function_exists('orc_proposta_data')) {
       $desc = trim((string)($it['description_snapshot'] ?? ''));
       $note = trim((string)($it['notes'] ?? ''));
       $rows[] = [
-        'code' => trim((string)($it['product_code_snapshot'] ?? '')) ?: (string)($it['produto_id'] ?? ''),
+        'code' => trim((string)($it['product_code_snapshot'] ?? '')) ?: ((int)($it['produto_id'] ?? 0) > 0 ? (string)(int)$it['produto_id'] : ''),
         'qty' => (float)($it['quantity'] ?? 0),
         'unit' => trim((string)($it['unidade_snapshot'] ?? '')) ?: 'UN',
         'desc' => $desc . ($note !== '' ? "\n" . $note : ''),
@@ -135,7 +136,7 @@ if (!function_exists('orc_proposta_data')) {
     foreach ($payments as $p) {
       $label = trim((string)($p['payment_label'] ?? ''));
       $due = !empty($p['due_date']) && strtotime((string)$p['due_date']) ? date('d/m/Y', strtotime((string)$p['due_date'])) : '';
-      $pays[] = trim($label . ($due !== '' ? ' - ' . $due : '') . ': R$ ' . number_format((float)($p['amount'] ?? 0), 2, ',', '.'));
+      $pays[] = trim($label . ($due !== '' ? ' - ' . $due : '') . (!empty($opts['hide_prices']) ? '' : ': R$ ' . number_format((float)($p['amount'] ?? 0), 2, ',', '.')));
     }
     return [
       'number' => (string)(int)($quote['quote_number'] ?? 0),
@@ -151,6 +152,9 @@ if (!function_exists('orc_proposta_data')) {
       'intro' => (string)$cfg['proposta_intro'],
       'other' => (string)$cfg['proposta_other'],
       'terms' => (string)$cfg['proposta_terms'],
+      'hide_prices' => !empty($opts['hide_prices']),
+      'blank_items' => !empty($opts['blank_items']),
+      'doc_slug' => (string)($opts['doc_slug'] ?? 'orcamento'),
     ];
   }
 }
@@ -222,8 +226,15 @@ if (!function_exists('orc_proposta_qty')) {
 if (!function_exists('orc_proposta_pdf_build')) {
   /** PDF A4 do modelo Proposta para WhatsApp/E-mail. $data = nexa_quote_document_load(). */
   function orc_proposta_pdf_build(PDO $pdo, int $companyId, array $data): array {
-    nexa_customer_pdf_bootstrap();
     $d = orc_proposta_data($pdo, $companyId, (array)$data['quote'], (array)$data['items'], (array)($data['payments'] ?? []));
+    return orc_proposta_pdf_render($companyId, $d);
+  }
+}
+
+if (!function_exists('orc_proposta_pdf_render')) {
+  /** Desenha o PDF a partir dos dados já montados (orçamento ou O.S.). */
+  function orc_proposta_pdf_render(int $companyId, array $d): array {
+    nexa_customer_pdf_bootstrap();
     $t = static fn($v): string => nexa_customer_pdf_text((string)$v);
     $pdf = new \NFePHP\DA\Legacy\FPDF\Fpdf('P', 'mm', 'A4');
     $m = 10.0; $W = 190.0;
@@ -287,7 +298,7 @@ if (!function_exists('orc_proposta_pdf_build')) {
     $field('Endereço:', $cu['address'], $m + 2, 20, 95); $field('Bairro:', $cu['district'], $m + 120, 16, 50); $pdf->Ln(4.4);
     $field('Cidade:', $cu['city'], $m + 2, 20, 60); $field('UF', $cu['uf'], $m + 84, 7, 25); $field('Telefone:', $cu['phone'], $m + 120, 16, 50); $pdf->Ln(4.4);
     $field('CPF/CNPJ:', $cu['doc'], $m + 2, 20, 95); $field('RG/I.E.:', $cu['rg_ie'], $m + 120, 16, 50); $pdf->Ln(4.4);
-    $field('A/C:', '', $m + 2, 20, 95); $pdf->Ln(5.2);
+    $field('A/C:', (string)($cu['contact'] ?? ''), $m + 2, 20, 95); $pdf->Ln(5.2);
     $y = $pdf->GetY(); $pdf->Rect($m, $boxTop, $W, $y - $boxTop);
 
     if ($d['intro'] !== '') {
@@ -303,23 +314,26 @@ if (!function_exists('orc_proposta_pdf_build')) {
     foreach ($cols as [$l, $w, $a]) $pdf->Cell($w, 4.6, $t($l), 'B', 0, $a);
     $pdf->Ln(5.6);
     $pdf->SetFont('Arial', '', 7.5);
-    foreach ($d['items'] as $it) {
+    $hideP = !empty($d['hide_prices']);
+    $pdfItems = !empty($d['blank_items']) ? array_fill(0, 6, ['code' => '', 'qty' => '', 'unit' => '', 'desc' => '', 'price' => '', 'total' => '']) : $d['items'];
+    foreach ($pdfItems as $it) {
       $lines = max(1, count(explode("\n", (string)$it['desc'])) + (int)floor($pdf->GetStringWidth($t($it['desc'])) / 82));
       $rh = max(6.0, $lines * 3.6 + 2);
       if ($pdf->GetY() + $rh > $pdf->h - 15) { $pdf->AddPage(); }
       $ry = $pdf->GetY();
       $pdf->Rect($m, $ry, $W, $rh);
       $pdf->SetXY($m + 1, $ry + 1); $pdf->Cell(21, 3.6, $t($it['code']), 0, 0, 'L');
-      $pdf->Cell(20, 3.6, $t(orc_proposta_qty($it['qty'])), 0, 0, 'C');
+      $pdf->Cell(20, 3.6, $t($it['qty'] === '' ? '' : orc_proposta_qty($it['qty'])), 0, 0, 'C');
       $pdf->Cell(15, 3.6, $t($it['unit']), 0, 0, 'C');
       $dx = $pdf->GetX(); $pdf->MultiCell(85, 3.6, $t($it['desc']), 0, 'L');
-      $pdf->SetXY($dx + 85, $ry + 1); $pdf->Cell(24, 3.6, $t(orc_proposta_money($it['price'])), 0, 0, 'R');
-      $pdf->Cell(23, 3.6, $t(orc_proposta_money($it['total'])), 0, 0, 'R');
+      $pdf->SetXY($dx + 85, $ry + 1); $pdf->Cell(24, 3.6, $t($hideP || $it['price'] === '' ? '' : orc_proposta_money($it['price'])), 0, 0, 'R');
+      $pdf->Cell(23, 3.6, $t($hideP || $it['total'] === '' ? '' : orc_proposta_money($it['total'])), 0, 0, 'R');
       $pdf->SetY($ry + $rh);
     }
 
-    // Totais.
+    // Totais (não aparecem na versão sem preço).
     $tt = $d['totals'];
+    if (!$hideP) {
     $tRows = [['Valor total bruto:', orc_proposta_money($tt['bruto']), 'B'], ['Total de Descontos:', $tt['desconto'] > 0 ? orc_proposta_money($tt['desconto']) : '', 'I'], ['Total de Acréscimos:', $tt['acrescimo'] > 0 ? orc_proposta_money($tt['acrescimo']) : '', 'I']];
     if ($tt['frete'] > 0) $tRows[] = ['Frete:', orc_proposta_money($tt['frete']), 'I'];
     $tRows[] = ['Valor a pagar:', orc_proposta_money($tt['pagar']), 'B'];
@@ -331,6 +345,9 @@ if (!function_exists('orc_proposta_pdf_build')) {
       $pdf->SetFont('Times', 'B', 8.5); $pdf->Cell(28, 4.4, $t($v), 0, 1, 'R');
     }
     $y = $ty + $th + 6;
+    } else {
+      $y = $pdf->GetY() + 6;
+    }
 
     // Outros dados.
     $other = [];
@@ -366,6 +383,71 @@ if (!function_exists('orc_proposta_pdf_build')) {
     $pdf->SetXY($m, $ly + .5); $pdf->SetFont('Times', 'B', 8); $pdf->Cell(75, 4, $t(mb_strtoupper($c['name'], 'UTF-8')), 0, 0, 'C');
     $pdf->SetX($m + 80); $pdf->Cell(75, 4, 'ASSINATURA/CARIMBO CLIENTE', 0, 0, 'C');
 
-    return ['filename' => 'proposta-orcamento-' . $d['number'] . '.pdf', 'mimetype' => 'application/pdf', 'content' => $pdf->Output('', 'S')];
+    return ['filename' => 'proposta-' . ($d['doc_slug'] ?? 'orcamento') . '-' . $d['number'] . '.pdf', 'mimetype' => 'application/pdf', 'content' => $pdf->Output('', 'S')];
+  }
+}
+
+if (!function_exists('os_proposta_data')) {
+  /**
+   * O.S. no modelo Proposta/Orçamento: converte a O.S. para os mesmos dados do
+   * orçamento. Observações = campos da O.S. marcados para impressão + solicitação +
+   * diagnóstico + observações ao cliente. Representante = vendedores/técnicos dos itens.
+   * $opts: hide_prices (O.S. sem preço), blank_items (O.S. sem produtos).
+   */
+  function os_proposta_data(PDO $pdo, int $companyId, array $o, array $items, array $payments = [], array $fields = [], array $optionLabels = [], array $opts = []): array {
+    // Código do produto como no cadastro (nº do cadastro), senão o id.
+    $codes = [];
+    $ids = array_values(array_unique(array_filter(array_map(static fn($i) => (int)($i['produto_id'] ?? 0), $items))));
+    if ($ids) {
+      $in = implode(',', array_fill(0, count($ids), '?'));
+      try {
+        $st = $pdo->prepare("SELECT id, numero_cadastro FROM produtos WHERE company_id=? AND id IN ($in)");
+        $st->execute(array_merge([$companyId], $ids));
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) if ((int)($r['numero_cadastro'] ?? 0) > 0) $codes[(int)$r['id']] = (string)(int)$r['numero_cadastro'];
+      } catch (Throwable $e) {}
+    }
+    $sorted = $items;
+    usort($sorted, static fn($a, $b) => [((string)($a['item_type'] ?? '') === 'SERVICO') ? 1 : 0, (int)($a['id'] ?? 0)] <=> [((string)($b['item_type'] ?? '') === 'SERVICO') ? 1 : 0, (int)($b['id'] ?? 0)]);
+    $rows = [];
+    $people = [];
+    foreach ($sorted as $it) {
+      $pid = (int)($it['produto_id'] ?? 0);
+      $it['product_code_snapshot'] = $pid > 0 ? ($codes[$pid] ?? (string)$pid) : '';
+      $rows[] = $it;
+      foreach (['seller_name_snapshot', 'technician_name_snapshot'] as $k) {
+        $n = trim((string)($it[$k] ?? ''));
+        if ($n !== '') $people[mb_strtoupper($n, 'UTF-8')] = $n;
+      }
+    }
+    $notes = [];
+    foreach ($fields as $f) {
+      $v = (string)($f['value_text'] ?? '');
+      $type = (string)($f['input_type'] ?? '');
+      if ($type === 'password' || trim($v) === '') continue;
+      if ($type === 'checkbox') $v = $v === '1' ? 'Sim' : 'Não';
+      else $v = (string)($optionLabels[(int)($f['id'] ?? 0) . '|' . $v] ?? $v);
+      $notes[] = trim((string)($f['label'] ?? '')) . ': ' . $v;
+    }
+    foreach (['title' => '', 'reported_problem' => 'Solicitação: ', 'diagnosis' => 'Diagnóstico: ', 'customer_notes' => ''] as $k => $label) {
+      $v = trim((string)($o[$k] ?? ''));
+      if ($v !== '') $notes[] = $label . $v;
+    }
+    $quote = [
+      'quote_number' => (int)($o['os_number'] ?? 0),
+      'quote_date' => (string)(($o['opened_at'] ?? '') ?: ($o['created_at'] ?? '')),
+      'person_id' => (int)($o['person_id'] ?? 0),
+      'person_name_snapshot' => (string)($o['person_name_snapshot'] ?? ''),
+      'person_document_snapshot' => (string)($o['person_document_snapshot'] ?? ''),
+      'person_phone_snapshot' => (string)(($o['contact_phone'] ?? '') ?: ($o['person_phone_snapshot'] ?? '')),
+      'contact_name' => mb_strtoupper(trim((string)($o['contact_name'] ?? '')), 'UTF-8') === mb_strtoupper(trim((string)($o['person_name_snapshot'] ?? '')), 'UTF-8') ? '' : (string)($o['contact_name'] ?? ''),
+      'seller_name_snapshot' => implode(', ', array_values($people)),
+      'notes' => implode("\n", $notes),
+      'discount_amount' => (float)($o['discount_amount'] ?? 0),
+      'addition_amount' => (float)($o['addition_amount'] ?? 0),
+      'freight_amount' => 0,
+      'total_general' => (float)($o['total_general'] ?? 0),
+    ];
+    $opts['doc_slug'] = 'os';
+    return orc_proposta_data($pdo, $companyId, $quote, $rows, $payments, $opts);
   }
 }

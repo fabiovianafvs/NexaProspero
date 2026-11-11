@@ -47,7 +47,7 @@ try{
     $messageVars=['empresa'=>trim((string)($payload['company']['name']??''))?:'Nexa Próspero','cliente'=>$customer,'orcamento'=>$number,'data'=>ndw_date($q['quote_date']??''),'total'=>ndw_money($q['total_general']??0),'status'=>orc_status_label((string)($q['status']??''))];
   }elseif($type==='os'){
     $payload=nexa_os_document_load($pdo,$cid,$id);$o=(array)$payload['order'];$p=(array)$payload['person'];
-    if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual'],true))$model='a4_half';
+    if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual','proposta'],true))$model='a4_half';
     $number=str_pad((string)(int)$o['os_number'],6,'0',STR_PAD_LEFT);$customer=trim((string)($o['person_name_snapshot']??''))?:'cliente';
     $phone=trim((string)($o['contact_phone']??''));if($phone==='')$phone=trim((string)($p['whatsapp']??''))?:trim((string)($p['phone']??''));if($phone==='')$phone=trim((string)($o['person_phone_snapshot']??''));
     $context='ordem_servico';$pageTitle='Enviar O.S. #'.$number.' por WhatsApp';$docLabel='Ordem de Serviço #'.$number;$filenameHint='O.S. em PDF';$returnFallback='os_imprimir.php?id='.$id.'&modelo='.$model.nexa_os_share_query($osShareOptions);$nav='os_monitor';

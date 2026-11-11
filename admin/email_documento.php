@@ -170,7 +170,7 @@ try {
       $osShareOptions=nexa_os_share_options($_SERVER['REQUEST_METHOD']==='POST'?$_POST:$_GET);
       $id=max(0,(int)($_GET['id'] ?? $_POST['id'] ?? 0));
       if($id<=0) throw new RuntimeException('Ordem de Serviço inválida.');
-      $model=strtolower(trim((string)($_GET['modelo'] ?? $_POST['modelo'] ?? 'a4_half')));if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual'],true))$model='a4_half';
+      $model=strtolower(trim((string)($_GET['modelo'] ?? $_POST['modelo'] ?? 'a4_half')));if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual','proposta'],true))$model='a4_half';
       $data=nexa_os_document_load($pdo,$cid,$id);$o=(array)$data['order'];$person=(array)$data['person'];
       $number=str_pad((string)(int)($o['os_number']??0),6,'0',STR_PAD_LEFT);$customer=trim((string)($o['person_name_snapshot']??''))?:'cliente';
       $recipient=strtolower(trim((string)($person['email']??'')));if(!filter_var($recipient,FILTER_VALIDATE_EMAIL))$recipient=ned_person_email($pdo,$cid,(int)($o['person_id']??0));

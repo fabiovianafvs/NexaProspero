@@ -14,7 +14,7 @@ $stmt=$pdo->prepare("SELECT name,cnpj,cpf,endereco,numero,bairro,cidade,estado,e
 $printLogoUrl=nexa_print_logo_url($companyId);
 $stmt=$pdo->prepare("SELECT * FROM os_settings WHERE company_id=? LIMIT 1");$stmt->execute(array($companyId));$settings=$stmt->fetch(PDO::FETCH_ASSOC);
 $model=isset($_GET['modelo'])?$_GET['modelo']:($settings['default_print_model']??'a4_landscape_dual');
-if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual'],true))$model='a4_landscape_dual';
+if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual','proposta'],true))$model='a4_landscape_dual';
 // Modos somente de apresentação: jamais alterar itens, preços ou totais no banco.
 $printContent=(string)($_GET['conteudo']??'');
 if(!in_array($printContent,['completa','sem_preco','sem_produtos'],true)){
@@ -45,6 +45,7 @@ if(!in_array($printContent,['completa','sem_preco','sem_produtos'],true)){
       <option value="a4_full" <?=$model==='a4_full'?'selected':''?>>A4 inteira</option>
       <option value="a4_half" <?=$model==='a4_half'?'selected':''?>>A4 meia folha</option>
       <option value="72mm" <?=$model==='72mm'?'selected':''?>>72 mm</option>
+      <option value="proposta" <?=$model==='proposta'?'selected':''?>>Proposta/Orçamento (A4 com quadros)</option>
     </select>
     <div id="os-paper-option" style="margin-top:11px">
       <label class="title" for="papel">Papel</label>
@@ -89,6 +90,14 @@ $damageTypes=os_vehicle_damage_types();
 function osp_field_value($f,$labels){$v=(string)$f['value_text'];if($f['input_type']==='checkbox')return $v==='1'?'Sim':'Não';$key=$f['id'].'|'.$v;return isset($labels[$key])?$labels[$key]:$v;}
 function osp_doc($c){return $c['cnpj']?$c['cnpj']:$c['cpf'];}
 if($model==='a4_landscape_dual'){require __DIR__ . '/_os_print_landscape_dual.php';exit;}
+if($model==='proposta'){
+  // Mesmo modelo Proposta/Orçamento do Orçamento (textos em Configurações do Orçamento).
+  require_once __DIR__ . '/../config/orcamento_proposta.php';
+  $pp=os_proposta_data($pdo,$companyId,$o,$items,$payments,$fields,$optionLabels,['hide_prices'=>$printHidePrices,'blank_items'=>$printBlankItems]);
+  $logo=$printLogoUrl;$ppBackUrl=$exitHref;
+  ob_start();?><div class="nexa-print-toolbar <?php echo $model==='72mm'?'nexa-print-toolbar--compact':''; ?>"><div class="nexa-print-toolbar-copy"><strong class="nexa-print-toolbar-title">O.S. #<?php echo str_pad((string)$o['os_number'],6,'0',STR_PAD_LEFT); ?></strong><div class="nexa-print-toolbar-hint">Imprimir ou enviar a O.S. no modelo já escolhido.</div><?php if(trim((string)($_GET['ok']??''))!==''):?><div class="nexa-print-toolbar-message"><?php echo htmlspecialchars((string)$_GET['ok'],ENT_QUOTES,'UTF-8'); ?></div><?php endif;?></div><div class="nexa-print-actions"><button class="nexa-print-action is-primary" type="button" title="Imprimir O.S." aria-label="Imprimir O.S." onclick="window.print()"><span class="nexa-print-action-icon" aria-hidden="true">🖨</span><span class="nexa-print-action-label">Imprimir</span></button><a class="nexa-print-action is-whatsapp" title="Enviar O.S. por WhatsApp" aria-label="Enviar O.S. por WhatsApp" href="documento_whatsapp.php?type=os&id=<?php echo $id; ?>&modelo=<?php echo rawurlencode($model); ?><?php echo htmlspecialchars('&conteudo='.rawurlencode($printContent).'&papel='.rawurlencode((string)($_GET['papel']??'a4')).'&perfil_impressao='.rawurlencode((string)($_GET['perfil_impressao']??'padrao')),ENT_QUOTES,'UTF-8'); ?>&return_to=<?php echo rawurlencode('os_imprimir.php?id='.$id.'&modelo='.$model.$printQuery.'&papel='.rawurlencode((string)($_GET['papel']??'a4')).'&perfil_impressao='.rawurlencode((string)($_GET['perfil_impressao']??'padrao'))); ?>"><span class="nexa-print-action-icon" aria-hidden="true">💬</span><span class="nexa-print-action-label">WhatsApp</span></a><a class="nexa-print-action" title="Enviar O.S. por e-mail" aria-label="Enviar O.S. por e-mail" href="email_documento.php?type=os&id=<?php echo $id; ?>&modelo=<?php echo rawurlencode($model); ?><?php echo htmlspecialchars('&conteudo='.rawurlencode($printContent).'&papel='.rawurlencode((string)($_GET['papel']??'a4')).'&perfil_impressao='.rawurlencode((string)($_GET['perfil_impressao']??'padrao')),ENT_QUOTES,'UTF-8'); ?>&return_to=<?php echo rawurlencode('os_imprimir.php?id='.$id.'&modelo='.$model.$printQuery.'&papel='.rawurlencode((string)($_GET['papel']??'a4')).'&perfil_impressao='.rawurlencode((string)($_GET['perfil_impressao']??'padrao'))); ?>"><span class="nexa-print-action-icon" aria-hidden="true">✉</span><span class="nexa-print-action-label">E-mail</span></a><a class="nexa-print-action" title="Alterar opções" href="os_imprimir.php?id=<?php echo $id; ?>&modelo=<?php echo os_e($model); ?><?php echo os_e($originQuery); ?>"><span class="nexa-print-action-icon" aria-hidden="true">⚙</span><span class="nexa-print-action-label">Opções</span></a><a class="nexa-print-action" title="Sair da impressão" aria-label="Sair da impressão" href="<?php echo os_e($exitHref); ?>"><span class="nexa-print-action-icon" aria-hidden="true">↩</span><span class="nexa-print-action-label">Sair</span></a></div></div><?php $ppToolbarHtml=(string)ob_get_clean();
+  require __DIR__ . '/_orcamento_print_proposta.php';exit;
+}
 $paperCss=$model==='72mm'?'@page{size:72mm auto;margin:3mm}.sheet{width:66mm;padding:0;font-size:10px}.header h1{font-size:14px}.section-title{font-size:10px}.items th,.items td{padding:3px 2px}.hide72{display:none}':($model==='a4_half'?'@page{size:A5 portrait;margin:8mm}.sheet{width:100%;font-size:11px}.header h1{font-size:18px}':'@page{size:A4 portrait;margin:12mm}.sheet{width:100%;font-size:12px}.header h1{font-size:22px}');
 ?><!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>O.S. #<?php echo os_e($o['os_number']); ?></title><link rel="stylesheet" href="../assets/nexa-print-actions.css?v=1145197">
 <style>

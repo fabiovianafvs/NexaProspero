@@ -1,11 +1,17 @@
 <?php
 declare(strict_types=1);
 
-// Orçamento no modelo "Proposta/Orçamento" (A4 com quadros).
-// Incluído somente por orcamento_imprimir.php (já autenticado e com a empresa resolvida).
+// Modelo "Proposta/Orçamento" (A4 com quadros) do Orçamento e da O.S.
+// Incluído somente por orcamento_imprimir.php e os_imprimir.php (já autenticados e com a
+// empresa resolvida). A O.S. entrega $pp pronto (os_proposta_data), a barra em
+// $ppToolbarHtml e o endereço do Esc em $ppBackUrl.
 require_once __DIR__ . '/../config/orcamento_proposta.php';
 
-$pp = orc_proposta_data($pdo, $companyId, $q, $items, $payments);
+if (!isset($pp)) $pp = orc_proposta_data($pdo, $companyId, $q, $items, $payments);
+$ppToolbarHtml = $ppToolbarHtml ?? ($orcToolbarHtml ?? '');
+$ppBackUrl = $ppBackUrl ?? ('orcamentos.php?print_id=' . (int)$id);
+$ppHideP = !empty($pp['hide_prices']);
+$ppRows = !empty($pp['blank_items']) ? array_fill(0, 6, null) : $pp['items'];
 $ppC = $pp['company'];
 $ppU = $pp['customer'];
 $ppT = $pp['totals'];
@@ -16,7 +22,7 @@ if ($ppLogoFile !== '' && is_file($ppLogoFile) && filesize($ppLogoFile) < 3 * 10
   $ppMime = (string)(@getimagesize($ppLogoFile)['mime'] ?? '');
   if (in_array($ppMime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) $ppLogo = 'data:' . $ppMime . ';base64,' . base64_encode((string)file_get_contents($ppLogoFile));
 }
-if ($ppLogo === '') $ppLogo = (string)$logo;
+if ($ppLogo === '') $ppLogo = (string)($logo ?? '');
 $ppDocLabel = strlen(preg_replace('/\D/', '', $ppC['doc']) ?? '') > 11 ? 'CNPJ' : 'CPF';
 ?>
 <!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Proposta/Orçamento <?= $ppH($pp['number']) ?></title>
@@ -57,7 +63,7 @@ body{margin:0;background:#eef2f7;color:#000;font-family:"Times New Roman",Times,
 @media print{body{background:#fff}.nexa-print-toolbar{display:none!important}.pp{box-shadow:none;margin:0;padding:0;width:auto;min-height:0}.pp-bar,.pp-items thead{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pp-items thead{display:table-header-group}}
 @media screen and (max-width:820px){.pp{width:100%;min-height:0;margin:0}}
 </style></head><body>
-<?= $orcToolbarHtml ?>
+<?= $ppToolbarHtml ?>
 <main class="pp">
   <div class="pp-head">
     <div class="pp-logo"><?php if ($ppLogo !== ''): ?><img src="<?= $ppH($ppLogo) ?>" alt="Logo"><?php endif; ?></div>
@@ -82,7 +88,7 @@ body{margin:0;background:#eef2f7;color:#000;font-family:"Times New Roman",Times,
     <div><b>Endereço:</b> <?= $ppH($ppU['address']) ?></div><div><b>Bairro:</b> <?= $ppH($ppU['district']) ?></div>
     <div><b>Cidade:</b> <?= $ppH($ppU['city']) ?><span style="margin-left:8mm"><b style="min-width:6mm">UF</b> <?= $ppH($ppU['uf']) ?></span></div><div><b>Telefone:</b> <?= $ppH($ppU['phone']) ?></div>
     <div><b>CPF/CNPJ:</b> <?= $ppH($ppU['doc']) ?></div><div><b>RG/I.E.:</b> <?= $ppH($ppU['rg_ie']) ?></div>
-    <div class="full"><b>A/C:</b></div>
+    <div class="full"><b>A/C:</b> <?= $ppH($ppU['contact'] ?? '') ?></div>
   </div>
   <?php if ($pp['intro'] !== ''): ?><div class="pp-intro"><?= $ppH($pp['intro']) ?></div><?php endif; ?>
 
@@ -90,18 +96,19 @@ body{margin:0;background:#eef2f7;color:#000;font-family:"Times New Roman",Times,
   <table class="pp-items">
     <thead><tr><th style="width:22mm">Código</th><th class="c" style="width:20mm">Quantidade</th><th class="c" style="width:15mm">Unidade</th><th>Descrição</th><th class="r" style="width:24mm">Vlr Unitário</th><th class="r" style="width:24mm">Total</th></tr></thead>
     <tbody>
-    <?php foreach ($pp['items'] as $it): ?>
-      <tr><td><?= $ppH($it['code']) ?></td><td class="c"><?= $ppH(orc_proposta_qty($it['qty'])) ?></td><td class="c"><?= $ppH($it['unit']) ?></td><td class="desc"><?= $ppH($it['desc']) ?></td><td class="r"><?= $ppH(orc_proposta_money($it['price'])) ?></td><td class="r"><?= $ppH(orc_proposta_money($it['total'])) ?></td></tr>
+    <?php foreach ($ppRows as $it): ?>
+      <?php if ($it === null): ?><tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr><?php continue; endif; ?>
+      <tr><td><?= $ppH($it['code']) ?></td><td class="c"><?= $ppH(orc_proposta_qty($it['qty'])) ?></td><td class="c"><?= $ppH($it['unit']) ?></td><td class="desc"><?= $ppH($it['desc']) ?></td><td class="r"><?= $ppHideP ? '' : $ppH(orc_proposta_money($it['price'])) ?></td><td class="r"><?= $ppHideP ? '' : $ppH(orc_proposta_money($it['total'])) ?></td></tr>
     <?php endforeach; ?>
     </tbody>
   </table>
-  <div class="pp-tot">
+  <?php if (!$ppHideP): ?><div class="pp-tot">
     <div class="b"><span>Valor total bruto:</span><span><?= $ppH(orc_proposta_money($ppT['bruto'])) ?></span></div>
     <div class="i"><span>Total de Descontos:</span><span><?= $ppT['desconto'] > 0 ? $ppH(orc_proposta_money($ppT['desconto'])) : '' ?></span></div>
     <div class="i"><span>Total de Acréscimos:</span><span><?= $ppT['acrescimo'] > 0 ? $ppH(orc_proposta_money($ppT['acrescimo'])) : '' ?></span></div>
     <?php if ($ppT['frete'] > 0): ?><div class="i"><span>Frete:</span><span><?= $ppH(orc_proposta_money($ppT['frete'])) ?></span></div><?php endif; ?>
     <div class="b"><span>Valor a pagar:</span><span><?= $ppH(orc_proposta_money($ppT['pagar'])) ?></span></div>
-  </div>
+  </div><?php endif; ?>
 
   <?php if ($pp['seller'] !== '' || $pp['payments'] || $pp['other'] !== ''): ?>
   <div class="pp-bar sep">Outros dados:</div>
@@ -119,5 +126,5 @@ body{margin:0;background:#eef2f7;color:#000;font-family:"Times New Roman",Times,
   <div class="pp-date"><?= $ppH($pp['date']) ?><b>DATA</b></div>
   <div class="pp-sign"><div><?= $ppH($ppC['name']) ?></div><div>Assinatura/Carimbo cliente</div></div>
 </main>
-<script>function nexaPrintBack(url){try{if(window.opener||window.history.length<=1){window.close();}}catch(e){}setTimeout(function(){window.location.href=url;},250);}(function(){const backUrl=<?= json_encode('orcamentos.php?print_id=' . $id, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;document.addEventListener('keydown',function(e){if(e.key!=='Escape'||e.ctrlKey||e.altKey||e.metaKey)return;e.preventDefault();nexaPrintBack(backUrl);});})();</script>
+<script>function nexaPrintBack(url){try{if(window.opener||window.history.length<=1){window.close();}}catch(e){}setTimeout(function(){window.location.href=url;},250);}(function(){const backUrl=<?= json_encode($ppBackUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;document.addEventListener('keydown',function(e){if(e.key!=='Escape'||e.ctrlKey||e.altKey||e.metaKey)return;e.preventDefault();nexaPrintBack(backUrl);});})();</script>
 </body></html>

@@ -331,6 +331,13 @@ if (!function_exists('nexa_os_document_pdf_build')) {
   function nexa_os_document_pdf_build(array $data,string $model='a4_half',string $content='completa',string $paper='a4',string $profile='padrao'): array {
     $o=(array)$data['order'];$items=(array)$data['items'];$payments=(array)$data['payments'];$fields=(array)$data['fields'];$optionLabels=(array)($data['option_labels']??[]);$settings=(array)$data['settings'];$damages=(function_exists('os_vehicle_damage_enabled') && os_vehicle_damage_enabled($settings))?(array)$data['damages']:[];$company=(array)$data['company'];
     $content=in_array($content,['completa','sem_preco','sem_produtos'],true)?$content:'completa';
+    if(strtolower($model)==='proposta'&&isset($GLOBALS['pdo'])&&$GLOBALS['pdo'] instanceof PDO){
+      // Modelo Proposta/Orçamento (A4 com quadros), o mesmo do Orçamento.
+      require_once __DIR__.'/orcamento_proposta.php';
+      $cid=(int)(($company['id']??0)?:($o['company_id']??0));
+      $d=os_proposta_data($GLOBALS['pdo'],$cid,$o,$items,$payments,$fields,$optionLabels,['hide_prices'=>$content!=='completa','blank_items'=>$content==='sem_produtos']);
+      return orc_proposta_pdf_render($cid,$d);
+    }
     $model=strtolower($model);if(!in_array($model,['72mm','a4_half','a4_full','a4_landscape_dual'],true))$model='a4_half';if($model==='a4_landscape_dual')return nexa_os_document_pdf_build_dual($data,$content,$paper,$profile);$estimated=260+count($items)*12+count($fields)*7+count($damages)*8+count($payments)*6;[$pdf,$font,$cw,$margin]=nexa_customer_pdf_new($model,$estimated);
     $number=str_pad((string)(int)($o['os_number']??0),6,'0',STR_PAD_LEFT);nexa_customer_pdf_header_modern($pdf,$company,'O.S. #'.$number,nexa_customer_pdf_date($o['opened_at']??'',true),trim((string)($o['status_name']??'')),$font,$cw,$margin,$model);
 
