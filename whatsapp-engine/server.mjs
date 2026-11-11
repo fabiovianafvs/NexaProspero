@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.2';
+const SERVICE_VERSION = 'engine-1.3';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -51,6 +51,17 @@ const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 const WAIT_READY_MS = 25000;
 
+// A biblioteca de criptografia do WhatsApp (libsignal) escreve no console o
+// conteúdo das sessões ("Closing session: SessionEntry {...}"), inclusive chaves.
+// Isso enche o log e não deve ser gravado: essas linhas são descartadas.
+const SIGNAL_NOISE = /^(Closing session|Opening session|Removing old closed session|Closing open session|Session error|Decrypted message with closed session|Migrating session to)/;
+for (const method of ['log', 'info', 'debug']) {
+  const original = console[method].bind(console);
+  console[method] = (...args) => {
+    if (typeof args[0] === 'string' && SIGNAL_NOISE.test(args[0])) return;
+    original(...args);
+  };
+}
 const log = (...args) => console.log(new Date().toISOString(), ...args);
 const warn = (...args) => console.warn(new Date().toISOString(), ...args);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -366,7 +377,14 @@ async function startSession(sid) {
     printQRInTerminal: false,
     markOnlineOnConnect: false,
     syncFullHistory: false,
-    shouldSyncHistoryMessage: () => false,
+    // Não bloquear a sincronização inicial: sem ela o Baileys 7 não recebe os
+    // mapeamentos de LID e o celular pode remover o aparelho logo após a leitura
+    // do QR Code ("device_removed"). Só o histórico COMPLETO fica de fora; as
+    // mensagens antigas não são guardadas nem respondidas pelo robô.
+    shouldSyncHistoryMessage: (msg) => {
+      const full = proto?.HistorySync?.HistorySyncType?.FULL;
+      return full === undefined ? true : msg?.syncType !== full;
+    },
     shouldIgnoreJid: ignore,
     generateHighQualityLinkPreview: false,
     connectTimeoutMs: 60000,
