@@ -63,7 +63,7 @@ if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $cfg = whatsapp_bot_config($pdo, $cid);
 $users = $statuses = $types = $tree = $departments = $members = [];
-try { $st = $pdo->prepare('SELECT id, name FROM users WHERE company_id=? AND is_active=1 ORDER BY name, id'); $st->execute([$cid]); $users = $st->fetchAll(PDO::FETCH_ASSOC) ?: []; } catch (Throwable $e) {}
+try { $st = $pdo->prepare('SELECT id, name FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND is_active=1 ORDER BY name, id'); $st->execute((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid])); $users = $st->fetchAll(PDO::FETCH_ASSOC) ?: []; } catch (Throwable $e) {}
 try { $st = $pdo->prepare('SELECT id, name FROM crm_statuses WHERE company_id=? AND active=1 ORDER BY sort_order, name, id'); $st->execute([$cid]); $statuses = $st->fetchAll(PDO::FETCH_ASSOC) ?: []; } catch (Throwable $e) {}
 try { $st = $pdo->prepare('SELECT id, name FROM crm_service_types WHERE company_id=? AND active=1 ORDER BY sort_order, name, id'); $st->execute([$cid]); $types = $st->fetchAll(PDO::FETCH_ASSOC) ?: []; } catch (Throwable $e) {}
 if ($ready) {

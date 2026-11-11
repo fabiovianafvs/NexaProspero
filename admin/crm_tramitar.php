@@ -77,8 +77,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     if($action==='send_only'&&$movement==='')$movement='Mensagem enviada ao lead.';
     if($action==='save_pending'&&$pendingReason==='')throw new RuntimeException('Informe o motivo da pendência.');
     if($nextDate!==''&&!preg_match('/^\d{4}-\d{2}-\d{2}$/',$nextDate))throw new RuntimeException('Data do próximo contato inválida.');
-    $st=$pdo->prepare('SELECT id,name FROM users WHERE company_id=? AND id=? AND is_active=1 LIMIT 1');
-    $st->execute([$cid,$responsible]);$urow=$st->fetch(PDO::FETCH_ASSOC);$st->closeCursor();
+    $st=$pdo->prepare('SELECT id,name FROM users WHERE '.(function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)').' AND id=? AND is_active=1 LIMIT 1');
+    $st->execute(array_merge((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid]),[$responsible]));$urow=$st->fetch(PDO::FETCH_ASSOC);$st->closeCursor();
     if(!$urow)throw new RuntimeException('Responsável inválido.');
 
     $selectedModel=crm_tramitar_model_by_id($crmModels,$messageModelId);

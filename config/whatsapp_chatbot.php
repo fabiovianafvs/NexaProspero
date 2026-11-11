@@ -209,8 +209,8 @@ if (!function_exists('whatsapp_bot_company_name')) {
 if (!function_exists('whatsapp_bot_user_name')) {
   function whatsapp_bot_user_name(PDO $pdo, int $companyId, int $userId): string {
     if ($userId <= 0) return '';
-    $st = $pdo->prepare('SELECT name FROM users WHERE company_id=? AND id=? LIMIT 1');
-    $st->execute([$companyId, $userId]);
+    $st = $pdo->prepare('SELECT name FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND id=? LIMIT 1');
+    $st->execute(array_merge((function_exists('access_company_users_params') ? access_company_users_params($pdo, $companyId) : [$companyId]), [$userId]));
     return trim((string)$st->fetchColumn());
   }
 }
@@ -278,8 +278,8 @@ if (!function_exists('whatsapp_department_save')) {
       $ids = array_values(array_unique(array_filter(array_map('intval', $userIds), static fn($v) => $v > 0)));
       if ($ids) {
         $in = implode(',', array_fill(0, count($ids), '?'));
-        $st = $pdo->prepare("SELECT id FROM users WHERE company_id=? AND id IN ($in)");
-        $st->execute(array_merge([$companyId], $ids));
+        $st = $pdo->prepare('SELECT id FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . " AND id IN ($in)");
+        $st->execute(array_merge((function_exists('access_company_users_params') ? access_company_users_params($pdo, $companyId) : [$companyId]), $ids));
         $valid = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
       }
     }
@@ -849,8 +849,8 @@ if (!function_exists('whatsapp_bot_open_crm')) {
     if ((int)$st->fetchColumn() !== 2) throw new RuntimeException('O CRM não está instalado nesta empresa.');
     $responsible = (int)($userId ?: $cfg['crm_responsible_user_id']);
     if ($responsible > 0) {
-      $q = $pdo->prepare('SELECT id FROM users WHERE company_id=? AND id=? AND is_active=1 LIMIT 1');
-      $q->execute([$companyId, $responsible]);
+      $q = $pdo->prepare('SELECT id FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND id=? AND is_active=1 LIMIT 1');
+      $q->execute(array_merge((function_exists('access_company_users_params') ? access_company_users_params($pdo, $companyId) : [$companyId]), [$responsible]));
       $responsible = (int)$q->fetchColumn();
     }
     if ($responsible <= 0) {

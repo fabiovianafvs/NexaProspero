@@ -59,8 +59,8 @@ function crm_types(PDO $pdo,int $companyId,bool $activeOnly=true): array {
 }}
 if (!function_exists('crm_users')) {
 function crm_users(PDO $pdo,int $companyId,bool $activeOnly=true): array {
-  $sql='SELECT id,name,email,is_active FROM users WHERE company_id=?';if($activeOnly)$sql.=' AND is_active=1';$sql.=' ORDER BY name,id';
-  $st=$pdo->prepare($sql);$st->execute([$companyId]);return $st->fetchAll(PDO::FETCH_ASSOC)?:[];
+  $sql='SELECT id,name,email,is_active FROM users WHERE '.(function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)');if($activeOnly)$sql.=' AND is_active=1';$sql.=' ORDER BY name,id';
+  $st=$pdo->prepare($sql);$st->execute((function_exists('access_company_users_params') ? access_company_users_params($pdo, $companyId) : [$companyId]));return $st->fetchAll(PDO::FETCH_ASSOC)?:[];
 }}
 if (!function_exists('crm_attendance')) {
 function crm_attendance(PDO $pdo,int $companyId,int $id): array {

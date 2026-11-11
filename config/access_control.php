@@ -656,3 +656,24 @@ if (!function_exists('access_user_default_cash_account')) {
     } catch (Throwable $e) { return 0; }
   }
 }
+
+if (!function_exists('access_company_users_sql')) {
+  /**
+   * V13 Multiempresa Isolado: condição SQL "usuários desta empresa" que inclui quem
+   * recebeu acesso à empresa em Acessos multiempresa (user_company_access). Assim o
+   * usuário que trabalha nela pelo F11 aparece como responsável/atendente/técnico.
+   * Use com access_company_users_params($companyId). Sem a estrutura Multiempresa,
+   * fica igual a "company_id = ?".
+   */
+  function access_company_users_sql(PDO $pdo, string $alias = ''): string {
+    $col = $alias !== '' ? preg_replace('/[^a-z0-9_]/i', '', $alias) . '.' : '';
+    if (!access_table_exists($pdo, 'user_company_access')) return '(' . $col . 'company_id = ?)';
+    return '(' . $col . 'company_id = ? OR ' . $col . 'id IN (SELECT uca_m.user_id FROM user_company_access uca_m WHERE uca_m.company_id = ? AND uca_m.is_active = 1))';
+  }
+}
+
+if (!function_exists('access_company_users_params')) {
+  function access_company_users_params(PDO $pdo, int $companyId): array {
+    return access_table_exists($pdo, 'user_company_access') ? [$companyId, $companyId] : [$companyId];
+  }
+}

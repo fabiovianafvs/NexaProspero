@@ -51,8 +51,8 @@ try {
       $out(['ok' => true, 'chat' => whatsapp_att_chat_info($pdo, $cid, $chatId), 'messages' => whatsapp_att_messages($pdo, $cid, $chatId, $after), 'me' => $uid, 'supervisor' => $supervisor]);
 
     case 'options':
-      $st = $pdo->prepare('SELECT id, name FROM users WHERE company_id=? AND is_active=1 ORDER BY name, id');
-      $st->execute([$cid]);
+      $st = $pdo->prepare('SELECT id, name FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND is_active=1 ORDER BY name, id');
+      $st->execute((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid]));
       $out(['ok' => true, 'departments' => array_map(static fn($d) => ['id' => (int)$d['id'], 'name' => (string)$d['name']], whatsapp_departments($pdo, $cid)), 'users' => $st->fetchAll(PDO::FETCH_ASSOC) ?: []]);
   }
 

@@ -80,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $st->execute([$cid, (int)$form['service_type_id']]);
       if (!(int)$st->fetchColumn()) throw new RuntimeException('Tipo de atendimento inválido.');
     }
-    $st = $pdo->prepare('SELECT id FROM users WHERE company_id=? AND id=? AND is_active=1 LIMIT 1');
-    $st->execute([$cid, (int)$form['responsible_user_id']]);
+    $st = $pdo->prepare('SELECT id FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND id=? AND is_active=1 LIMIT 1');
+    $st->execute(array_merge((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid]), [(int)$form['responsible_user_id']]));
     if (!(int)$st->fetchColumn()) throw new RuntimeException('Responsável inválido.');
 
     $state = $action === 'complete' ? 'CONCLUIDO' : 'PENDENTE';
