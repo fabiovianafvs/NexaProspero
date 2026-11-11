@@ -111,6 +111,10 @@ try {
         if (function_exists('mb_substr')) $dupTerms = mb_substr($dupTerms, 0, 2000, 'UTF-8');
         $dupCfg = config_store_get($pdo, $cid, 'pedido_duplicata') ?: [];
         $dupCfg['terms'] = $dupTerms;
+        foreach (['name' => 160, 'doc' => 30, 'ie' => 30, 'address' => 200, 'city' => 80, 'phone' => 80] as $dupKey => $dupMax) {
+          $dupVal = trim((string)($_POST['order_duplicata_company_' . $dupKey] ?? ''));
+          $dupCfg['company_' . $dupKey] = function_exists('mb_substr') ? mb_substr($dupVal, 0, $dupMax, 'UTF-8') : substr($dupVal, 0, $dupMax);
+        }
         config_store_set($pdo, $cid, 'pedido_duplicata', $dupCfg);
       }
       // % aproximado de tributos do Simples Nacional (pTotTribSN da NFS-e Nacional).
@@ -666,6 +670,13 @@ if ($err): ?><div class="msg err"><?= fiscal_h($err) ?></div><?php endif; ?>
           <?php endforeach; ?>
         </select></div>
         <div class="span-2"><label>Garantia e orientações (aparece na Duplicata)</label><textarea name="order_duplicata_terms" rows="4" maxlength="2000" placeholder="Ex.: *Armações possuem garantia de 6 meses..."><?= fiscal_h((string)($orderDuplicataCfg['terms'] ?? '')) ?></textarea></div>
+        <div class="span-3 fiscal-muted" style="font-weight:700;line-height:1.5;margin-top:6px">Dados da empresa na Duplicata — preencha só o que quiser trocar; em branco usa o cadastro da empresa.</div>
+        <div class="span-2"><label>Nome / razão social (Duplicata)</label><input name="order_duplicata_company_name" maxlength="160" value="<?= fiscal_h((string)($orderDuplicataCfg['company_name'] ?? '')) ?>" placeholder="Em branco: nome do cadastro"></div>
+        <div><label>CNPJ/CPF (Duplicata)</label><input name="order_duplicata_company_doc" maxlength="30" value="<?= fiscal_h((string)($orderDuplicataCfg['company_doc'] ?? '')) ?>" placeholder="Ex.: 00.000.000/0001-00"></div>
+        <div class="span-2"><label>Endereço (Duplicata)</label><input name="order_duplicata_company_address" maxlength="200" value="<?= fiscal_h((string)($orderDuplicataCfg['company_address'] ?? '')) ?>" placeholder="Ex.: Rua Dr. Antônio Soeiro, 38 - Vila Regina"></div>
+        <div><label>Cidade/UF (Duplicata)</label><input name="order_duplicata_company_city" maxlength="80" value="<?= fiscal_h((string)($orderDuplicataCfg['company_city'] ?? '')) ?>" placeholder="Ex.: Barão de Cocais/MG"></div>
+        <div><label>Inscrição estadual (Duplicata)</label><input name="order_duplicata_company_ie" maxlength="30" value="<?= fiscal_h((string)($orderDuplicataCfg['company_ie'] ?? '')) ?>"></div>
+        <div><label>Telefone (Duplicata)</label><input name="order_duplicata_company_phone" maxlength="80" value="<?= fiscal_h((string)($orderDuplicataCfg['company_phone'] ?? '')) ?>"></div>
         <div class="span-3 fiscal-muted" style="font-weight:700;line-height:1.5">O layout escolhido abre ao clicar em Imprimir no pedido. Na tela de impressão dá para alternar entre os modelos (70 mm, A4, Duplicata e o modelo atual).</div>
         <?php else: ?>
         <div class="span-3" style="padding:10px 12px;border:1px solid #f59e0b;background:#fffbeb;border-radius:12px;color:#92400e;font-weight:800">Novos modelos do Pedido ainda não disponíveis. Aplique a migration <b>V11.45.18</b> pelo Atualizador do Banco.</div>

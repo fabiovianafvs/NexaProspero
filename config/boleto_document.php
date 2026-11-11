@@ -251,8 +251,8 @@ function boleto_document_itau_our_number(array $data): string {
 function boleto_document_pdf_itau_brand(BoletoPdf $pdf, float $x, float $y, float $w, float $h): void {
   // O arquivo foi extraído do próprio modelo de boleto Itaú fornecido para homologação.
   // Mantemos fallback desenhado para não impedir a emissão caso o asset seja removido.
-  $asset = dirname(__DIR__) . '/assets/img/itau-logo.png';
-  if (is_file($asset)) {
+  $asset = boleto_document_logo_path('itau');
+  if ($asset !== '') {
     $imgW = min($w - 1.6, 31.5);
     $imgH = $imgW * (56 / 246);
     if ($imgH > $h - 1.0) {
@@ -308,14 +308,14 @@ function boleto_document_pdf_generic_brand(BoletoPdf $pdf, array $data, float $x
 }
 
 
-function boleto_document_pdf_itau_label(BoletoPdf $pdf, float $x, float $y, float $w, string $label, float $size = 5.7): void {
-  $pdf->SetFont('Arial','', $size);
+function boleto_document_pdf_itau_label(BoletoPdf $pdf, float $x, float $y, float $w, string $label, float $size = 7.0): void {
+  $pdf->SetFont('Times','', $size);
   $pdf->SetXY($x + 0.8, $y + 0.5);
   $pdf->Cell(max(1, $w - 1.6), 2.5, boleto_document_pdf_text($label), 0, 0, 'L');
 }
 
-function boleto_document_pdf_itau_value(BoletoPdf $pdf, float $x, float $y, float $w, string $value, float $size = 8.2, string $align = 'C', string $style = ''): void {
-  $pdf->SetFont('Arial', $style, $size);
+function boleto_document_pdf_itau_value(BoletoPdf $pdf, float $x, float $y, float $w, string $value, float $size = 9.6, string $align = 'C', string $style = ''): void {
+  $pdf->SetFont('Times', $style, $size);
   $pdf->SetXY($x + 0.8, $y + 3.1);
   $pdf->Cell(max(1, $w - 1.6), 4.3, boleto_document_pdf_text($value), 0, 0, $align);
 }
@@ -402,7 +402,7 @@ function boleto_document_pdf_itau_section(BoletoPdf $pdf, array $data, float $x,
   $companyName = boleto_document_company_name($data);
   $companyDoc = boleto_document_digits($company['cnpj'] ?? '');
   $companyAddress = trim((string)($company['address'] ?? ''));
-  $payer = trim((string)($data['payer_name'] ?? '')) ?: 'Pagador';
+  $payer = mb_strtoupper(trim((string)($data['payer_name'] ?? '')) ?: 'Pagador', 'UTF-8');
   $payerDoc = boleto_document_format_document($data['payer_document'] ?? '');
   $wallet = trim((string)($data['carteira'] ?? ''));
   $ourNumber = boleto_document_itau_our_number($data);
@@ -416,25 +416,24 @@ function boleto_document_pdf_itau_section(BoletoPdf $pdf, array $data, float $x,
   $instructionBase = 'Instruções de responsabilidade do BENEFICIÁRIO. Qualquer dúvida sobre este boleto contate o BENEFICIÁRIO.';
 
   if ($receipt) {
-    $pdf->SetFont('Arial','B',7.8);
+    $pdf->SetFont('Times','B',8.6);
     $pdf->SetXY($x, $y - 5.3);
     $pdf->Cell($w, 4, boleto_document_pdf_text('RECIBO DO PAGADOR'), 0, 0, 'C');
   }
 
   // Cabeçalho do banco
   $h = 9.0;
-  $pdf->Rect($x, $y, $w, $h);
   $pdf->Line($x + $brandW, $y, $x + $brandW, $y + $h);
   $pdf->Line($x + $brandW + $codeW, $y, $x + $brandW + $codeW, $y + $h);
   boleto_document_pdf_itau_brand($pdf, $x, $y, $brandW, $h);
-  $pdf->SetFont('Arial','B',9.5); $pdf->SetXY($x+$brandW,$y+1.1); $pdf->Cell($codeW,$h-2.0,boleto_document_pdf_text($bankCode.'-7'),0,0,'C');
-  $pdf->SetFont('Arial','B',8.8); $pdf->SetXY($x+$brandW+$codeW+1,$y+1.1); $pdf->Cell($lineW-2,$h-2.0,boleto_document_pdf_text($line),0,0,'R');
+  $pdf->SetFont('Times','B',10.5); $pdf->SetXY($x+$brandW,$y+1.1); $pdf->Cell($codeW,$h-2.0,boleto_document_pdf_text($bankCode.'-7'),0,0,'C');
+  $pdf->SetFont('Times','B',10.2); $pdf->SetXY($x+$brandW+$codeW+1,$y+1.1); $pdf->Cell($lineW-2,$h-2.0,boleto_document_pdf_text($line),0,0,'R');
   $y += $h;
 
   // Local de pagamento / vencimento
   $h = 10.0; $pdf->Rect($x,$y,$w,$h); $pdf->Line($x+$leftW,$y,$x+$leftW,$y+$h);
-  boleto_document_pdf_itau_label($pdf,$x,$y,$leftW,'Local de pagamento:');
-  $pdf->SetFont('Arial','',6.8); $pdf->SetXY($x+31,$y+0.3); $pdf->Cell($leftW-32,3.0,boleto_document_pdf_text('Pague pelo aplicativo, internet ou em agências e correspondentes.'),0,0,'L');
+  $pdf->SetFont('Times','B',7.6); $pdf->SetXY($x+0.8,$y+3.0); $pdf->Cell(26,3.4,boleto_document_pdf_text('Local de pagamento:'),0,0,'L');
+  $pdf->SetFont('Times','',7.6); $pdf->SetXY($x+26.5,$y+3.0); $pdf->Cell($leftW-27,3.4,boleto_document_pdf_text('Pague pelo aplicativo, internet ou em agências e correspondentes.'),0,0,'L');
   boleto_document_pdf_itau_label($pdf,$x+$leftW,$y,$rightW,'Vencimento');
   boleto_document_pdf_itau_value($pdf,$x+$leftW,$y,$rightW,$due,9.4,'C','B');
   $y += $h;
@@ -442,10 +441,10 @@ function boleto_document_pdf_itau_section(BoletoPdf $pdf, array $data, float $x,
   // Beneficiário
   $h = 14.0; $pdf->Rect($x,$y,$w,$h); $pdf->Line($x+$leftW,$y,$x+$leftW,$y+$h);
   boleto_document_pdf_itau_label($pdf,$x,$y,$leftW,'Beneficiário');
-  $pdf->SetFont('Arial','B',7.8); $pdf->SetXY($x+0.8,$y+3.0); $pdf->Cell(70,4,boleto_document_pdf_text($companyName),0,0,'L');
-  $pdf->SetFont('Arial','B',6.7); $pdf->SetXY($x+76,$y+3.0); $pdf->Cell(19,4,boleto_document_pdf_text('CNPJ/CPF:'),0,0,'R');
-  $pdf->SetFont('Arial','',6.5); $pdf->SetXY($x+96,$y+3.0); $pdf->Cell($leftW-97,4,boleto_document_pdf_text($companyDoc),0,0,'L');
-  $pdf->SetFont('Arial','',6.3); $pdf->SetXY($x+0.8,$y+7.3); $pdf->Cell($leftW-1.6,4,boleto_document_pdf_text($companyAddress),0,0,'L');
+  $pdf->SetFont('Times','B',9.0); $pdf->SetXY($x+0.8,$y+3.0); $pdf->Cell(70,4,boleto_document_pdf_text($companyName),0,0,'L');
+  $pdf->SetFont('Times','B',7.8); $pdf->SetXY($x+76,$y+3.0); $pdf->Cell(19,4,boleto_document_pdf_text('CNPJ/CPF:'),0,0,'R');
+  $pdf->SetFont('Times','',7.6); $pdf->SetXY($x+96,$y+3.0); $pdf->Cell($leftW-97,4,boleto_document_pdf_text($companyDoc),0,0,'L');
+  $pdf->SetFont('Times','',7.2); $pdf->SetXY($x+0.8,$y+7.6); $pdf->Cell($leftW-1.6,4,boleto_document_pdf_text($companyAddress),0,0,'L');
   boleto_document_pdf_itau_label($pdf,$x+$leftW,$y,$rightW,'Agência/Código Beneficiário');
   boleto_document_pdf_itau_value($pdf,$x+$leftW,$y,$rightW,$beneficiaryCode,7.8,'C','');
   $y += $h;
@@ -456,7 +455,7 @@ function boleto_document_pdf_itau_section(BoletoPdf $pdf, array $data, float $x,
   $labels = ['Data do documento','Núm. do documento','Espécie Doc.','Aceite','Data Processamento','Nosso Número'];
   $vals = [$issueDate,$docNumber,'DMI','N',$processDate,$ourNumber];
   $cx=$x; $pdf->Rect($x,$y,$w,$h);
-  foreach($cols as $i=>$cw){ if($i>0)$pdf->Line($cx,$y,$cx,$y+$h); boleto_document_pdf_itau_label($pdf,$cx,$y,$cw,$labels[$i],5.2); boleto_document_pdf_itau_value($pdf,$cx,$y,$cw,$vals[$i],7.2,'C',''); $cx+=$cw; }
+  foreach($cols as $i=>$cw){ if($i>0)$pdf->Line($cx,$y,$cx,$y+$h); boleto_document_pdf_itau_label($pdf,$cx,$y,$cw,$labels[$i],6.6); boleto_document_pdf_itau_value($pdf,$cx,$y,$cw,$vals[$i],9.0,'C',''); $cx+=$cw; }
   $y += $h;
 
   // Uso do banco / carteira / espécie / quantidade / valor / valor documento
@@ -465,14 +464,14 @@ function boleto_document_pdf_itau_section(BoletoPdf $pdf, array $data, float $x,
   $labels = ['Uso do Banco','Carteira','Espécie','Quantidade','Valor','(=) Valor do Documento'];
   $vals = ['', $wallet, 'R$', '', '', $amount];
   $cx=$x; $pdf->Rect($x,$y,$w,$h);
-  foreach($cols as $i=>$cw){ if($i>0)$pdf->Line($cx,$y,$cx,$y+$h); boleto_document_pdf_itau_label($pdf,$cx,$y,$cw,$labels[$i],5.2); boleto_document_pdf_itau_value($pdf,$cx,$y,$cw,$vals[$i],$i===5?8.8:7.3,'C',$i===5?'B':''); $cx+=$cw; }
+  foreach($cols as $i=>$cw){ if($i>0)$pdf->Line($cx,$y,$cx,$y+$h); boleto_document_pdf_itau_label($pdf,$cx,$y,$cw,$labels[$i],6.6); boleto_document_pdf_itau_value($pdf,$cx,$y,$cw,$vals[$i],$i===5?9.8:9.0,'C',$i===5?'B':''); $cx+=$cw; }
   $y += $h;
 
   // Instruções e totais
   $h = $receipt ? 31.0 : 52.0;
   $pdf->Rect($x,$y,$w,$h); $pdf->Line($x+$leftW,$y,$x+$leftW,$y+$h);
-  $pdf->SetFont('Arial','B',5.4); $pdf->SetXY($x+0.8,$y+0.8); $pdf->MultiCell($leftW-1.6,2.7,boleto_document_pdf_text($instructionBase),0,'L');
-  if ($instructions !== '') { $pdf->SetFont('Arial','',5.2); $pdf->SetXY($x+0.8,$y+6.3); $pdf->MultiCell($leftW-2.0,2.5,boleto_document_pdf_text($instructions),0,'L'); }
+  $pdf->SetFont('Times','B',6.4); $pdf->SetXY($x+0.8,$y+0.8); $pdf->MultiCell($leftW-1.6,2.9,boleto_document_pdf_text($instructionBase),0,'L');
+  if ($instructions !== '') { $pdf->SetFont('Times','',7.0); $pdf->SetXY($x+0.8,$y+7.0); $pdf->MultiCell($leftW-40.0,3.0,boleto_document_pdf_text($instructions),0,'L'); }
 
   $third = $h/3.0;
   $pdf->Line($x+$leftW,$y+$third,$x+$w,$y+$third); $pdf->Line($x+$leftW,$y+2*$third,$x+$w,$y+2*$third);
@@ -483,22 +482,224 @@ function boleto_document_pdf_itau_section(BoletoPdf $pdf, array $data, float $x,
   if (!$receipt) {
     boleto_document_pdf_itau_draw_qr($pdf, $data, $x+$leftW-38, $y+6.5, 33);
     $note = 'Escolha a forma mais conveniente para realizar seu pagamento: Código de Barras ou QR Code. Basta acessar o aplicativo da sua instituição financeira e utilizar apenas uma das opções.';
-    $pdf->SetFont('Arial','',5.1); $pdf->SetXY($x+0.8,$y+$h-9.2); $pdf->MultiCell($leftW-2.0,2.5,boleto_document_pdf_text($note),0,'L');
+    $pdf->SetFont('Times','',6.4); $pdf->SetXY($x+0.8,$y+$h-9.2); $pdf->MultiCell($leftW-2.0,2.8,boleto_document_pdf_text($note),0,'L');
   }
   $y += $h;
 
   // Pagador / beneficiário final
   $h = 9.0; $pdf->Rect($x,$y,$w,$h);
   $split = 82.0;
-  $pdf->SetFont('Arial','B',6.1); $pdf->SetXY($x+0.8,$y+0.8); $pdf->Cell(15,3,boleto_document_pdf_text('Pagador:'),0,0,'L');
-  $pdf->SetFont('Arial','',6.5); $pdf->SetXY($x+16,$y+0.8); $pdf->Cell($split-16,3,boleto_document_pdf_text($payer),0,0,'L');
-  $pdf->SetFont('Arial','B',6.1); $pdf->SetXY($x+$split,$y+0.8); $pdf->Cell(18,3,boleto_document_pdf_text('CNPJ/CPF:'),0,0,'L');
-  $pdf->SetFont('Arial','',6.3); $pdf->SetXY($x+$split+19,$y+0.8); $pdf->Cell($w-$split-20,3,boleto_document_pdf_text($payerDoc),0,0,'L');
-  $pdf->SetFont('Arial','B',6.0); $pdf->SetXY($x+0.8,$y+4.6); $pdf->Cell(28,3,boleto_document_pdf_text('Beneficiário final:'),0,0,'L');
+  $pdf->SetFont('Times','B',7.6); $pdf->SetXY($x+0.8,$y+0.8); $pdf->Cell(15,3,boleto_document_pdf_text('Pagador:'),0,0,'L');
+  $pdf->SetFont('Times','',7.6); $pdf->SetXY($x+13,$y+0.8); $pdf->Cell($split-16,3,boleto_document_pdf_text($payer),0,0,'L');
+  $pdf->SetFont('Times','B',7.6); $pdf->SetXY($x+$split,$y+0.8); $pdf->Cell(18,3,boleto_document_pdf_text('CNPJ/CPF:'),0,0,'L');
+  $pdf->SetFont('Times','',7.6); $pdf->SetXY($x+$split+15,$y+0.8); $pdf->Cell($w-$split-20,3,boleto_document_pdf_text($payerDoc),0,0,'L');
+  $pdf->SetFont('Times','B',7.6); $pdf->SetXY($x+0.8,$y+4.6); $pdf->Cell(28,3,boleto_document_pdf_text('Beneficiário final:'),0,0,'L');
   $pdf->SetXY($x+$split,$y+4.6); $pdf->Cell(18,3,boleto_document_pdf_text('CNPJ/CPF:'),0,0,'L');
   $y += $h;
 
   return $y;
+}
+
+/** Logomarca oficial do banco (extraída dos boletos originais do banco) em assets/. */
+function boleto_document_logo_path(string $bank): string {
+  $files = ['itau' => ['assets/itau-logo.png', 'assets/img/itau-logo.png'], 'sicoob' => ['assets/sicoob-logo.jpg']];
+  foreach ($files[$bank] ?? [] as $rel) {
+    $path = dirname(__DIR__) . '/' . $rel;
+    if (is_file($path)) return $path;
+  }
+  return '';
+}
+
+/** data: URI da logomarca do banco para a impressão em HTML. */
+function boleto_document_logo_data_uri(string $bank): string {
+  $path = boleto_document_logo_path($bank);
+  if ($path === '') return '';
+  $mime = str_ends_with($path, '.jpg') ? 'image/jpeg' : 'image/png';
+  return 'data:' . $mime . ';base64,' . base64_encode((string)file_get_contents($path));
+}
+
+function boleto_document_sicoob_beneficiary_code(array $data): string {
+  $agency = trim((string)($data['bank_agency'] ?? ''));
+  $code = boleto_document_digits($data['convenio'] ?? '');
+  if ($code !== '' && strlen($code) >= 2) $code = substr($code, 0, -1) . '-' . substr($code, -1);
+  if ($code === '') $code = trim((string)($data['bank_account_number'] ?? ''));
+  return trim($agency . ($agency !== '' && $code !== '' ? ' / ' : '') . $code);
+}
+
+function boleto_document_sicoob_our_number(array $data): string {
+  $raw = trim((string)($data['nosso_numero'] ?? ''));
+  if ($raw === '' || str_contains($raw, '-')) return $raw;
+  $d = boleto_document_digits($raw);
+  if (strlen($d) < 2) return $raw;
+  return str_pad(substr($d, 0, -1), 7, '0', STR_PAD_LEFT) . '-' . substr($d, -1);
+}
+
+/** Célula do modelo Sicoob: rótulo pequeno no alto e valor embaixo. */
+function boleto_document_pdf_sicoob_cell(BoletoPdf $pdf, float $x, float $y, float $w, float $h, string $label, string $value = '', string $align = 'L', float $size = 7.4, string $style = ''): void {
+  $pdf->Rect($x, $y, $w, $h);
+  $pdf->SetFont('Arial', '', 5.3);
+  $pdf->SetXY($x + 0.5, $y + 0.3);
+  $pdf->Cell(max(1, $w - 1.0), 2.4, boleto_document_pdf_text($label), 0, 0, 'L');
+  if ($value === '') return;
+  $pdf->SetFont('Arial', $style, $size);
+  $pdf->SetXY($x + 0.5, $y + $h - 4.2);
+  $pdf->Cell(max(1, $w - 1.4), 3.8, boleto_document_pdf_text($value), 0, 0, $align);
+}
+
+function boleto_document_pdf_sicoob_header(BoletoPdf $pdf, array $data, float $x, float $y, float $w, string $right, bool $bigCode, bool $line): void {
+  $logo = boleto_document_logo_path('sicoob');
+  $logoH = 10.0;
+  if ($logo !== '') {
+    $pdf->Image($logo, $x + 1.0, $y, $logoH * (156 / 43), $logoH, 'JPG');
+  } else {
+    $pdf->SetFont('Arial','B',16); $pdf->SetTextColor(0, 84, 61); $pdf->SetXY($x, $y + 1); $pdf->Cell(40, 8, 'SICOOB', 0, 0, 'L'); $pdf->SetTextColor(20,20,20);
+  }
+  $cx = $x + 42.5;
+  $pdf->SetLineWidth(0.5);
+  $pdf->Line($cx, $y + 1.5, $cx, $y + 10.0);
+  $pdf->Line($cx + 16.5, $y + 1.5, $cx + 16.5, $y + 10.0);
+  $pdf->SetLineWidth(0.2);
+  $pdf->SetFont('Arial', 'B', $bigCode ? 13.5 : 10.5);
+  $pdf->SetXY($cx, $y + 2.5);
+  $pdf->Cell(16.5, 7, '756-0', 0, 0, 'C');
+  if ($line) {
+    $pdf->SetFont('Courier', '', 10.6);
+    $pdf->SetXY($cx + 18, $y + 3.0);
+    $pdf->Cell($w - ($cx - $x) - 19, 6, boleto_document_pdf_text($right), 0, 0, 'R');
+  } else {
+    $pdf->SetFont('Arial', 'B', 10.5);
+    $pdf->SetXY($cx + 18, $y + 3.5);
+    $pdf->Cell($w - ($cx - $x) - 19, 6, boleto_document_pdf_text($right), 0, 0, 'R');
+  }
+}
+
+/** Corpo comum do Recibo do Pagador e da Ficha de Compensação (modelo Sicoob). */
+function boleto_document_pdf_sicoob_body(BoletoPdf $pdf, array $data, float $x, float $y, float $w, bool $ficha): float {
+  $rightW = 44.4;
+  $leftW = $w - $rightW;
+  $company = (array)($data['company'] ?? []);
+  $companyName = mb_strtoupper(boleto_document_company_name($data), 'UTF-8');
+  $companyDoc = boleto_document_format_document($company['cnpj'] ?? '');
+  $docLabel = strlen(boleto_document_digits($company['cnpj'] ?? '')) === 11 ? 'CPF' : 'CNPJ';
+  $companyAddress = mb_strtoupper(trim((string)($company['address'] ?? '')), 'UTF-8');
+  $issue = boleto_document_date($data['issue_date'] ?? $data['receivable_issue_date'] ?? '');
+  $docNumber = trim((string)($data['document_number'] ?? $data['seu_numero'] ?? ''));
+  $amount = number_format((float)($data['amount'] ?? 0), 2, ',', '.');
+  $payer = mb_strtoupper(trim((string)($data['payer_name'] ?? '')) ?: 'Pagador', 'UTF-8');
+  $payerDocDigits = boleto_document_digits($data['payer_document'] ?? '');
+  $payerDoc = $payerDocDigits !== '' ? (strlen($payerDocDigits) === 11 ? 'CPF: ' : 'CNPJ: ') . boleto_document_format_document($payerDocDigits) : '';
+  $payerAddress = boleto_document_payer_address($data);
+
+  boleto_document_pdf_sicoob_cell($pdf, $x, $y, $leftW, 7.4, 'Local de Pagamento', 'PAGÁVEL EM QUALQUER BANCO ATÉ A DATA DE VENCIMENTO.', 'L', 7.2);
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y, $rightW, 7.4, 'Vencimento', boleto_document_date($data['due_date'] ?? ''), 'R', 7.6, 'B');
+  $y += 7.4;
+
+  $h = 8.8;
+  $pdf->Rect($x, $y, $leftW, $h);
+  $pdf->SetFont('Arial', '', 5.3); $pdf->SetXY($x + 0.5, $y + 0.3); $pdf->Cell($leftW - 1, 2.4, boleto_document_pdf_text('Beneficiário/' . $docLabel . '/Endereço'), 0, 0, 'L');
+  $pdf->SetFont('Arial', '', 7.4); $pdf->SetXY($x + 0.5, $y + 2.6); $pdf->Cell($leftW - 1, 3.0, boleto_document_pdf_text($companyName . ($companyDoc !== '' ? '   ' . $docLabel . ': ' . $companyDoc : '')), 0, 0, 'L');
+  $pdf->SetXY($x + 0.5, $y + 5.4); $pdf->Cell($leftW - 1, 3.0, boleto_document_pdf_text($companyAddress), 0, 0, 'L');
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y, $rightW, $h, 'Agência / Código Beneficiário', boleto_document_sicoob_beneficiary_code($data), 'L', 7.4);
+  $y += $h;
+
+  $h = 7.4;
+  $cols = [[39.3, 'Data do Documento', $issue, 'L'], [32.3, 'Nº do documento', $docNumber, 'L'], [16.2, 'Espécie Doc', 'DM', 'C'], [16.6, 'Aceite', 'N', 'C'], [$leftW - 104.4, 'Data do Processamento', $issue, 'C']];
+  $cx = $x;
+  foreach ($cols as [$cw, $lb, $vl, $al]) { boleto_document_pdf_sicoob_cell($pdf, $cx, $y, $cw, $h, $lb, $vl, $al, 7.0); $cx += $cw; }
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y, $rightW, $h, 'Nosso número', boleto_document_sicoob_our_number($data), 'R', 7.4);
+  $y += $h;
+
+  $cols = [[39.3, 'Uso do Banco', '', 'L', ''], [16.9, 'Carteira', trim((string)($data['carteira'] ?? '')), 'L', 'B'], [14.3, 'Espécie', 'R$', 'L', 'B'], [33.9, 'Quantidade', '', 'L', ''], [$leftW - 104.4, 'Valor', '', 'L', '']];
+  $cx = $x;
+  foreach ($cols as [$cw, $lb, $vl, $al, $st]) { boleto_document_pdf_sicoob_cell($pdf, $cx, $y, $cw, $h, $lb, $vl, $al, 7.0, $st); $cx += $cw; }
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y, $rightW, $h, '(=) Valor do Documento', $amount, 'R', 7.6, 'B');
+  $y += $h;
+
+  // Instruções (esquerda) e quadro de valores (direita)
+  $h = 37.0;
+  $pdf->Rect($x, $y, $leftW, $h);
+  $pdf->SetFont('Arial', '', 5.3); $pdf->SetXY($x + 0.5, $y + 0.4); $pdf->Cell($leftW - 1, 2.4, boleto_document_pdf_text('Instruções de responsabilidade do beneficiário. Qualquer dúvida sobre este boleto, contate o beneficiário'), 0, 0, 'L');
+  $instructions = trim((string)($data['instructions'] ?? ''));
+  $hasPix = trim((string)($data['pix_qr_base64'] ?? '')) !== '' || trim((string)($data['pix_emv'] ?? '')) !== '';
+  $textW = $hasPix && $ficha ? $leftW - 40 : $leftW - 3;
+  if ($instructions !== '') { $pdf->SetFont('Arial', '', 8.2); $pdf->SetXY($x + 1.0, $y + 6.0); $pdf->MultiCell($textW, 3.8, boleto_document_pdf_text($instructions), 0, 'L'); }
+  if ($hasPix && $ficha) {
+    boleto_document_pdf_itau_draw_qr($pdf, $data, $x + $leftW - 36, $y + 3.5, 30);
+    $pdf->SetFont('Arial', '', 5.2); $pdf->SetXY($x + $leftW - 39, $y + 33.8); $pdf->Cell(36, 2.6, boleto_document_pdf_text('Pague também via Pix'), 0, 0, 'C');
+  }
+  $stack = ['(-) Desconto/Abatimento', '(-) Outras Deduções', '(+) Mora/Multa', '(+) Outros Acréscimos', '(=) Valor Cobrado'];
+  $sh = $h / count($stack);
+  foreach ($stack as $i => $lb) boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y + $i * $sh, $rightW, $sh, $lb);
+  $y += $h;
+
+  // Pagador
+  $h = 10.6;
+  $pdf->Rect($x, $y, $w, $h);
+  $pdf->SetFont('Arial', '', 5.3); $pdf->SetXY($x + 0.5, $y + 0.8); $pdf->Cell(12, 2.6, 'Pagador :', 0, 0, 'L');
+  $pdf->SetFont('Arial', '', 7.4); $pdf->SetXY($x + 12, $y + 0.4); $pdf->Cell($w - 13, 3.4, boleto_document_pdf_text($payer . ($payerDoc !== '' ? '   ' . $payerDoc : '')), 0, 0, 'L');
+  if ($payerAddress !== '') { $pdf->SetXY($x + 12, $y + 4.2); $pdf->Cell($w - 13, 3.4, boleto_document_pdf_text($payerAddress), 0, 0, 'L'); }
+  $y += $h;
+  return $y;
+}
+
+function boleto_document_pdf_sicoob_cut(BoletoPdf $pdf, float $x, float $y, float $w): void {
+  $pdf->SetDrawColor(90, 90, 90);
+  for ($i = 0.0; $i < $w; $i += 1.2) $pdf->Line($x + $i, $y, $x + min($w, $i + 0.5), $y);
+  $pdf->SetDrawColor(20, 20, 20);
+}
+
+/** Boleto no modelo do Sicoob: Recibo de entrega, Recibo do Pagador e Ficha de Compensação. */
+function boleto_document_pdf_sicoob(array $data): string {
+  if (!boleto_document_ready($data)) throw new RuntimeException('O boleto ainda não possui linha digitável e código de barras para impressão.');
+  $pdf = new BoletoPdf('P', 'mm', 'A4');
+  $pdf->SetMargins(8, 7, 8);
+  $pdf->SetAutoPageBreak(false);
+  $pdf->AddPage();
+  $pdf->SetDrawColor(20, 20, 20);
+  $pdf->SetTextColor(20, 20, 20);
+  $pdf->SetLineWidth(0.2);
+  $x = 8.0; $w = 194.0;
+  $payer = mb_strtoupper(trim((string)($data['payer_name'] ?? '')) ?: 'Pagador', 'UTF-8');
+  $payerDocDigits = boleto_document_digits($data['payer_document'] ?? '');
+  $payerLine = $payer . ($payerDocDigits !== '' ? '  ' . (strlen($payerDocDigits) === 11 ? 'CPF: ' : 'CNPJ: ') . boleto_document_format_document($payerDocDigits) : '');
+
+  // 1) Recibo de entrega
+  $y = 7.0;
+  boleto_document_pdf_sicoob_header($pdf, $data, $x, $y, $w, 'Recibo de entrega', false, false);
+  $y += 10.5;
+  $leftW = 122.4; $rightW = $w - $leftW;
+  boleto_document_pdf_sicoob_cell($pdf, $x, $y, 19.6, 7.6, 'Vencimento', boleto_document_date($data['due_date'] ?? ''), 'L', 7.0, 'B');
+  boleto_document_pdf_sicoob_cell($pdf, $x + 19.6, $y, 38.1, 7.6, 'Agência / Código Beneficiário', boleto_document_sicoob_beneficiary_code($data), 'L', 7.0);
+  boleto_document_pdf_sicoob_cell($pdf, $x + 57.7, $y, 10.9, 7.6, 'Espécie', 'R$', 'L', 7.0, 'B');
+  boleto_document_pdf_sicoob_cell($pdf, $x + 68.6, $y, $leftW - 68.6, 7.6, 'Quantidade');
+  boleto_document_pdf_sicoob_cell($pdf, $x, $y + 7.6, 38.1, 7.0, '(=) Valor do Documento', number_format((float)($data['amount'] ?? 0), 2, ',', '.'), 'L', 7.0);
+  boleto_document_pdf_sicoob_cell($pdf, $x + 38.1, $y + 7.6, $leftW - 38.1, 7.0, 'Nosso número', boleto_document_sicoob_our_number($data), 'L', 7.0);
+  boleto_document_pdf_sicoob_cell($pdf, $x, $y + 14.6, $leftW, 7.0, 'Pagador', $payerLine, 'L', 7.0);
+  boleto_document_pdf_sicoob_cell($pdf, $x, $y + 21.6, 30.7, 7.4, 'Data da Entrega');
+  boleto_document_pdf_sicoob_cell($pdf, $x + 30.7, $y + 21.6, $leftW - 30.7, 7.4, 'Assinatura do responsável');
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y, $rightW, 21.6, 'Motivo da não entrega (para uso da empresa entregadora)');
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW, $y + 21.6, 27.3, 7.4, 'Data');
+  boleto_document_pdf_sicoob_cell($pdf, $x + $leftW + 27.3, $y + 21.6, $rightW - 27.3, 7.4, 'Assinatura do entregador');
+  $y += 29.0 + 3.5;
+  boleto_document_pdf_sicoob_cut($pdf, $x, $y, $w);
+
+  // 2) Recibo do Pagador
+  $y += 3.0;
+  boleto_document_pdf_sicoob_header($pdf, $data, $x, $y, $w, 'Recibo do Pagador', true, false);
+  $y += 10.5;
+  $y = boleto_document_pdf_sicoob_body($pdf, $data, $x, $y, $w, false);
+  $pdf->SetFont('Arial', '', 5.3); $pdf->SetXY($x + 115, $y + 0.6); $pdf->Cell(40, 2.6, boleto_document_pdf_text('Autenticação Mecânica'), 0, 0, 'L');
+  $y += 7.0;
+  boleto_document_pdf_sicoob_cut($pdf, $x, $y, $w);
+
+  // 3) Ficha de Compensação
+  $y += 2.5;
+  boleto_document_pdf_sicoob_header($pdf, $data, $x, $y, $w, trim((string)($data['linha_digitavel'] ?? '')), true, true);
+  $y += 10.5;
+  $y = boleto_document_pdf_sicoob_body($pdf, $data, $x, $y, $w, true);
+  $pdf->SetFont('Arial', '', 5.3); $pdf->SetXY($x + 130, $y + 0.6); $pdf->Cell($w - 131, 2.6, boleto_document_pdf_text('Autenticação Mecânica - Ficha de Compensação'), 0, 0, 'R');
+  boleto_document_pdf_draw_barcode($pdf, (string)$data['barcode'], $x + 1.0, $y + 2.5, 103.0, 13.0);
+  return (string)$pdf->Output('', 'S');
 }
 
 function boleto_document_pdf_itau(array $data): string {
@@ -514,7 +715,7 @@ function boleto_document_pdf_itau(array $data): string {
   $x=14.0; $w=182.0;
   $endTop = boleto_document_pdf_itau_section($pdf,$data,$x,13.0,$w,true);
   $cutY = $endTop + 8.0;
-  $pdf->SetFont('Arial','',5.8); $pdf->SetXY($x,$cutY-4.0); $pdf->Cell($w,3,boleto_document_pdf_text('Autenticação mecânica'),0,0,'R');
+  $pdf->SetFont('Times','',7.4); $pdf->SetXY($x,$cutY-4.0); $pdf->Cell($w,3,boleto_document_pdf_text('Autenticação mecânica'),0,0,'R');
   $pdf->SetDrawColor(110,110,110);
   $segments = 90; $segW=$w/$segments;
   for($i=0;$i<$segments;$i+=2){ $pdf->Line($x+$i*$segW,$cutY,$x+($i+1)*$segW,$cutY); }
@@ -523,8 +724,8 @@ function boleto_document_pdf_itau(array $data): string {
   $endBottom = boleto_document_pdf_itau_section($pdf,$data,$x,$cutY+4.0,$w,false);
   $barcodeY = $endBottom + 1.3;
   boleto_document_pdf_draw_barcode($pdf,(string)$data['barcode'],$x,$barcodeY,111.0,14.5);
-  $pdf->SetFont('Arial','B',8.7); $pdf->SetXY($x+112.0,$barcodeY+0.5); $pdf->Cell($w-112.0,5,boleto_document_pdf_text('Ficha de Compensação'),0,0,'R');
-  $pdf->SetFont('Arial','',5.7); $pdf->SetXY($x+112.0,$barcodeY+5.0); $pdf->Cell($w-112.0,4,boleto_document_pdf_text('Autenticação mecânica'),0,0,'R');
+  $pdf->SetFont('Times','B',11); $pdf->SetXY($x+112.0,$barcodeY+0.5); $pdf->Cell($w-112.0,5,boleto_document_pdf_text('Ficha de Compensação'),0,0,'R');
+  $pdf->SetFont('Times','',7.4); $pdf->SetXY($x+112.0,$barcodeY+5.0); $pdf->Cell($w-112.0,4,boleto_document_pdf_text('Autenticação mecânica'),0,0,'R');
   return (string)$pdf->Output('', 'S');
 }
 
@@ -628,6 +829,8 @@ function boleto_document_pdf_generic(array $data): string {
 
 if (!function_exists('boleto_document_pdf')) {
   function boleto_document_pdf(array $data): string {
-    return boleto_document_is_itau($data) ? boleto_document_pdf_itau($data) : boleto_document_pdf_generic($data);
+    if (boleto_document_is_itau($data)) return boleto_document_pdf_itau($data);
+    if (boleto_document_is_sicoob($data)) return boleto_document_pdf_sicoob($data);
+    return boleto_document_pdf_generic($data);
   }
 }

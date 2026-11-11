@@ -136,6 +136,15 @@ try {
   if (!function_exists('config_store_get')) require_once __DIR__ . '/../config/config_store.php';
   $dupCfg = config_store_get($pdo, $dupCid, 'pedido_duplicata') ?: [];
   $dupTerms = trim((string)($dupCfg['terms'] ?? ''));
+  // Dados da empresa personalizados para a Duplicata (Configurações fiscais): quando
+  // preenchidos, substituem os do cadastro (ex.: empresa cadastrada com CPF que quer CNPJ).
+  $dupOv = static fn(string $k): string => trim((string)($dupCfg['company_' . $k] ?? ''));
+  if ($dupOv('name') !== '') $dupCompanyName = $dupOv('name');
+  if ($dupOv('doc') !== '') $dupCompanyDoc = $dupOv('doc');
+  if ($dupOv('ie') !== '') $dupCompanyIe = $dupOv('ie');
+  if ($dupOv('address') !== '') $dupCompanyStreet = $dupOv('address');
+  if ($dupOv('city') !== '') { $dupCompanyCity = $dupOv('city'); $dupCompanyUf = ''; }
+  if ($dupOv('phone') !== '') $dupCompanyPhones = $dupOv('phone');
 } catch (Throwable $e) {}
 
 $dupCreatedTs = !empty($pedido['created_at']) ? strtotime((string)$pedido['created_at']) : false;
@@ -168,8 +177,8 @@ body{margin:0;background:#eef2f7;color:#000;font-family:Arial,Helvetica,sans-ser
 table{border-collapse:collapse;width:100%}
 .box{border:1px solid #000}
 .head td{border:1px solid #000;vertical-align:top}
-.head .logo-cell{width:34mm;text-align:center;vertical-align:middle;padding:1.5mm}
-.head .logo-cell img{max-width:30mm;max-height:16mm;object-fit:contain}
+.head .logo-cell{width:34mm;text-align:center;vertical-align:middle;padding:.6mm}
+.head .logo-cell img{display:block;margin:0 auto;width:32.5mm;height:19mm;max-width:32.5mm;max-height:19mm;object-fit:contain}
 .head .title{font-family:"Times New Roman",Times,serif;font-size:13pt;font-weight:700;text-align:center;padding:2mm}
 .head .meta td{border:0;border-left:1px solid #000;padding:.6mm 1.5mm;vertical-align:top}
 .head .meta td:first-child{border-left:0}
@@ -244,7 +253,7 @@ table{border-collapse:collapse;width:100%}
       <div class="bar">Empresa:</div>
       <div class="party">
         <b><?= pedido_dup_h(mb_strtoupper($dupCompanyName, 'UTF-8')) ?></b>
-        <?php if ($dupCompanyDoc !== ''): ?><div>CNPJ: <?= pedido_dup_h($dupCompanyDoc) ?></div><?php endif; ?>
+        <?php if ($dupCompanyDoc !== ''): ?><div><?= strlen(preg_replace('/\D+/', '', $dupCompanyDoc) ?? '') === 11 ? 'CPF' : 'CNPJ' ?>: <?= pedido_dup_h($dupCompanyDoc) ?></div><?php endif; ?>
         <?php if ($dupCompanyIe !== ''): ?><div>I.E.: <?= pedido_dup_h($dupCompanyIe) ?></div><?php endif; ?>
         <?php if ($dupCompanyStreet !== ''): ?><div><?= pedido_dup_h(mb_strtoupper($dupCompanyStreet, 'UTF-8')) ?></div><?php endif; ?>
         <?php if ($dupCompanyCity !== ''): ?><div><?= pedido_dup_h(mb_strtoupper($dupCompanyCity . ($dupCompanyUf !== '' ? '/' . $dupCompanyUf : ''), 'UTF-8')) ?></div><?php endif; ?>
