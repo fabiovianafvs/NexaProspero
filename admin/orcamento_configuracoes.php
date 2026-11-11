@@ -48,7 +48,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $st->execute([$defaultReserve, $allowOut, $delivery, $companyId]);
     }
     require_once __DIR__ . '/../config/config_store.php';
-    config_store_set($pdo, $companyId, 'orcamento_print', ['default_model' => ((string)($_POST['print_default_model'] ?? 'a4') === '72mm') ? '72mm' : 'a4']);
+    require_once __DIR__ . '/../config/orcamento_proposta.php';
+    $printModel = (string)($_POST['print_default_model'] ?? 'a4');
+    $printCfg = orc_print_config($pdo, $companyId);
+    $printCfg['default_model'] = in_array($printModel, ['a4', '72mm', 'proposta'], true) ? $printModel : 'a4';
+    $printCfg['proposta_validity_days'] = max(0, min(365, (int)($_POST['proposta_validity_days'] ?? 0)));
+    foreach (['proposta_intro' => 300, 'proposta_other' => 600, 'proposta_terms' => 600] as $k => $max) {
+      $printCfg[$k] = mb_substr(trim((string)($_POST[$k] ?? '')), 0, $max, 'UTF-8');
+    }
+    config_store_set($pdo, $companyId, 'orcamento_print', $printCfg);
     header('Location: orcamento_configuracoes.php?ok=' . rawurlencode('Configurações do Orçamento salvas.'));
     exit;
   } catch (Throwable $e) {
@@ -59,8 +67,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $settings = orc_settings($pdo, $companyId);
 if (empty($_SESSION['nexa_orc_seq_csrf'])) $_SESSION['nexa_orc_seq_csrf'] = bin2hex(random_bytes(20));
 $orcSeq = orc_sequence_info($pdo, $companyId);
-$orcPrintDefault = 'a4';
-try { require_once __DIR__ . '/../config/config_store.php'; $orcPrintCfg = config_store_get($pdo, $companyId, 'orcamento_print'); if (is_array($orcPrintCfg) && ($orcPrintCfg['default_model'] ?? '') === '72mm') $orcPrintDefault = '72mm'; } catch (Throwable $e) {}
+require_once __DIR__ . '/../config/orcamento_proposta.php';
+$orcPrintCfg = orc_print_config($pdo, $companyId);
+$orcPrintDefault = $orcPrintCfg['default_model'];
 orc_page_start('Configurações do Orçamento', 'orcamento_configuracoes');
 ?>
 <div class="orc-head">
@@ -80,8 +89,27 @@ orc_page_start('Configurações do Orçamento', 'orcamento_configuracoes');
       <div class="orc-grid">
         <div class="orc-c12">
           <label style="display:block;font-weight:800;margin-bottom:4px">Layout padrão de impressão</label>
-          <select name="print_default_model" style="max-width:260px"><option value="a4" <?= $orcPrintDefault === 'a4' ? 'selected' : '' ?>>A4</option><option value="72mm" <?= $orcPrintDefault === '72mm' ? 'selected' : '' ?>>Bobina 70 mm</option></select>
-          <div class="orc-hint">Formato que abre ao clicar em Imprimir. Na tela de impressão ainda dá para trocar entre 70 mm e A4.</div>
+          <select name="print_default_model" style="max-width:260px"><option value="a4" <?= $orcPrintDefault === 'a4' ? 'selected' : '' ?>>A4</option><option value="72mm" <?= $orcPrintDefault === '72mm' ? 'selected' : '' ?>>Bobina 70 mm</option><option value="proposta" <?= $orcPrintDefault === 'proposta' ? 'selected' : '' ?>>Proposta/Orçamento (A4 com quadros)</option></select>
+          <div class="orc-hint">Formato que abre ao clicar em Imprimir. Na tela de impressão ainda dá para trocar entre 70 mm, A4 e Proposta. O PDF enviado por WhatsApp/E-mail segue o modelo escolhido.</div>
+        </div>
+        <div class="orc-c4">
+          <label>Validade da proposta (dias)</label>
+          <input type="number" name="proposta_validity_days" min="0" max="365" step="1" value="<?= (int)$orcPrintCfg['proposta_validity_days'] ?>">
+          <div class="orc-hint">Modelo Proposta. Use 0 para não mostrar a validade.</div>
+        </div>
+        <div class="orc-c8">
+          <label>Frase de abertura (modelo Proposta)</label>
+          <input type="text" name="proposta_intro" maxlength="300" value="<?= orc_e($orcPrintCfg['proposta_intro']) ?>">
+        </div>
+        <div class="orc-c6">
+          <label>Outros dados (modelo Proposta)</label>
+          <textarea name="proposta_other" rows="2" maxlength="600"><?= orc_e($orcPrintCfg['proposta_other']) ?></textarea>
+          <div class="orc-hint">Aparece abaixo do Representante (vendedor). Ex.: * Todos os impostos inclusos.</div>
+        </div>
+        <div class="orc-c6">
+          <label>Texto de aceite (modelo Proposta)</label>
+          <textarea name="proposta_terms" rows="2" maxlength="600"><?= orc_e($orcPrintCfg['proposta_terms']) ?></textarea>
+          <div class="orc-hint">Aparece acima das assinaturas. Os dados da empresa (razão social, CNPJ, I.E., endereço) podem ser personalizados em Configurações fiscais &gt; Duplicata.</div>
         </div>
         <div class="orc-c12">
           <label class="orc-check"><input type="checkbox" name="default_reserve_product" value="1" <?= !empty($settings['default_reserve_product']) ? 'checked' : '' ?>> Marcar “Reservar” por padrão ao adicionar produtos</label>

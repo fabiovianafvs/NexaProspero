@@ -156,7 +156,7 @@ try {
     case 'orcamento':
       $id=max(0,(int)($_GET['id'] ?? $_POST['id'] ?? 0));
       if($id<=0) throw new RuntimeException('Orçamento inválido.');
-      $model=strtolower(trim((string)($_GET['modelo'] ?? $_POST['modelo'] ?? 'a4')));if(!in_array($model,['72mm','a4'],true))$model='a4';
+      $model=strtolower(trim((string)($_GET['modelo'] ?? $_POST['modelo'] ?? 'a4')));if(!in_array($model,['72mm','a4','proposta'],true))$model='a4';
       $data=nexa_quote_document_load($pdo,$cid,$id);$q=(array)$data['quote'];$person=(array)$data['person'];
       $number=str_pad((string)(int)($q['quote_number']??0),6,'0',STR_PAD_LEFT);$customer=trim((string)($q['person_name_snapshot']??''))?:'cliente';
       $recipient=strtolower(trim((string)($person['email']??'')));if(!filter_var($recipient,FILTER_VALIDATE_EMAIL))$recipient=ned_person_email($pdo,$cid,(int)($q['person_id']??0));

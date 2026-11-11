@@ -250,6 +250,11 @@ if (!function_exists('nexa_customer_pdf_footer')) {
 
 if (!function_exists('nexa_quote_document_pdf_build')) {
   function nexa_quote_document_pdf_build(array $data,string $model='a4'): array {
+    if(strtolower($model)==='proposta'&&isset($GLOBALS['pdo'])&&$GLOBALS['pdo'] instanceof PDO){
+      // Modelo Proposta/Orçamento (A4 com quadros).
+      require_once __DIR__.'/orcamento_proposta.php';
+      return orc_proposta_pdf_build($GLOBALS['pdo'],(int)(($data['company']['id']??0)?:($data['quote']['company_id']??0)),$data);
+    }
     $q=(array)$data['quote'];$items=(array)$data['items'];$payments=(array)$data['payments'];$company=(array)$data['company'];$person=(array)$data['person'];
     $model=in_array(strtolower($model),['72mm','a4'],true)?strtolower($model):'a4';
     $estimated=210+count($items)*12+count($payments)*7+(trim((string)($q['notes']??''))!==''?40:0);[$pdf,$font,$cw,$margin]=nexa_customer_pdf_new($model,$estimated);

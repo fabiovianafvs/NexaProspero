@@ -39,7 +39,7 @@ try{
     $payload=['order'=>$o,'items'=>$items,'company_name'=>$companyName,'app_cfg'=>$appCfg];$context='pedido';$pageTitle='Enviar Pedido #'.$number.' por WhatsApp';$docLabel='Pedido #'.$number;$filenameHint='Pedido em PDF';$returnFallback='pedido_print.php?id='.$id.'&modelo='.$model.'&autoprint=0';$nav='pedidos';
   }elseif($type==='orcamento'){
     $payload=nexa_quote_document_load($pdo,$cid,$id);$q=(array)$payload['quote'];$p=(array)$payload['person'];
-    if(!in_array($model,['72mm','a4'],true))$model='a4';
+    if(!in_array($model,['72mm','a4','proposta'],true))$model='a4';
     $number=str_pad((string)(int)$q['quote_number'],6,'0',STR_PAD_LEFT);$customer=trim((string)($q['person_name_snapshot']??''))?:'cliente';
     $phone=trim((string)($p['whatsapp']??''))?:trim((string)($p['phone']??''));if($phone==='')$phone=trim((string)($q['person_phone_snapshot']??''));
     $context='orcamento';$pageTitle='Enviar Orçamento #'.$number.' por WhatsApp';$docLabel='Orçamento #'.$number;$filenameHint='Orçamento em PDF';$returnFallback='orcamento_imprimir.php?id='.$id.'&modelo='.$model;$nav='orcamentos';
