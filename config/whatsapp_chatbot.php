@@ -675,7 +675,9 @@ if (!function_exists('whatsapp_chat_send_text')) {
   function whatsapp_chat_send_text(PDO $pdo, int $companyId, array $ctx, string $text, string $sender = 'robo', ?int $userId = null, string $wireText = ''): bool {
     $payload = ['company_id' => $ctx['sid'], 'message' => $wireText !== '' ? $wireText : $text];
     if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone'];
-    if ($ctx['contact'] !== '') $payload['jid'] = $ctx['contact'];
+    // Responde sempre pelo número de telefone quando ele é conhecido: o envio direto
+    // para o endereço interno (@lid) fazia o WhatsApp derrubar a sessão (device_removed).
+    if ($ctx['phone'] === '' && $ctx['contact'] !== '') $payload['jid'] = $ctx['contact'];
     $ok = true; $messageId = '';
     try {
       $res = whatsapp_api_request(array_merge($ctx['wa'], ['timeout_seconds' => 40]), 'POST', '/send', $payload);
@@ -700,7 +702,9 @@ if (!function_exists('whatsapp_chat_send_file')) {
     $filename = mb_substr(basename($filename) ?: 'arquivo', 0, 150);
     $payload = ['company_id' => $ctx['sid'], 'kind' => $kind, 'caption' => $caption, 'filename' => $filename, 'mimetype' => $mime, 'file_base64' => base64_encode($bytes)];
     if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone'];
-    if ($ctx['contact'] !== '') $payload['jid'] = $ctx['contact'];
+    // Responde sempre pelo número de telefone quando ele é conhecido: o envio direto
+    // para o endereço interno (@lid) fazia o WhatsApp derrubar a sessão (device_removed).
+    if ($ctx['phone'] === '' && $ctx['contact'] !== '') $payload['jid'] = $ctx['contact'];
     $ok = true; $messageId = ''; $error = '';
     try {
       $res = whatsapp_api_request(array_merge($ctx['wa'], ['timeout_seconds' => 60]), 'POST', '/send-document', $payload);

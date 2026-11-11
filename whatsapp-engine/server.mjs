@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.3';
+const SERVICE_VERSION = 'engine-1.4';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -508,8 +508,19 @@ function phoneCandidates(n) {
 
 async function resolveJid(state, rawTo, rawJid) {
   const jid = String(rawJid || '').trim();
-  if (/^[0-9]{5,20}(:[0-9]+)?@(s\.whatsapp\.net|lid)$/.test(jid)) return jid;
-  const n = normalizePhone(rawTo);
+  const phone = normalizePhone(rawTo);
+  // Prefere SEMPRE o número de telefone: enviar direto para o endereço interno
+  // (@lid) derrubava a sessão ("device_removed"). Sem telefone, tenta converter
+  // o @lid para o número; só em último caso usa o @lid.
+  if (phone.length < 10 && /^[0-9]{5,20}(:[0-9]+)?@s\.whatsapp\.net$/.test(jid)) return jid;
+  if (phone.length < 10 && /^[0-9]{5,20}(:[0-9]+)?@lid$/.test(jid)) {
+    try {
+      const pn = await state.sock?.signalRepository?.lidMapping?.getPNForLID?.(jid);
+      if (pn && String(pn).includes('@s.whatsapp.net')) return String(pn).replace(/:\d+@/, '@');
+    } catch (_) {}
+    return jid;
+  }
+  const n = phone;
   if (n.length < 10 || n.length > 15) throw httpError(400, 'Número de WhatsApp inválido.');
   const cached = state.numberCache.get(n);
   if (cached && Date.now() - cached.at < 7 * 86400000) return cached.jid;
