@@ -453,6 +453,42 @@ $saldoInicialPeriodo = round($saldoInicialBancos + $saldoAnteriorMov, 2);
 $saldoMovPeriodo = (float)(finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN type='CREDITO' THEN amount WHEN type='DEBITO' THEN -amount ELSE 0 END),0) AS total FROM finance_movements WHERE company_id=? AND movement_date BETWEEN ? AND ? AND (status IS NULL OR status='' OR status='ATIVO')" . $balanceMovSql, array_merge([$cid, $ini, $fim], $balanceMovParams))['total'] ?? 0);
 $saldoFinalPeriodo = round($saldoInicialPeriodo + $saldoMovPeriodo, 2);
 
+// "Todos": saldo montado conta a conta, para a soma dos bancos filtrados um a um
+// bater com o total. Mostra à parte o que não pertence a um banco ativo
+// (lançamentos sem Caixa/Banco e contas inativas com movimento).
+$saldoPorConta = [];
+if ($bankFilter <= 0) {
+  $signed = "CASE WHEN m.type='CREDITO' THEN m.amount WHEN m.type='DEBITO' THEN -m.amount ELSE 0 END";
+  $activeMov = "(m.status IS NULL OR m.status='' OR m.status='ATIVO')";
+  $accSql = 'SELECT b.id, b.name, b.active, b.initial_balance, COUNT(m.id) AS qtd,'
+    . " COALESCE(SUM(CASE WHEN m.movement_date < ? THEN $signed ELSE 0 END),0) AS antes,"
+    . " COALESCE(SUM(CASE WHEN m.movement_date >= ? THEN $signed ELSE 0 END),0) AS periodo"
+    . " FROM finance_bank_accounts b LEFT JOIN finance_movements m ON m.company_id=b.company_id AND m.bank_account_id=b.id AND m.movement_date <= ? AND $activeMov"
+    . ' WHERE b.company_id=?';
+  $accParams = [$ini, $ini, $fim, $cid];
+  if (is_array($allowedBankIds)) {
+    $accSql .= $allowedBankIds ? ' AND b.id IN (' . implode(',', array_fill(0, count($allowedBankIds), '?')) . ')' : ' AND 0=1';
+    foreach ($allowedBankIds as $allowedBankId) $accParams[] = (int)$allowedBankId;
+  }
+  $accSql .= ' GROUP BY b.id, b.name, b.active, b.initial_balance ORDER BY b.active DESC, b.name ASC';
+  foreach (finance_query_all($pdo, $accSql, $accParams) as $acc) {
+    $isActive = (int)$acc['active'] === 1;
+    // Conta inativa sem nenhum movimento não entra (cadastro descartado).
+    if (!$isActive && (int)$acc['qtd'] === 0) continue;
+    $ini0 = round((float)$acc['initial_balance'] + (float)$acc['antes'], 2);
+    $saldoPorConta[] = ['name' => (string)$acc['name'] . ($isActive ? '' : ' (inativa)'), 'extra' => !$isActive, 'ini' => $ini0, 'fim' => round($ini0 + (float)$acc['periodo'], 2)];
+  }
+  if (!is_array($allowedBankIds)) {
+    $noBank = finance_query_one($pdo, "SELECT COUNT(*) AS qtd, COALESCE(SUM(CASE WHEN m.movement_date < ? THEN $signed ELSE 0 END),0) AS antes, COALESCE(SUM(CASE WHEN m.movement_date >= ? THEN $signed ELSE 0 END),0) AS periodo FROM finance_movements m LEFT JOIN finance_bank_accounts b ON b.company_id=m.company_id AND b.id=m.bank_account_id WHERE m.company_id=? AND b.id IS NULL AND m.movement_date <= ? AND $activeMov", [$ini, $ini, $cid, $fim]) ?: [];
+    if ((int)($noBank['qtd'] ?? 0) > 0) {
+      $ini0 = round((float)$noBank['antes'], 2);
+      $saldoPorConta[] = ['name' => 'Sem Caixa/Banco informado', 'extra' => true, 'ini' => $ini0, 'fim' => round($ini0 + (float)$noBank['periodo'], 2)];
+    }
+  }
+  $saldoInicialPeriodo = round(array_sum(array_column($saldoPorConta, 'ini')), 2);
+  $saldoFinalPeriodo = round(array_sum(array_column($saldoPorConta, 'fim')), 2);
+}
+
 $filterArgs = ['ini' => $ini, 'fim' => $fim];
 if ($typeFilter !== '') $filterArgs['type'] = $typeFilter;
 if ($bankFilter > 0) $filterArgs['bank_account_id'] = $bankFilter;
@@ -569,6 +605,20 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div class="finance-kpi"><small>Débitos</small><strong class="neg">R$ <?= finance_money_br($debitos) ?></strong></div>
   <div class="finance-kpi"><small>Saldo final</small><strong class="<?= $saldoFinalPeriodo>=0?'pos':'neg' ?>">R$ <?= finance_money_br($saldoFinalPeriodo) ?></strong></div>
 </div>
+<?php if (count($saldoPorConta) > 1): $temExtra = (bool)array_filter(array_column($saldoPorConta, 'extra')); ?>
+<details class="finance-card fin-mov-saldos" style="margin-top:8px;padding:8px 14px"<?= $temExtra ? ' open' : '' ?>>
+  <summary style="cursor:pointer;font-weight:700;font-size:13px">Saldo por Caixa/Banco (a soma é o total de "Todos")</summary>
+  <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px">
+    <thead><tr><th style="text-align:left;padding:4px 6px">Caixa/Banco</th><th style="text-align:right;padding:4px 6px">Saldo inicial</th><th style="text-align:right;padding:4px 6px">Saldo final</th></tr></thead>
+    <tbody>
+    <?php foreach ($saldoPorConta as $sc): ?>
+      <tr style="border-top:1px solid rgba(2,6,23,.08)<?= $sc['extra'] ? ';color:#b45309;font-weight:700' : '' ?>"><td style="padding:4px 6px"><?= finance_h($sc['name']) ?></td><td style="text-align:right;padding:4px 6px">R$ <?= finance_money_br($sc['ini']) ?></td><td style="text-align:right;padding:4px 6px">R$ <?= finance_money_br($sc['fim']) ?></td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php if ($temExtra): ?><div class="finance-muted" style="font-size:12px;margin-top:4px">As linhas em destaque entram no total de "Todos", mas não aparecem quando você filtra um banco. Para corrigir, informe o Caixa/Banco nesses lançamentos ou reative a conta.</div><?php endif; ?>
+</details>
+<?php endif; ?>
 
 <div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter" data-lembrar-filtros="movimentos" data-lembrar-ignorar="edit,new,cancel,adjust_date,transfer" data-lembrar-somente-retorno="1"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
   <div><label>Data inicial</label><input type="date" name="ini" value="<?= finance_h($ini) ?>"></div>
