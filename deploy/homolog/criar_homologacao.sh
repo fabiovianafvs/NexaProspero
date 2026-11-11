@@ -27,7 +27,7 @@ PROD_DB=nexaprospero
 HML_DB=nexaprospero_homolog
 HML_DB_USER=nexa_homolog
 HML_HOST=homolog.nexaprospero.com.br
-TEST_COMPANY_SLUG=empresa-padrao
+TEST_COMPANY_SLUG="${HML_EMPRESA:-empresa-padrao}"  # outra empresa: HML_EMPRESA=slug bash criar_homologacao.sh
 REPO=git@github.com:fabiovianafvs/NexaProspero.git
 BRANCH=homolog
 VHOST_NAME=nexa-homolog  # ordem: depois de nexa-app (site padrão), antes de nexaprospero (curinga *.)
@@ -181,4 +181,4 @@ code_tools="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $HML_HOST" "http:
 echo "  admin/login.php -> $code_login (esperado 200)"
 echo "  tools/...       -> $code_tools (esperado 403)"
 echo
-ok "Homologação pronta: https://$HML_HOST/admin/login.php (mesmos usuários e senhas da empresa-padrao)"
+ok "Homologação pronta: https://$HML_HOST/admin/login.php (mesmos usuários e senhas da empresa $TEST_COMPANY_SLUG)"
