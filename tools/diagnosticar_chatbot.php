@@ -46,6 +46,15 @@ $line('Robô ligado: ' . ($cfg['enabled'] ? 'sim' : 'NÃO'));
 $wa = whatsapp_load_config($pdo, $cid, false);
 $sid = whatsapp_service_company_id($wa, $cid);
 $line('WhatsApp no motor novo: ' . (whatsapp_engine_is_url($engine, (string)$wa['service_url']) ? 'sim' : 'NÃO (' . $wa['service_url'] . ')') . ' · sessão ' . $sid);
+try {
+  $sess = whatsapp_engine_request($engine, 'GET', '/admin/sessions', [], 8);
+  foreach ((array)($sess['items'] ?? []) as $it) {
+    if ((string)($it['company_id'] ?? $it['id'] ?? '') !== (string)$sid) continue;
+    $line('Sessão no motor: ' . json_encode($it, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  }
+} catch (Throwable $e) {
+  $line('Sessão no motor: não consultada (' . $e->getMessage() . ')');
+}
 $line('Opções do menu inicial:');
 foreach (whatsapp_bot_nodes($pdo, $cid, null) as $i => $n) {
   $line('  ' . ($i + 1) . ' - ' . $n['label'] . ' [' . $n['action'] . ']');
