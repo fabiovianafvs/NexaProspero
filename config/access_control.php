@@ -53,7 +53,7 @@ if (!function_exists('access_permissions_catalog')) {
       'brain' => ['label' => 'Nexa Brain', 'group' => 'Geral', 'module' => '*', 'pages' => ['brain.php','brain_alertas.php','brain_alert_action.php','brain_api.php','brain_live_api.php'], 'nav' => ['brain']],
       'pedido_finalizado_alterar_vendedor' => ['label' => 'Alterar vendedor de pedido finalizado sem documento fiscal', 'group' => 'Vendas', 'module' => '*', 'pages' => [], 'nav' => []],
       'pedidos' => ['label' => 'Pedidos', 'group' => 'Geral', 'module' => ['delivery','gestao','fiscal','financeiro'], 'pages' => ['pedidos.php','pedido.php','pedido_editar.php','pedido_regularizacao.php','pedido_status.php','pedido_print.php','pedido_print_conferencia.php','pedido_print_producao.php','pedido_relatorio_produtos.php','pedido_whatsapp.php'], 'nav' => ['pedidos']],
-      'produtos' => ['label' => 'Produtos', 'group' => 'Geral', 'module' => '*', 'pages' => ['produtos.php','produto_form.php','estoque_consulta.php'], 'nav' => ['produtos']],
+      'produtos' => ['label' => 'Produtos', 'group' => 'Geral', 'module' => '*', 'pages' => ['produtos.php','produto_form.php','produto_gtin_lookup.php','estoque_consulta.php'], 'nav' => ['produtos']],
       'clientes' => ['label' => 'Clientes', 'group' => 'Geral', 'module' => 'delivery', 'pages' => ['gestao_clientes.php','gestao_clientes_importar.php'], 'nav' => ['clientes','gestao_clientes']],
       // Aba Anexos do cadastro de Pessoas (ações dentro da tela; o administrador e a senha master têm todas).
       'pessoas_anexos_ver' => ['label' => 'Pessoas · Anexos: ver, abrir e baixar', 'group' => 'Geral', 'module' => ['financeiro','delivery','orcamento'], 'pages' => [], 'nav' => []],

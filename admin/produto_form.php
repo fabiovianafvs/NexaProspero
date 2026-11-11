@@ -820,6 +820,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         $erro = 'Falha no upload da imagem.';
       }
     }
+    // Foto sugerida pela consulta do código de barras (só se não enviou arquivo).
+    $imagemUrl = trim((string)($_POST['imagem_url'] ?? ''));
+    if ($erro === '' && $imagemUrl !== '' && $imagemNome === (string)($produto['imagem'] ?? '')
+      && (($_FILES['imagem']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE)) {
+      require_once __DIR__ . '/../config/product_gtin_lookup.php';
+      $downloaded = product_gtin_download_image($imagemUrl, $nome, __DIR__ . '/../uploads/products/');
+      if ($downloaded !== '') $imagemNome = $downloaded;
+    }
 
     if ($erro === '') {
       if ($id > 0) {
@@ -1059,8 +1067,13 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
           <input class="field" value="<?= (int)$id > 0 ? ('#' . htmlspecialchars((string)company_sequence_display($produto, 'produtos'))) : 'Novo' ?>" readonly>
         </div>
         <div class="row product-barcode-field">
-          <label>Código de barras</label>
-          <input class="field" name="codigo_barras" value="<?= htmlspecialchars((string)($produto['codigo_barras'] ?? '')) ?>" placeholder="GTIN ou SEM GTIN" inputmode="text" maxlength="80" autocomplete="off">
+          <label>Código de barras <?php if (access_is_company_master()): ?><a href="#" id="gtinCfgLink" style="font-weight:600;font-size:11px;margin-left:6px">configurar consulta</a><?php endif; ?></label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="field" name="codigo_barras" id="codigoBarrasInput" value="<?= htmlspecialchars((string)($produto['codigo_barras'] ?? '')) ?>" placeholder="GTIN ou SEM GTIN" inputmode="text" maxlength="80" autocomplete="off" style="flex:1;min-width:0">
+            <button class="btn" type="button" id="gtinLookupBtn" title="Buscar nome, foto e NCM pelo código de barras" style="white-space:nowrap">Buscar dados</button>
+          </div>
+          <div class="help" id="gtinLookupMsg"></div>
+          <input type="hidden" name="imagem_url" id="imagemUrlInput" value="">
         </div>
         <div class="row product-name-field">
           <label>Nome do produto</label>
@@ -1585,7 +1598,7 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
 
       <div class="row" style="grid-column:1/-1;">
         <label>Descrição / observação (aparece no catálogo de pedidos e no detalhe)</label>
-        <textarea class="field" name="descricao" rows="3" placeholder="Ex: Mussarela, provolone, parmesão e catupiry."><?= htmlspecialchars((string)$produto['descricao']) ?></textarea>
+        <textarea class="field" name="descricao" rows="3"><?= htmlspecialchars((string)$produto['descricao']) ?></textarea>
       </div>
 
       <?php if ($productOrderOptionsEnabled): ?>
@@ -2556,4 +2569,78 @@ if ($fiscalEnabled) {
 </script>
 <?php endif; ?>
 
+<?php
+if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf'])) $_SESSION['nexa_gtin_csrf'] = bin2hex(random_bytes(16));
+?>
+<script>
+// Consulta de produto pelo código de barras (Cosmos / Open Food Facts).
+(() => {
+  const input = document.getElementById('codigoBarrasInput');
+  const btn = document.getElementById('gtinLookupBtn');
+  const msg = document.getElementById('gtinLookupMsg');
+  if (!input || !btn) return;
+  const form = input.form;
+  const field = (name) => form ? form.querySelector('[name="' + name + '"]') : null;
+  const say = (text, bad) => { msg.textContent = text; msg.style.color = bad ? '#b91c1c' : '#047857'; };
+  const setIfEmpty = (el, value) => {
+    if (!el || !value) return false;
+    const cur = String(el.value || '').trim();
+    if (cur !== '' && cur.toUpperCase() !== 'SEM GTIN') return false;
+    el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  };
+  async function lookup() {
+    const gtin = String(input.value || '').replace(/\D+/g, '');
+    if (gtin.length < 8) { say('Digite ou leia o código de barras (8 a 14 números).', true); return; }
+    btn.disabled = true; say('Buscando…', false); msg.style.color = '#475569';
+    try {
+      const res = await fetch('produto_gtin_lookup.php?gtin=' + encodeURIComponent(gtin), { credentials: 'same-origin' });
+      const j = await res.json();
+      if (!j.ok) { say(j.message || 'Não encontrado.', true); return; }
+      const d = j.data || {};
+      const nome = field('nome');
+      if (nome && d.name) {
+        const cur = String(nome.value || '').trim();
+        if (cur === '' || (cur !== d.name && confirm('Trocar o nome do produto por:\n' + d.name + ' ?'))) nome.value = d.name;
+      }
+      setIfEmpty(field('gtin_tributavel'), gtin);
+      const ncm = setIfEmpty(document.getElementById('fiscalNcmInput'), d.ncm);
+      setIfEmpty(document.getElementById('fiscalCestInput'), d.cest);
+      const fileInput = field('imagem');
+      if (d.image_url && (!fileInput || !fileInput.files || !fileInput.files.length)) {
+        const prev = document.getElementById('imgPreview');
+        if (prev) prev.src = d.image_url;
+        document.getElementById('imagemUrlInput').value = d.image_url;
+      }
+      const parts = ['Encontrado em ' + d.source + '.'];
+      if (d.image_url) parts.push('A foto será gravada ao salvar.');
+      if (ncm) parts.push('Confira o NCM antes de emitir nota.');
+      say(parts.join(' '), false);
+    } catch (e) {
+      say('Não foi possível consultar agora.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  btn.addEventListener('click', lookup);
+  // Leitor de código de barras envia Enter: busca em vez de salvar o formulário.
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookup(); } });
+  const fileInput = field('imagem');
+  if (fileInput) fileInput.addEventListener('change', () => { document.getElementById('imagemUrlInput').value = ''; });
+  const cfg = document.getElementById('gtinCfgLink');
+  if (cfg) cfg.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const token = prompt('Token da API do Cosmos (Bluesoft) desta empresa.\nCrie a conta em cosmos.bluesoft.com.br e copie o token.\nDeixe em branco para usar só a base gratuita (Open Food Facts).', '');
+    if (token === null) return;
+    const fd = new FormData();
+    fd.append('action', 'save_token'); fd.append('token', token.trim()); fd.append('csrf', <?= json_encode((string)($_SESSION['nexa_gtin_csrf'] ?? '')) ?>);
+    try {
+      const j = await (await fetch('produto_gtin_lookup.php', { method: 'POST', body: fd, credentials: 'same-origin' })).json();
+      alert(j.message || (j.ok ? 'Salvo.' : 'Falha ao salvar.'));
+    } catch (err) { alert('Falha ao salvar.'); }
+  });
+})();
+</script>
 <?php admin_footer(); ?>

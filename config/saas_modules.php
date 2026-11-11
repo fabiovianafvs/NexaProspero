@@ -786,7 +786,7 @@ if (!function_exists('saas_admin_page_required_modules')) {
       'compras_painel.php', 'compras_alertas.php', 'compras_fornecedores_avaliacao.php',
       'compras_fornecedores_ranking.php', 'compras_historico_precos.php' => ['compras'],
       'pedidos.php', 'pedido.php', 'pedido_editar.php', 'pedido_regularizacao.php', 'pedido_status.php', 'pedido_print.php', 'pedido_print_conferencia.php', 'pedido_print_producao.php', 'pedido_relatorio_produtos.php', 'pedido_whatsapp.php' => ['delivery','gestao','fiscal','financeiro'],
-      'produtos.php', 'produto_form.php', 'estoque_consulta.php' => ['*'],
+      'produtos.php', 'produto_form.php', 'produto_gtin_lookup.php', 'estoque_consulta.php' => ['*'],
       'utilitarios_manutencao_produtos.php' => ['*'],
       'whatsapp.php', 'whatsapp_api.php', 'whatsapp_modelos.php', 'whatsapp_fila.php' => ['*'],
       'whatsapp_chatbot.php', 'whatsapp_chatbot_fluxo.php', 'whatsapp_atendimento.php', 'whatsapp_atendimento_api.php', 'whatsapp_midia.php' => ['whatsapp_chatbot'],

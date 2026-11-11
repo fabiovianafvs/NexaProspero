@@ -79,7 +79,7 @@ if ($isCrossMultiCompany) {
   $financePersonRole = strtolower(trim((string)($_REQUEST['role'] ?? '')));
   $financePersonMode = !empty($_REQUEST['mc_finance']) && $financePersonRole === 'supplier';
   $multiCompanyPermission = match ($pageLower) {
-    'produtos.php', 'produto_form.php', 'estoque_consulta.php', 'fiscal_lookup.php' => 'produtos',
+    'produtos.php', 'produto_form.php', 'produto_gtin_lookup.php', 'estoque_consulta.php', 'fiscal_lookup.php' => 'produtos',
     'estoque_conferencias.php', 'estoque_conferencia_form.php', 'estoque_conferencia_processar.php' => 'conferencia_estoque',
     'fiscal_radar_xml.php' => 'fiscal_radar',
     'fiscal_entrada_notas.php' => 'fiscal_entrada_notas',
