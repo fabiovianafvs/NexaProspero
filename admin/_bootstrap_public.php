@@ -65,6 +65,21 @@ define('MULTI_COMPANY_SWAP_IS_ADMIN', $mcSwapCompany !== null && !empty($MULTI_C
 define('MULTI_COMPANY_SWAP_PROFILE_ID', $mcSwapCompany !== null ? (int)($MULTI_COMPANY_CONTEXT['company_profile_id'] ?? 0) : 0);
 if ($mcSwapCompany !== null) $company = $mcSwapCompany;
 
+// V13: página aberta pela navegação (link sem token, window.open, location.href) a partir
+// de uma tela em outra empresa: recarrega com o token no endereço, para tudo o que esta
+// página fizer depois (AJAX, impressão, F5) continuar na mesma empresa.
+if (!empty($GLOBALS['MULTI_COMPANY_TOKEN_FROM_REFERER']) && !empty($MULTI_COMPANY_CONTEXT['valid'])
+    && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+    && strtolower((string)($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '')) === 'navigate'
+    && !headers_sent()) {
+  $mcUri = (string)($_SERVER['REQUEST_URI'] ?? '');
+  if ($mcUri !== '' && str_starts_with($mcUri, '/admin/') && !preg_match('/(?:^|[?&])mc_ctx=/', $mcUri)
+      && !preg_match('~/admin/(login|logout|esqueci_senha|definir_senha|multiempresa_context_switch)\.php~i', $mcUri)) {
+    header('Location: ' . $mcUri . (str_contains($mcUri, '?') ? '&' : '?') . 'mc_ctx=' . rawurlencode((string)$MULTI_COMPANY_CONTEXT['token']), true, 302);
+    exit;
+  }
+}
+
 // V13: redirecionamentos (header Location) das telas levam o token da aba, para a
 // página seguinte continuar na empresa escolhida pelo F11 (inclusive as chamadas
 // AJAX dela, que usam o endereço da própria página como origem).

@@ -255,6 +255,7 @@ if (!function_exists('multi_company_context_request_token')) {
           parse_str((string)($p['query'] ?? ''), $q);
           $token = trim((string)($q['mc_ctx'] ?? ''));
           if (strtolower($token) === 'none') return '';
+          if ($token !== '') $GLOBALS['MULTI_COMPANY_TOKEN_FROM_REFERER'] = true;
         }
       }
     }
