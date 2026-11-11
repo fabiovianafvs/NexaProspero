@@ -16,7 +16,7 @@ $workspaceName='Usuário';
 $workspaceCompany=(string)($company['name']??'Empresa');
 try {
   $st=$pdo->prepare('SELECT name FROM users WHERE id=? AND company_id=? AND is_active=1 LIMIT 1');
-  $st->execute([(int)(auth_user_id()??0),(int)COMPANY_ID]);
+  $st->execute([(int)(auth_user_id()??0),(int)(function_exists('auth_login_company_id') ? (auth_login_company_id() ?? COMPANY_ID) : COMPANY_ID)]);
   $workspaceName=(string)($st->fetchColumn()?:$workspaceName);
 } catch(Throwable $e) {error_log('[Nexa][Workspace] '.$e->getMessage());}
 $workspaceCycle=[];

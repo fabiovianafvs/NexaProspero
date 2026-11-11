@@ -679,7 +679,7 @@ function admin_topbar(string $title, string $active=''): void {
   $multiCompanyUi = [
     'enabled' => false,
     'can_switch' => false,
-    'entry_company_id' => defined('COMPANY_ID') ? (int)COMPANY_ID : 0,
+    'entry_company_id' => defined('MULTI_COMPANY_ENTRY_ID') ? (int)MULTI_COMPANY_ENTRY_ID : (defined('COMPANY_ID') ? (int)COMPANY_ID : 0),
     'context_company_id' => defined('MULTI_COMPANY_CONTEXT_ID') ? (int)MULTI_COMPANY_CONTEXT_ID : (defined('COMPANY_ID') ? (int)COMPANY_ID : 0),
     'entry_company_name' => '',
     'context_company_name' => '',
@@ -692,8 +692,8 @@ function admin_topbar(string $title, string $active=''): void {
     $pdoMulti = $GLOBALS['pdo'] ?? null;
     $entryIdMulti = (int)$multiCompanyUi['entry_company_id'];
     $userIdMulti = function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : 0;
-    $roleMulti = function_exists('auth_role') ? (string)auth_role() : '';
-    $authCompanyMulti = function_exists('auth_company_id') ? (int)(auth_company_id() ?? 0) : 0;
+    $roleMulti = (string)($_SESSION['user_role'] ?? (function_exists('auth_role') ? auth_role() : ''));
+    $authCompanyMulti = function_exists('auth_login_company_id') ? (int)(auth_login_company_id() ?? 0) : (function_exists('auth_company_id') ? (int)(auth_company_id() ?? 0) : 0);
     if ($pdoMulti instanceof PDO && $entryIdMulti > 0 && $userIdMulti > 0
         && in_array($roleMulti, ['company_admin','company_user'], true)
         && $authCompanyMulti === $entryIdMulti
@@ -770,7 +770,7 @@ function admin_topbar(string $title, string $active=''): void {
   'csrf' => (string)$multiCompanyUi['csrf'],
   'endpoint' => '/admin/multiempresa_context_switch.php',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;</script>
-<script defer src="/assets/multi-company-context.js?v=20260916-4"></script>
+<script defer src="/assets/multi-company-context.js?v=20261111-13"></script>
 <?php endif; ?>
 <style>
 :root{

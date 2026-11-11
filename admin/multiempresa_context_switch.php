@@ -18,9 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $userId = (int)(auth_user_id() ?? 0);
-$role = (string)auth_role();
-$authCompanyId = (int)(auth_company_id() ?? 0);
-$entryCompanyId = (int)COMPANY_ID;
+$role = (string)($_SESSION['user_role'] ?? '');
+// V13: a empresa de entrada é sempre a do login/endereço, mesmo se esta aba estiver em outra empresa.
+$authCompanyId = (int)(auth_login_company_id() ?? 0);
+$entryCompanyId = defined('MULTI_COMPANY_ENTRY_ID') ? (int)MULTI_COMPANY_ENTRY_ID : (int)COMPANY_ID;
 
 if ($userId <= 0 || !in_array($role, ['company_admin','company_user'], true) || $authCompanyId !== $entryCompanyId) {
   mc_v4_json(['ok' => false, 'reason' => 'sessao_sem_acesso_empresa'], 403);

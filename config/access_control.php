@@ -318,6 +318,13 @@ if (!function_exists('access_ensure_schema')) {
   }
 }
 
+if (!function_exists('access_multi_company_swap_active')) {
+  function access_multi_company_swap_active(): bool {
+    return defined('MULTI_COMPANY_SWAP_ACTIVE') && MULTI_COMPANY_SWAP_ACTIVE === true
+      && defined('MULTI_COMPANY_SWAP_IS_ADMIN') && defined('MULTI_COMPANY_SWAP_PROFILE_ID') && defined('COMPANY_ID');
+  }
+}
+
 if (!function_exists('access_current_user')) {
   function access_current_user(PDO $pdo): ?array {
     $uid = auth_user_id();
@@ -333,6 +340,17 @@ if (!function_exists('access_current_user')) {
       $st = $pdo->prepare('SELECT ' . $cols . ' FROM users WHERE id = ? LIMIT 1');
       $st->execute([(int)$uid]);
       $u = $st->fetch(PDO::FETCH_ASSOC);
+      // V13 Multiempresa Isolado: na empresa escolhida pelo F11 o usuário age com o
+      // perfil daquela empresa (Acessos multiempresa). Caixas padrão do cadastro
+      // pertencem à empresa do login e não valem aqui.
+      if ($u && access_multi_company_swap_active()) {
+        $u['company_id'] = (int)COMPANY_ID;
+        $u['role'] = MULTI_COMPANY_SWAP_IS_ADMIN ? 'company_admin' : 'company_user';
+        $u['profile_id'] = (int)MULTI_COMPANY_SWAP_PROFILE_ID;
+        foreach (['default_cash_bank_account_id','default_pdv_cash_bank_account_id','default_comanda_cash_bank_account_id'] as $c) {
+          if (array_key_exists($c, $u)) $u[$c] = null;
+        }
+      }
       return $cache[$cacheKey] = ($u ?: null);
     } catch (Throwable $e) { return $cache[$cacheKey] = null; }
   }
@@ -340,6 +358,9 @@ if (!function_exists('access_current_user')) {
 
 if (!function_exists('access_is_company_master')) {
   function access_is_company_master(): bool {
+    // V13: na empresa escolhida pelo F11 (modo Isolado) vale o que foi definido em
+    // Acessos multiempresa: Administrador nesta empresa ou perfil.
+    if (access_multi_company_swap_active()) return MULTI_COMPANY_SWAP_IS_ADMIN === true;
     return in_array(auth_role(), ['company_admin', 'platform_admin'], true);
   }
 }

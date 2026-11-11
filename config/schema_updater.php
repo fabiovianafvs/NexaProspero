@@ -580,6 +580,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'eb3dbcd7101f79fc7515d0e652ab040ebf90d9c5f351a44841fc4cd74fdaca35',
         'order' => 202611110100,
       ],
+      [
+        'id' => '20261111_multiempresa_isolado_v13',
+        'module' => 'multiempresa_isolado',
+        'version' => 202611110200,
+        'label' => 'Multiempresa - Isolado completo (Administrador nesta empresa)',
+        'description' => 'Cria a opção "Administrador nesta empresa" em Acessos multiempresa, usada quando o grupo Isolado troca de empresa pelo F11.',
+        'file' => __DIR__ . '/../db/20261111_multiempresa_isolado_v13.sql',
+        'sha256' => 'db480a9bbc6369e37e27d121b6b931b969ed073d527545b20c36dfd997f4b304',
+        'order' => 202611110200,
+      ],
     ];
   }
 }

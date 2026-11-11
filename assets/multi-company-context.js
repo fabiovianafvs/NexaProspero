@@ -43,8 +43,9 @@
 
   function contextUrlWithToken(nextToken) {
     const url = new URL(window.location.href);
-    if (nextToken) url.searchParams.set('mc_ctx', nextToken);
-    else url.searchParams.delete('mc_ctx');
+    // Sem token = volta para a empresa do login; "none" impede que o servidor
+    // reaproveite o token da página anterior (origem da navegação).
+    url.searchParams.set('mc_ctx', nextToken || 'none');
     return url.toString();
   }
 
@@ -132,6 +133,49 @@
   if (token) {
     document.querySelectorAll('a[href]').forEach(decorateLink);
     document.querySelectorAll('form').forEach(decorateForm);
+
+    // V13: o endereço da aba sempre mostra o token (página aberta por redirecionamento
+    // ou pela origem da navegação), para atualizar (F5) continuar na mesma empresa.
+    try {
+      const here = new URL(window.location.href);
+      if (here.searchParams.get('mc_ctx') !== token) {
+        here.searchParams.set('mc_ctx', token);
+        window.history.replaceState(window.history.state, '', here.toString());
+      }
+    } catch (_) {}
+
+    // V13: chamadas AJAX das telas (fetch/XMLHttpRequest) para o painel levam o token,
+    // para gravar/consultar na empresa escolhida pelo F11.
+    const withToken = (raw) => {
+      try {
+        const url = internalAdminUrl(String(raw));
+        if (!url || url.searchParams.has('mc_ctx')) return null;
+        url.searchParams.set('mc_ctx', token);
+        return url.toString();
+      } catch (_) { return null; }
+    };
+    if (typeof window.fetch === 'function') {
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        try {
+          if (typeof input === 'string' || input instanceof URL) {
+            const next = withToken(input);
+            if (next) input = next;
+          } else if (input instanceof Request) {
+            const next = withToken(input.url);
+            if (next) input = new Request(next, input);
+          }
+        } catch (_) {}
+        return nativeFetch(input, init);
+      };
+    }
+    if (window.XMLHttpRequest && XMLHttpRequest.prototype.open) {
+      const nativeOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+        const next = withToken(url);
+        return nativeOpen.call(this, method, next || url, ...rest);
+      };
+    }
   }
 
   openButton?.addEventListener('click', openModal);

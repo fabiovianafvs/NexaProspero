@@ -56,6 +56,21 @@ if (!function_exists('multi_company_schema_ready')) {
   }
 }
 
+if (!function_exists('multi_company_access_admin_column_ready')) {
+  function multi_company_access_admin_column_ready(PDO $pdo): bool {
+    static $memo = [];
+    $key = spl_object_id($pdo);
+    if (array_key_exists($key, $memo)) return $memo[$key];
+    try {
+      $st = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_company_access' AND column_name = 'is_admin' LIMIT 1");
+      $st->execute();
+      return $memo[$key] = (bool)$st->fetchColumn();
+    } catch (Throwable $e) {
+      return $memo[$key] = false;
+    }
+  }
+}
+
 if (!function_exists('multi_company_group_by_company')) {
   function multi_company_group_by_company(PDO $pdo, int $companyId): ?array {
     if ($companyId <= 0 || !multi_company_schema_ready($pdo)) return null;
@@ -217,9 +232,31 @@ if (!function_exists('multi_company_user_feature_companies')) {
 
 if (!function_exists('multi_company_context_request_token')) {
   function multi_company_context_request_token(): string {
+    $explicit = isset($_GET['mc_ctx']) || isset($_POST['mc_ctx']);
     $token = trim((string)($_GET['mc_ctx'] ?? $_POST['mc_ctx'] ?? ''));
     if ($token === '' && isset($_SERVER['HTTP_X_NEXA_MULTI_COMPANY_CONTEXT'])) {
       $token = trim((string)$_SERVER['HTTP_X_NEXA_MULTI_COMPANY_CONTEXT']);
+      $explicit = true;
+    }
+    // V13: "none" = a aba voltou para a empresa do login de propósito.
+    if (strtolower($token) === 'none') return '';
+    // V13: sem token no endereço, usa o da página de origem (mesmo site, área /admin/).
+    // Cobre redirecionamentos após salvar, location.href e chamadas AJAX das telas,
+    // para a aba não "voltar" sozinha para a empresa do login. O token continua
+    // conferido contra a sessão/usuário em multi_company_context_resolve().
+    if ($token === '' && !$explicit) {
+      $ref = (string)($_SERVER['HTTP_REFERER'] ?? '');
+      $host = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+      if ($ref !== '' && $host !== '') {
+        $p = parse_url($ref);
+        $refHost = strtolower((string)($p['host'] ?? '')) . (isset($p['port']) ? ':' . $p['port'] : '');
+        if (is_array($p) && ($refHost === $host || strtolower((string)($p['host'] ?? '')) === preg_replace('/:\d+$/', '', $host))
+            && str_starts_with((string)($p['path'] ?? ''), '/admin/')) {
+          parse_str((string)($p['query'] ?? ''), $q);
+          $token = trim((string)($q['mc_ctx'] ?? ''));
+          if (strtolower($token) === 'none') return '';
+        }
+      }
     }
     // Token opaco hexadecimal gerado pelo servidor. Rejeita qualquer outro formato.
     return preg_match('/^[a-f0-9]{48,128}$/i', $token) ? strtolower($token) : '';
@@ -339,7 +376,9 @@ if (!function_exists('multi_company_context_validate_target_uncached')) {
     if (!$groupUser || (int)($groupUser['is_active'] ?? 0) !== 1) return $fail('usuario_sem_vinculo_ativo_no_grupo');
 
     try {
-      $st = $pdo->prepare('SELECT company_profile_id, is_default, is_active FROM user_company_access WHERE user_id = ? AND company_id = ? LIMIT 1');
+      // V13: is_admin (Administrador nesta empresa) existe após a migração V13.
+      $adminCol = multi_company_access_admin_column_ready($pdo) ? ', is_admin' : ', 0 AS is_admin';
+      $st = $pdo->prepare('SELECT company_profile_id, is_default, is_active' . $adminCol . ' FROM user_company_access WHERE user_id = ? AND company_id = ? LIMIT 1');
       $st->execute([$userId, $targetCompanyId]);
       $access = $st->fetch(PDO::FETCH_ASSOC);
       if (!$access || (int)($access['is_active'] ?? 0) !== 1) return $fail('usuario_sem_acesso_empresa');
@@ -362,6 +401,9 @@ if (!function_exists('multi_company_context_validate_target_uncached')) {
       } catch (Throwable $e) {
         return $fail('falha_validacao_perfil_integrado');
       }
+    } elseif ((int)($access['is_admin'] ?? 0) === 1 || $targetCompanyId === $entryCompanyId) {
+      // V13: Administrador nesta empresa dispensa perfil (acesso total, como o admin da própria empresa).
+      // A empresa do login sempre aparece no F11 para voltar a ela (lá vale o cadastro do próprio usuário).
     } else {
       $companyProfileId = (int)($access['company_profile_id'] ?? 0);
       if ($companyProfileId <= 0) return $fail('perfil_empresa_nao_configurado');
@@ -385,6 +427,7 @@ if (!function_exists('multi_company_context_validate_target_uncached')) {
       'company_profile_id' => isset($access['company_profile_id']) && $access['company_profile_id'] !== null ? (int)$access['company_profile_id'] : null,
       'group_profile_id' => isset($groupUser['group_profile_id']) && $groupUser['group_profile_id'] !== null ? (int)$groupUser['group_profile_id'] : null,
       'is_default' => (int)($access['is_default'] ?? 0) === 1,
+      'is_admin' => (int)($access['is_admin'] ?? 0) === 1,
     ];
   }
 }
@@ -553,6 +596,10 @@ if (!function_exists('multi_company_context_profile')) {
         return $row;
       }
 
+      if (!empty($validation['is_admin'])) {
+        $all = function_exists('access_permissions_catalog') ? array_keys(access_permissions_catalog()) : [];
+        return ['id' => 0, 'name' => 'Administrador', 'description' => '', 'permissions_json' => json_encode($all), 'is_active' => 1, 'profile_scope' => 'company_admin'];
+      }
       $profileId = (int)($validation['company_profile_id'] ?? 0);
       $st = $pdo->prepare('SELECT id, name, description, permissions_json, is_active FROM user_profiles WHERE id = ? AND company_id = ? AND is_active = 1 LIMIT 1');
       $st->execute([$profileId, $targetCompanyId]);

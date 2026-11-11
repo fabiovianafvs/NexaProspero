@@ -39,10 +39,30 @@ function auth_user_id(): ?int {
 
 function auth_role(): string {
   auth_start();
-  return (string)($_SESSION['user_role'] ?? '');
+  $role = (string)($_SESSION['user_role'] ?? '');
+  // Multiempresa Isolado (F11): na empresa selecionada o papel é o definido em
+  // Acessos multiempresa (Administrador nesta empresa ou usuário com perfil).
+  if (in_array($role, ['company_admin', 'company_user'], true)
+      && defined('MULTI_COMPANY_SWAP_ACTIVE') && MULTI_COMPANY_SWAP_ACTIVE === true
+      && defined('MULTI_COMPANY_SWAP_IS_ADMIN')) {
+    return MULTI_COMPANY_SWAP_IS_ADMIN === true ? 'company_admin' : 'company_user';
+  }
+  return $role;
 }
 
 function auth_company_id(): ?int {
+  $v = auth_login_company_id();
+  // Multiempresa Isolado (F11): nesta aba o usuário trabalha na empresa selecionada,
+  // como se tivesse entrado nela. A sessão continua com a empresa do login.
+  if ($v !== null && defined('MULTI_COMPANY_SWAP_ACTIVE') && MULTI_COMPANY_SWAP_ACTIVE === true
+      && defined('MULTI_COMPANY_ENTRY_ID') && $v === (int)MULTI_COMPANY_ENTRY_ID && defined('COMPANY_ID')) {
+    return (int)COMPANY_ID;
+  }
+  return $v;
+}
+
+/** Empresa em que o usuário fez login (ignora a troca de empresa do F11). */
+function auth_login_company_id(): ?int {
   auth_start();
   if (!array_key_exists('user_company_id', $_SESSION)) return null;
   $v = $_SESSION['user_company_id'];

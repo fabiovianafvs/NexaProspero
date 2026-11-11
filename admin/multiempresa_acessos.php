@@ -15,6 +15,7 @@ $group = multi_company_group_by_company($pdo, $cid);
 $err = '';
 $ok = trim((string)($_GET['ok'] ?? ''));
 $mcauCsrf = function_exists('multi_company_context_csrf_token') ? multi_company_context_csrf_token() : '';
+$mcauAdminReady = function_exists('multi_company_access_admin_column_ready') && multi_company_access_admin_column_ready($pdo);
 
 function mcau_h($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function mcau_url(string $url): string { return function_exists('multi_company_context_url') ? multi_company_context_url($url) : $url; }
@@ -67,6 +68,17 @@ if ($companyIds) {
   } catch (Throwable $e) {
     $err = trim($err . ' Não foi possível carregar os perfis atuais: ' . $e->getMessage());
   }
+}
+
+// V13: caixas/bancos ativos de cada empresa do grupo (permitidos ao usuário que não é administrador nela).
+$cashByCompany = [];
+if ($companyIds) {
+  try {
+    $ph = implode(',', array_fill(0, count($companyIds), '?'));
+    $st = $pdo->prepare("SELECT id, company_id, name FROM finance_bank_accounts WHERE company_id IN ({$ph}) AND active = 1 ORDER BY company_id, name");
+    $st->execute($companyIds);
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $b) $cashByCompany[(int)$b['company_id']][(int)$b['id']] = (string)$b['name'];
+  } catch (Throwable $e) {}
 }
 
 $groupProfiles = [];
@@ -151,6 +163,7 @@ try {
 
       $groupProfileId = null;
       $companyProfiles = [];
+      $companyAdmins = [];
       if ($mode === 'integrated') {
         $groupProfileId = (int)($_POST['group_profile_id'] ?? 0);
         if ($groupProfileId <= 0 || !isset($groupProfileMap[$groupProfileId])) {
@@ -158,9 +171,17 @@ try {
         }
       } else {
         foreach ($selected as $scid) {
-          $pid = (int)($_POST['company_profile_id'][$scid] ?? 0);
+          $rawProfile = (string)($_POST['company_profile_id'][$scid] ?? '');
+          // V13: "Administrador nesta empresa" (acesso total na empresa, sem perfil).
+          if ($rawProfile === 'admin' && $mcauAdminReady && $scid !== $legacyCompanyId) {
+            $companyAdmins[$scid] = true;
+            $companyProfiles[$scid] = null;
+            continue;
+          }
+          $pid = (int)$rawProfile;
           // Compatibilidade: para a empresa de origem, usa o perfil atual do usuário quando não informado.
           if ($pid <= 0 && $scid === $legacyCompanyId) $pid = (int)($u['profile_id'] ?? 0);
+          if ($pid <= 0 && $scid === $legacyCompanyId && ($u['role'] ?? '') === 'company_admin') { $companyProfiles[$scid] = null; continue; }
           if ($pid <= 0 || !isset($legacyProfileMap[$scid . ':' . $pid])) {
             throw new RuntimeException('Selecione um perfil válido para ' . (string)($companyMap[$scid]['name'] ?? ('empresa ' . $scid)) . '.');
           }
@@ -178,10 +199,30 @@ try {
       $params = array_merge([$userId], $companyIds);
       $pdo->prepare("UPDATE user_company_access SET is_active = 0, is_default = 0, updated_at = NOW() WHERE user_id = ? AND company_id IN ({$ph})")->execute($params);
 
-      $uca = $pdo->prepare("INSERT INTO user_company_access (user_id,company_id,company_profile_id,is_default,is_active,created_at,updated_at) VALUES (?,?,?,?,1,NOW(),NOW()) ON DUPLICATE KEY UPDATE company_profile_id=VALUES(company_profile_id),is_default=VALUES(is_default),is_active=1,updated_at=NOW()");
+      if ($mcauAdminReady) {
+        $uca = $pdo->prepare("INSERT INTO user_company_access (user_id,company_id,company_profile_id,is_admin,is_default,is_active,created_at,updated_at) VALUES (?,?,?,?,?,1,NOW(),NOW()) ON DUPLICATE KEY UPDATE company_profile_id=VALUES(company_profile_id),is_admin=VALUES(is_admin),is_default=VALUES(is_default),is_active=1,updated_at=NOW()");
+      } else {
+        $uca = $pdo->prepare("INSERT INTO user_company_access (user_id,company_id,company_profile_id,is_default,is_active,created_at,updated_at) VALUES (?,?,?,?,1,NOW(),NOW()) ON DUPLICATE KEY UPDATE company_profile_id=VALUES(company_profile_id),is_default=VALUES(is_default),is_active=1,updated_at=NOW()");
+      }
       foreach ($selected as $scid) {
-        $profileForCompany = $mode === 'isolated' ? (int)$companyProfiles[$scid] : null;
-        $uca->execute([$userId, $scid, $profileForCompany, $scid === $defaultCompanyId ? 1 : 0]);
+        $profileForCompany = $mode === 'isolated' && !empty($companyProfiles[$scid]) ? (int)$companyProfiles[$scid] : null;
+        $params = [$userId, $scid, $profileForCompany];
+        if ($mcauAdminReady) $params[] = ($mode === 'isolated' && !empty($companyAdmins[$scid])) ? 1 : 0;
+        $params[] = $scid === $defaultCompanyId ? 1 : 0;
+        $uca->execute($params);
+      }
+
+      if ($mode === 'isolated') {
+        $delCash = $pdo->prepare('DELETE FROM user_cash_accounts WHERE company_id = ? AND user_id = ?');
+        $insCash = $pdo->prepare('INSERT IGNORE INTO user_cash_accounts (company_id, user_id, bank_account_id) VALUES (?, ?, ?)');
+        foreach ($companyIds as $scid) {
+          if ($scid === $legacyCompanyId) continue;
+          $delCash->execute([$scid, $userId]);
+          if (!in_array($scid, $selected, true)) continue;
+          foreach (mcau_int_list($_POST['cash_ids'][$scid] ?? []) as $bid) {
+            if (isset($cashByCompany[$scid][$bid])) $insCash->execute([$scid, $userId, $bid]);
+          }
+        }
       }
 
       $pdo->commit();
@@ -207,7 +248,7 @@ try {
 
   if ($companyIds) {
     $ph = implode(',', array_fill(0, count($companyIds), '?'));
-    $st = $pdo->prepare("SELECT user_id, company_id, company_profile_id, is_default, is_active FROM user_company_access WHERE company_id IN ({$ph}) ORDER BY user_id, is_default DESC, company_id");
+    $st = $pdo->prepare("SELECT user_id, company_id, company_profile_id, is_default, is_active" . ($mcauAdminReady ? ', is_admin' : ', 0 AS is_admin') . " FROM user_company_access WHERE company_id IN ({$ph}) ORDER BY user_id, is_default DESC, company_id");
     $st->execute($companyIds);
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
       $uid = (int)$r['user_id'];
@@ -216,6 +257,7 @@ try {
       $configByUser[$uid]['companies'][$ccid] = [
         'profile_id' => $r['company_profile_id'] !== null ? (int)$r['company_profile_id'] : null,
         'is_default' => (int)$r['is_default'] === 1,
+        'is_admin' => (int)($r['is_admin'] ?? 0) === 1,
       ];
     }
   }
@@ -224,6 +266,16 @@ try {
 }
 
 $selectedUserId = (int)($_GET['user_id'] ?? $_POST['user_id'] ?? 0);
+if ($selectedUserId <= 0 && $users) $selectedUserId = (int)$users[0]['id'];
+$savedCashByCompany = [];
+if ($selectedUserId > 0 && $companyIds) {
+  try {
+    $ph = implode(',', array_fill(0, count($companyIds), '?'));
+    $st = $pdo->prepare("SELECT company_id, bank_account_id FROM user_cash_accounts WHERE user_id = ? AND company_id IN ({$ph})");
+    $st->execute(array_merge([$selectedUserId], $companyIds));
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) $savedCashByCompany[(int)$r['company_id']][] = (int)$r['bank_account_id'];
+  } catch (Throwable $e) {}
+}
 if ($selectedUserId <= 0 && $users) $selectedUserId = (int)$users[0]['id'];
 $selectedUser = $userMap[$selectedUserId] ?? null;
 $selectedCfg = $selectedUser ? ($configByUser[$selectedUserId] ?? []) : [];
@@ -319,10 +371,20 @@ admin_topbar('Acessos multiempresa', 'usuarios');
             </div>
             <div class="mcau-company-grid">
               <?php if ($mode === 'isolated'): ?>
+                <?php $savedAdmin = !empty($selectedCfg['companies'][$ccid]['is_admin']); ?>
                 <select name="company_profile_id[<?= $ccid ?>]" class="mcau-profile-select">
                   <option value="">Perfil nesta empresa...</option>
+                  <?php if ($mcauAdminReady && !$origin): ?><option value="admin" <?= $savedAdmin ? 'selected' : '' ?>>Administrador nesta empresa (acesso total)</option><?php endif; ?>
                   <?php foreach ($legacyProfilesByCompany[$ccid] ?? [] as $p): ?><option value="<?= (int)$p['id'] ?>" <?= $savedProfile===(int)$p['id']?'selected':'' ?>><?= mcau_h($p['name'] ?? '') ?></option><?php endforeach; ?>
                 </select>
+                <?php if (!$origin && !empty($cashByCompany[$ccid])): $savedCash = $savedCashByCompany[$ccid] ?? []; ?>
+                <div class="mcau-cash" style="grid-column:1/-1;font-size:13px">
+                  <span class="mcau-muted">Caixas/Bancos que pode usar nesta empresa (dispensado para Administrador):</span>
+                  <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">
+                    <?php foreach ($cashByCompany[$ccid] as $bid => $bname): ?><label style="display:flex;gap:5px;align-items:center;font-weight:600"><input type="checkbox" name="cash_ids[<?= $ccid ?>][]" value="<?= (int)$bid ?>" <?= in_array((int)$bid, $savedCash, true) ? 'checked' : '' ?>> <?= mcau_h($bname) ?></label><?php endforeach; ?>
+                  </div>
+                </div>
+                <?php endif; ?>
               <?php else: ?><div class="mcau-muted">Usará o perfil integrado selecionado acima.</div><?php endif; ?>
               <label style="display:flex;align-items:center;gap:7px;font-weight:800"><input type="radio" name="default_company_id" value="<?= $ccid ?>" <?= $isDefault?'checked':'' ?>> Empresa padrão</label>
             </div>

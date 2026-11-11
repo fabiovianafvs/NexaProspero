@@ -41,9 +41,60 @@ define('MULTI_COMPANY_CONTEXT_ID', (int)($MULTI_COMPANY_CONTEXT['company_id'] ??
 define('MULTI_COMPANY_CONTEXT_ACTIVE', !empty($MULTI_COMPANY_CONTEXT['active']));
 define('MULTI_COMPANY_CONTEXT_VALID', !empty($MULTI_COMPANY_CONTEXT['valid']));
 
-// Compatibilidade inviolável da V3: COMPANY_ID continua sendo a empresa do
-// subdomínio/tenant. A futura ativação operacional será feita em etapa própria.
-define('COMPANY_ID', $tenantCompanyId);
+// V13 Multiempresa ISOLADO: com um contexto F11 válido de grupo no modo Isolado, esta
+// aba passa a trabalhar inteiramente na empresa escolhida, como se o usuário tivesse
+// entrado nela: COMPANY_ID vira a empresa selecionada e TODAS as telas/rotinas usam
+// os dados, configurações, séries, caixas e perfil dessa empresa. A empresa do login
+// continua em MULTI_COMPANY_ENTRY_ID e a sessão não é alterada (outras abas seguem
+// na empresa em que estavam). Grupos Integrados continuam no modelo anterior (escopos).
+$mcSwapCompany = null;
+if (!empty($MULTI_COMPANY_CONTEXT['valid']) && !empty($MULTI_COMPANY_CONTEXT['active'])
+    && (string)($MULTI_COMPANY_CONTEXT['operation_mode'] ?? '') === 'isolated'
+    && (int)($MULTI_COMPANY_CONTEXT['company_id'] ?? 0) > 0) {
+  try {
+    $stSwap = $pdo->prepare('SELECT * FROM companies WHERE id = ? LIMIT 1');
+    $stSwap->execute([(int)$MULTI_COMPANY_CONTEXT['company_id']]);
+    $mcSwapCompany = $stSwap->fetch(PDO::FETCH_ASSOC) ?: null;
+  } catch (Throwable $e) {
+    $mcSwapCompany = null;
+  }
+}
+define('MULTI_COMPANY_ENTRY_ID', $tenantCompanyId);
+define('MULTI_COMPANY_SWAP_ACTIVE', $mcSwapCompany !== null);
+define('MULTI_COMPANY_SWAP_IS_ADMIN', $mcSwapCompany !== null && !empty($MULTI_COMPANY_CONTEXT['is_admin']));
+define('MULTI_COMPANY_SWAP_PROFILE_ID', $mcSwapCompany !== null ? (int)($MULTI_COMPANY_CONTEXT['company_profile_id'] ?? 0) : 0);
+if ($mcSwapCompany !== null) $company = $mcSwapCompany;
+
+// V13: redirecionamentos (header Location) das telas levam o token da aba, para a
+// página seguinte continuar na empresa escolhida pelo F11 (inclusive as chamadas
+// AJAX dela, que usam o endereço da própria página como origem).
+if (!empty($MULTI_COMPANY_CONTEXT['valid']) && (string)($MULTI_COMPANY_CONTEXT['token'] ?? '') !== '' && function_exists('header_register_callback')) {
+  header_register_callback(static function (): void {
+    $token = (string)($GLOBALS['MULTI_COMPANY_CONTEXT']['token'] ?? '');
+    if ($token === '' || !preg_match('/^[a-f0-9]{48,128}$/', $token)) return;
+    foreach (headers_list() as $h) {
+      if (stripos($h, 'Location:') !== 0) continue;
+      $url = trim(substr($h, 9));
+      if ($url === '' || preg_match('/(?:^|[?&])mc_ctx=/', $url)) return;
+      $p = parse_url($url);
+      if (!is_array($p)) return;
+      $host = strtolower((string)($p['host'] ?? ''));
+      if ($host !== '' && $host !== strtolower(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? '')))) return;
+      $path = (string)($p['path'] ?? '');
+      // Só páginas do painel: caminho relativo (mesma pasta /admin/) ou /admin/...
+      if ($path !== '' && $path[0] === '/' && !str_starts_with($path, '/admin/')) return;
+      if ($host === '' && $path !== '' && $path[0] !== '/' && !str_starts_with((string)($_SERVER['SCRIPT_NAME'] ?? ''), '/admin/')) return;
+      if (preg_match('/(?:^|\/)(login|logout)\.php$/i', $path)) return;
+      $frag = '';
+      if (($hp = strpos($url, '#')) !== false) { $frag = substr($url, $hp); $url = substr($url, 0, $hp); }
+      header('Location: ' . $url . (str_contains($url, '?') ? '&' : '?') . 'mc_ctx=' . $token . $frag, true);
+      return;
+    }
+  });
+}
+
+// Fora do modo Isolado: COMPANY_ID continua sendo a empresa do subdomínio/tenant.
+define('COMPANY_ID', $mcSwapCompany !== null ? (int)$mcSwapCompany['id'] : $tenantCompanyId);
 define('COMPANY_SLUG', (string)$company['slug']);
 
 $APP_CFG = load_app_config(COMPANY_ID);

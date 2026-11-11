@@ -105,7 +105,7 @@ function ned_order_items_text(array $items): string {
 $companyName = ned_company_name($pdo,$cid);
 $orderDocuments=['fiscal'=>[],'boleto'=>[]];
 $userName = 'Usuário';
-if($uid>0){ try{$st=$pdo->prepare('SELECT name FROM users WHERE id=? AND company_id=? LIMIT 1');$st->execute([$uid,(int)COMPANY_ID]);$userName=trim((string)($st->fetchColumn() ?: 'Usuário'));}catch(Throwable $e){} }
+if($uid>0){ try{$st=$pdo->prepare('SELECT name FROM users WHERE id=? AND company_id=? LIMIT 1');$st->execute([$uid,(int)(function_exists('auth_login_company_id') ? (auth_login_company_id() ?? COMPANY_ID) : COMPANY_ID)]);$userName=trim((string)($st->fetchColumn() ?: 'Usuário'));}catch(Throwable $e){} }
 
 $returnTo='pedidos.php';
 $context=''; $pageTitle='Enviar por e-mail'; $docLabel='Documento'; $summary=''; $recipient=''; $referenceId=null;
@@ -276,7 +276,7 @@ $smtpSenderEmail='';
 if($smtpUserId>0){
   try{
     $st=$pdo->prepare('SELECT name,email FROM users WHERE id=? AND company_id=? LIMIT 1');
-    $st->execute([$smtpUserId,$cid]);
+    $st->execute([$smtpUserId,($smtpUserId===(int)(auth_user_id()??0)?(int)(function_exists('auth_login_company_id') ? (auth_login_company_id() ?? COMPANY_ID) : COMPANY_ID):$cid)]);
     $smtpSenderRow=$st->fetch(PDO::FETCH_ASSOC) ?: [];
     $smtpSenderName=trim((string)($smtpSenderRow['name']??'')) ?: ('Usuário #'.$smtpUserId);
     $smtpSenderEmail=strtolower(trim((string)($smtpSenderRow['email']??'')));

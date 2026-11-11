@@ -55,6 +55,8 @@ if (!function_exists('commercial_user_rules')) {
     commercial_ensure_schema($pdo);
     $d=['default_seller_id'=>0,'allow_seller_change'=>1,'max_discount_percent'=>null,'allow_credit_override'=>0,'allow_waive_interest'=>0,'allow_waive_fine'=>0,'max_settlement_discount_percent'=>null];
     if($userId<=0) return $d;
+    // Multiempresa Isolado (F11): o usuário vem da empresa do login; valem as regras comerciais do cadastro dele.
+    if(defined('MULTI_COMPANY_SWAP_ACTIVE')&&MULTI_COMPANY_SWAP_ACTIVE===true&&defined('MULTI_COMPANY_ENTRY_ID')&&function_exists('auth_user_id')&&$userId===(int)(auth_user_id()??0)) $companyId=(int)MULTI_COMPANY_ENTRY_ID;
     try { $st=$pdo->prepare('SELECT default_seller_id,allow_seller_change,max_discount_percent,allow_credit_override,allow_waive_interest,allow_waive_fine,max_settlement_discount_percent FROM users WHERE id=? AND (company_id=? OR company_id IS NULL) LIMIT 1'); $st->execute([$userId,$companyId]); $r=$st->fetch(PDO::FETCH_ASSOC); if($r){$d['default_seller_id']=(int)($r['default_seller_id']??0);$d['allow_seller_change']=(int)($r['allow_seller_change']??1);$d['max_discount_percent']=$r['max_discount_percent']===null?null:(float)$r['max_discount_percent'];$d['allow_credit_override']=(int)($r['allow_credit_override']??0);$d['allow_waive_interest']=(int)($r['allow_waive_interest']??0);$d['allow_waive_fine']=(int)($r['allow_waive_fine']??0);$d['max_settlement_discount_percent']=$r['max_settlement_discount_percent']===null?null:(float)$r['max_settlement_discount_percent'];} } catch(Throwable $e){}
     return $d;
   }
@@ -80,6 +82,8 @@ if (!function_exists('commercial_validate_discount')) {
 if (!function_exists('commercial_user_role')) {
   function commercial_user_role(PDO $pdo,int $companyId,int $userId): string {
     if($userId<=0) return '';
+    // Multiempresa Isolado (F11): papel definido em Acessos multiempresa para a empresa escolhida.
+    if(defined('MULTI_COMPANY_SWAP_ACTIVE')&&MULTI_COMPANY_SWAP_ACTIVE===true&&function_exists('auth_user_id')&&$userId===(int)(auth_user_id()??0)&&function_exists('auth_role')) return auth_role();
     try{$st=$pdo->prepare("SELECT role FROM users WHERE id=? AND (company_id=? OR role='platform_admin') LIMIT 1");$st->execute([$userId,$companyId]);return (string)($st->fetchColumn()?:'');}catch(Throwable $e){return '';}
   }
 }
