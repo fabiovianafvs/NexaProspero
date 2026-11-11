@@ -447,7 +447,11 @@ if ($bankFilter > 0) {
 $saldoInicialBancos = (float)(finance_query_one($pdo, 'SELECT COALESCE(SUM(initial_balance),0) AS total FROM finance_bank_accounts WHERE ' . $balanceAccountSql, $balanceAccountParams)['total'] ?? 0);
 $saldoAnteriorMov = (float)(finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN type='CREDITO' THEN amount WHEN type='DEBITO' THEN -amount ELSE 0 END),0) AS total FROM finance_movements WHERE company_id=? AND movement_date < ? AND (status IS NULL OR status='' OR status='ATIVO')" . $balanceMovSql, array_merge([$cid, $ini], $balanceMovParams))['total'] ?? 0);
 $saldoInicialPeriodo = round($saldoInicialBancos + $saldoAnteriorMov, 2);
-$saldoFinalPeriodo = round($saldoInicialPeriodo + $creditos - $debitos, 2);
+// Saldo final = saldo real do caixa/banco no fim do período. Não usa os filtros de
+// Tipo, Status e Histórico (antes, ao filtrar só débitos ou um histórico, o saldo
+// final somava apenas as linhas filtradas e ficava errado).
+$saldoMovPeriodo = (float)(finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN type='CREDITO' THEN amount WHEN type='DEBITO' THEN -amount ELSE 0 END),0) AS total FROM finance_movements WHERE company_id=? AND movement_date BETWEEN ? AND ? AND (status IS NULL OR status='' OR status='ATIVO')" . $balanceMovSql, array_merge([$cid, $ini, $fim], $balanceMovParams))['total'] ?? 0);
+$saldoFinalPeriodo = round($saldoInicialPeriodo + $saldoMovPeriodo, 2);
 
 $filterArgs = ['ini' => $ini, 'fim' => $fim];
 if ($typeFilter !== '') $filterArgs['type'] = $typeFilter;
@@ -566,7 +570,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div class="finance-kpi"><small>Saldo final</small><strong class="<?= $saldoFinalPeriodo>=0?'pos':'neg' ?>">R$ <?= finance_money_br($saldoFinalPeriodo) ?></strong></div>
 </div>
 
-<div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter" data-lembrar-filtros="movimentos" data-lembrar-ignorar="edit,new,cancel,adjust_date,transfer"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
+<div class="finance-card finance-filter-card" style="margin-top:10px"><form method="get" class="finance-filter finance-movements-filter" data-lembrar-filtros="movimentos" data-lembrar-ignorar="edit,new,cancel,adjust_date,transfer" data-lembrar-somente-retorno="1"><?php if($financeCrossContext && $financeMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= finance_h($financeMcCtx) ?>"><?php endif; ?>
   <div><label>Data inicial</label><input type="date" name="ini" value="<?= finance_h($ini) ?>"></div>
   <div><label>Data final</label><input type="date" name="fim" value="<?= finance_h($fim) ?>"></div>
   <div><label>Tipo</label><select name="type"><option value="">Todos</option><option value="CREDITO" <?= $typeFilter==='CREDITO'?'selected':'' ?>>Créditos</option><option value="DEBITO" <?= $typeFilter==='DEBITO'?'selected':'' ?>>Débitos</option></select></div>
