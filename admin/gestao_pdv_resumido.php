@@ -67,7 +67,8 @@ if ($pdvCrossContext) {
     $pdvFiscalCfgF11 = function_exists('fiscal_company_config') ? fiscal_company_config($pdo, $companyId) : [];
     $pdvFiscalEnvironmentF11 = strtoupper(trim((string)($pdvFiscalCfgF11['environment'] ?? '')));
     $pdvFiscalEmissionEnabledF11 = !empty($pdvFiscalCfgF11['fiscal_emission_enabled']);
-    $pdvFiscalHomologationAllowedF11 = $pdvFiscalEnvironmentF11 === 'HOMOLOGACAO' && $pdvFiscalEmissionEnabledF11;
+    // V12: produção também, quando liberada para o Grupo Empresarial.
+    $pdvFiscalHomologationAllowedF11 = (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, $pdvFiscalEnvironmentF11)) && $pdvFiscalEmissionEnabledF11;
     $pdvNfceHomologationF11 = $pdvFiscalHomologationAllowedF11 && !empty($pdvFiscalCfgF11['nfce_enabled']);
     $pdvNfeHomologationF11 = $pdvFiscalHomologationAllowedF11 && !empty($pdvFiscalCfgF11['nfe_enabled']);
     $pdvFiscalStatusF11 = 'Empresa #' . $companyId
@@ -312,19 +313,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'final
     if ($pdvCrossContext) {
       if ($requestedCheckoutOption === '') $requestedCheckoutOption = 'none';
       if (!in_array($requestedCheckoutOption, ['none','nfce','nfe'], true)) {
-        throw new RuntimeException('V11.46.3 Multiempresa: no PDV Resumido somente NFC-e/NF-e em HOMOLOGAÇÃO ou Somente gravar pedido estão liberados. NFS-e continua bloqueada.');
+        throw new RuntimeException('V11.46.3 Multiempresa: no PDV Resumido somente NFC-e/NF-e ou Somente gravar pedido estão liberados. NFS-e continua bloqueada.');
       }
       if ($requestedCheckoutOption === 'nfce' && !$pdvNfceHomologationF11) {
         if (function_exists('fiscal_multi_company_nfce_homologation_assert')) {
           fiscal_multi_company_nfce_homologation_assert($pdo, $companyId, 'emitir');
         }
-        throw new RuntimeException('V11.46.3 Multiempresa: a NFC-e da empresa selecionada não está habilitada em HOMOLOGAÇÃO.');
+        throw new RuntimeException('V11.46.3 Multiempresa: a NFC-e da empresa selecionada não está liberada (ambiente/emissão da empresa ou, em produção, liberação do Grupo Empresarial).');
       }
       if ($requestedCheckoutOption === 'nfe' && !$pdvNfeHomologationF11) {
         if (function_exists('fiscal_multi_company_nfe_homologation_assert')) {
           fiscal_multi_company_nfe_homologation_assert($pdo, $companyId, 'emitir');
         }
-        throw new RuntimeException('V11.46.3 Multiempresa: a NF-e da empresa selecionada não está habilitada em HOMOLOGAÇÃO.');
+        throw new RuntimeException('V11.46.3 Multiempresa: a NF-e da empresa selecionada não está liberada (ambiente/emissão da empresa ou, em produção, liberação do Grupo Empresarial).');
       }
       $_POST['emit_doc_after'] = $requestedCheckoutOption;
       $fiscalCfgPost = $pdvFiscalCfgF11 ?: ['order_auto_print_enabled'=>1, 'order_print_disabled'=>0];
@@ -482,8 +483,8 @@ $pdvFiscalChoiceCount = (int)$pdvCanEmitNfce + (int)$pdvCanEmitNfe + (int)$pdvCa
 $pdvFiscalChoiceCount = max(1, min(4, $pdvFiscalChoiceCount));
 $pdvFiscalModalDescription = $pdvCrossContext
   ? (($pdvNfceHomologationF11 || $pdvNfeHomologationF11)
-      ? 'V11.46.3 Multiempresa: NFC-e e/ou NF-e estão liberadas no PDV Resumido somente em HOMOLOGAÇÃO. NFS-e e produção continuam bloqueadas.'
-      : 'Multiempresa: nenhuma opção fiscal foi liberada para a empresa selecionada. Confira o diagnóstico fiscal; no F11 esta etapa aceita somente HOMOLOGAÇÃO.')
+      ? 'Multiempresa (F11): as notas habilitadas na empresa selecionada (NFC-e e/ou NF-e) podem ser emitidas. NFS-e é emitida pela tela de NFS-e.'
+      : 'Multiempresa (F11): nenhuma opção fiscal foi liberada. Confira o diagnóstico da empresa selecionada (ambiente, emissão habilitada e, para produção, a liberação do Grupo Empresarial).')
   : ($pdvCanSaveOrder
   ? 'Escolha se deseja emitir agora ou apenas gravar o pedido.'
   : ($pdvFiscalChoiceCount > 1 ? 'Escolha o documento fiscal que deseja emitir.' : 'Confirme o documento fiscal que deseja emitir.'));

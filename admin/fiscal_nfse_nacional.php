@@ -131,10 +131,11 @@ $incomplete = is_array($readiness['incomplete_products'] ?? null) ? $readiness['
 $profiles = is_array($readiness['profiles'] ?? null) ? $readiness['profiles'] : [];
 $docVersion = is_array($readiness['documentation'] ?? null) ? $readiness['documentation'] : [];
 $environment = strtoupper((string)($readiness['environment'] ?? 'HOMOLOGACAO'));
-$productionRequiresConfirmation = !$nfseF11 && $environment === 'PRODUCAO';
-$productionLocked = $nfseF11
-  ? $environment !== 'HOMOLOGACAO'
-  : ($environment === 'PRODUCAO' && $providerCode !== 'PRONIM' && !nfse_provider_production_enabled($pdo, $cid));
+// V12: no F11, produção só quando liberada para o Grupo Empresarial; depois valem as mesmas regras da empresa.
+$nfseF11EnvAllowed = !$nfseF11 || (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $cid, $environment));
+$productionRequiresConfirmation = $nfseF11EnvAllowed && $environment === 'PRODUCAO';
+$productionLocked = !$nfseF11EnvAllowed
+  || ($environment === 'PRODUCAO' && $providerCode !== 'PRONIM' && !nfse_provider_production_enabled($pdo, $cid));
 $csrf = nfse_emitter_csrf_token('nfse_emitter');
 $originInput = trim((string)($_GET['return_to'] ?? ''));
 $nfseOrigin = $originInput !== '' ? nexa_navigation_safe_return($originInput, 'pedidos.php') : '';
@@ -236,7 +237,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
       && function_exists('multi_company_context_permission_allowed')
       && multi_company_context_permission_allowed($pdo, 'fiscal_documentos')
       && (!function_exists('saas_company_has_module') || saas_company_has_module($pdo, $cid, 'fiscal'))
-      && $existingDocEnvironment === 'HOMOLOGACAO'
+      && (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $cid, $existingDocEnvironment))
       && strtoupper(trim((string)($existingDocument['source_type'] ?? ''))) === 'PEDIDO'
       && (int)($existingDocument['source_id'] ?? 0) > 0
       && $existingDocProvider === 'PRONIM';

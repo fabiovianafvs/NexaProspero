@@ -41,6 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (!in_array($mode, ['integrated','isolated'], true)) throw new RuntimeException('Modo de operação inválido.');
       $pdo->prepare('UPDATE business_groups SET name=?, operation_mode=?, notes=?, is_active=?, updated_at=NOW() WHERE id=?')
         ->execute([$name, $mode, ($notes !== '' ? $notes : null), $active, $id]);
+      // V12: nota fiscal em PRODUÇÃO pelo F11 (só existe depois da migração V12).
+      if (array_key_exists('f11_fiscal_production', $group)) {
+        $pdo->prepare('UPDATE business_groups SET f11_fiscal_production=? WHERE id=?')
+          ->execute([!empty($_POST['f11_fiscal_production']) ? 1 : 0, $id]);
+      }
       $msg = 'Dados do Grupo Empresarial atualizados.';
     }
 
@@ -119,6 +124,11 @@ saas_layout_start('Grupo Empresarial • Central SaaS', 'Grupo Empresarial', 'De
       <div class="bge-mode-info"><?= $modeIntegrated ? '<strong>Integrado:</strong> perfil poderá ser único no grupo. Compartilhamentos de cadastros só serão ativados posteriormente e de forma explícita.' : '<strong>Isolado:</strong> o vínculo permitirá login/troca de empresa pelo mesmo usuário, sem compartilhamento de dados entre empresas.' ?></div>
       <label>Observações<textarea name="notes" rows="5"><?= e((string)($group['notes'] ?? '')) ?></textarea></label>
       <label style="display:flex;gap:8px;align-items:center"><input style="width:auto" type="checkbox" name="is_active" value="1" <?= !empty($group['is_active']) ? 'checked' : '' ?>> Grupo ativo</label>
+      <?php if (array_key_exists('f11_fiscal_production', $group)): ?>
+      <label style="display:flex;gap:8px;align-items:flex-start"><input style="width:auto;margin-top:3px" type="checkbox" name="f11_fiscal_production" value="1" <?= !empty($group['f11_fiscal_production']) ? 'checked' : '' ?>> <span><b>Nota fiscal em produção pelo F11</b><br><small>Permite emitir, consultar, imprimir, cancelar, corrigir (CC-e) e inutilizar NF-e/NFC-e/NFS-e em PRODUÇÃO na empresa escolhida pela troca de empresa (F11), com o certificado, as séries e as configurações fiscais dela. Desmarcado, o F11 emite somente em HOMOLOGAÇÃO.</small></span></label>
+      <?php else: ?>
+      <div class="bge-mode-info">Para liberar nota fiscal em produção pelo F11, aplique a atualização "Multiempresa - Nota fiscal em produção pelo F11" no Atualizador do Banco.</div>
+      <?php endif; ?>
       <button class="btn2 btn2-dark" type="submit">Salvar grupo</button>
     </form>
   </section>

@@ -978,3 +978,45 @@ if (!function_exists('multi_company_cross_page_allowed')) {
     return isset($set[$page]);
   }
 }
+
+/**
+ * V12 (Multiempresa Isolado) - nota fiscal em PRODUÇÃO pelo F11.
+ *
+ * Até a V11.51 toda emissão/evento fiscal pelo F11 era aceito somente em HOMOLOGAÇÃO.
+ * A produção é liberada por Grupo Empresarial (SaaS > Grupos Empresariais, só o
+ * administrador da plataforma), coluna business_groups.f11_fiscal_production
+ * (migração 20261111_multiempresa_fiscal_producao_v12.sql). Sem a coluna, ou com
+ * a opção desligada, tudo continua somente em HOMOLOGAÇÃO, exatamente como antes.
+ */
+if (!function_exists('multi_company_group_fiscal_production_enabled')) {
+  function multi_company_group_fiscal_production_enabled(PDO $pdo, int $companyId): bool {
+    static $memo = [];
+    if ($companyId <= 0) return false;
+    $key = spl_object_id($pdo) . '|' . $companyId;
+    if (array_key_exists($key, $memo)) return $memo[$key];
+    $enabled = false;
+    try {
+      $group = multi_company_group_by_company($pdo, $companyId);
+      $enabled = $group && (int)($group['f11_fiscal_production'] ?? 0) === 1;
+    } catch (Throwable $e) {
+      $enabled = false;
+    }
+    return $memo[$key] = $enabled;
+  }
+}
+
+if (!function_exists('multi_company_fiscal_environment_allowed')) {
+  /** Ambiente fiscal permitido no F11 para a empresa selecionada. */
+  function multi_company_fiscal_environment_allowed(PDO $pdo, int $companyId, string $environment): bool {
+    $environment = strtoupper(trim($environment));
+    if ($environment === 'HOMOLOGACAO') return true;
+    if ($environment === 'PRODUCAO') return multi_company_group_fiscal_production_enabled($pdo, $companyId);
+    return false;
+  }
+}
+
+if (!function_exists('multi_company_fiscal_environment_message')) {
+  function multi_company_fiscal_environment_message(string $what): string {
+    return 'Multiempresa (F11): ' . $what . ' em PRODUÇÃO pelo F11 não está liberada para este Grupo Empresarial. Peça ao administrador da plataforma para ligar "Nota fiscal em produção pelo F11" no cadastro do grupo, ou entre diretamente na empresa.';
+  }
+}

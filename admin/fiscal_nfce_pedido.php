@@ -27,11 +27,12 @@ if ($nfcePedidoCrossContext && function_exists('fiscal_multi_company_nfce_homolo
 if (!function_exists('nfce_pedido_assert_cross_doc')) {
   function nfce_pedido_assert_cross_doc(?array $doc, bool $cross): void {
     if (!$cross || !$doc) return;
+    global $pdo;
     if ((string)($doc['model'] ?? '') !== '65') {
       throw new RuntimeException('V11.35 Multiempresa: somente NFC-e modelo 65 pode ser operada pelo F11.');
     }
-    if (strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.35 Multiempresa: documento fiscal fora de HOMOLOGAÇÃO permanece bloqueado no F11.');
+    if (!($pdo instanceof PDO && function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)($GLOBALS['cid'] ?? 0), (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a NFC-e') : 'V11.35 Multiempresa: documento fiscal fora de HOMOLOGAÇÃO permanece bloqueado no F11.');
     }
   }
 }

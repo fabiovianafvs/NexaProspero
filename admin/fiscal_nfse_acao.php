@@ -62,15 +62,15 @@ function nfse_action_f11_guard(PDO $pdo, int $companyId, bool $isF11, string $ac
 
   $cfg = fiscal_company_config($pdo, $companyId);
   $environment = strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO')));
-  if ($environment !== 'HOMOLOGACAO') {
-    throw new RuntimeException('V11.51 Multiempresa: NFS-e pelo F11 está liberada somente em HOMOLOGAÇÃO. Produção continua bloqueada.');
+  if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, $environment))) {
+    throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a NFS-e') : 'V11.51 Multiempresa: NFS-e pelo F11 está liberada somente em HOMOLOGAÇÃO.');
   }
 
   if ($docId > 0) {
     $doc = nfse_emitter_document_by_id($pdo, $companyId, $docId);
     if (!$doc) throw new RuntimeException('Documento NFS-e não encontrado na empresa selecionada.');
-    if (strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.51 Multiempresa: este documento NFS-e não pertence ao ambiente de HOMOLOGAÇÃO.');
+    if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('esta NFS-e') : 'V11.51 Multiempresa: este documento NFS-e não pertence ao ambiente de HOMOLOGAÇÃO.');
     }
     if (strtoupper(trim((string)($doc['source_type'] ?? ''))) !== 'PEDIDO' || (int)($doc['source_id'] ?? 0) <= 0) {
       throw new RuntimeException('V11.51 Multiempresa: somente NFS-e originada de PEDIDO está homologada no F11.');

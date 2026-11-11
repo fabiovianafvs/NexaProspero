@@ -39,8 +39,8 @@ $cfg = [];
 try {
   $cfg = fiscal_company_config($pdo, $cid);
   $currentEnvironment = strtoupper((string)($cfg['environment'] ?? 'HOMOLOGACAO')) === 'PRODUCAO' ? 'PRODUCAO' : 'HOMOLOGACAO';
-  if ($isCrossF11 && $currentEnvironment !== 'HOMOLOGACAO') {
-    throw new RuntimeException('V11.49 Multiempresa: inutilização pelo F11 está liberada somente em HOMOLOGAÇÃO. Produção permanece bloqueada.');
+  if ($isCrossF11 && !(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $cid, $currentEnvironment))) {
+    throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a inutilização') : 'V11.49 Multiempresa: inutilização pelo F11 está liberada somente em HOMOLOGAÇÃO.');
   }
   $st = $pdo->prepare("SELECT model,series,environment,is_active,next_number,last_number FROM fiscal_document_series WHERE company_id=? AND model IN ('55','65') AND environment=? AND is_active=1 ORDER BY model,CAST(series AS UNSIGNED)");
   $st->execute([$cid, $currentEnvironment]);

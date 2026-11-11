@@ -28,7 +28,7 @@ if ($nfseF11) {
   if (!function_exists('multi_company_scope_is_cross_company') || !multi_company_scope_is_cross_company($pdo, 'fiscal_nfse_homologation')) { http_response_code(403); echo 'Contexto Multiempresa inválido para NFS-e.'; exit; }
   if (function_exists('multi_company_context_permission_allowed') && !multi_company_context_permission_allowed($pdo, 'fiscal_documentos')) { http_response_code(403); echo 'Sem permissão para Documentos fiscais na empresa selecionada.'; exit; }
   if (function_exists('saas_company_has_module') && !saas_company_has_module($pdo, $cid, 'fiscal')) { http_response_code(403); echo 'Módulo Fiscal não está ativo na empresa selecionada.'; exit; }
-  if (strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') { http_response_code(403); echo 'V11.50 Multiempresa: impressão NFS-e pelo F11 está liberada somente em HOMOLOGAÇÃO.'; exit; }
+  if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $cid, (string)($doc['environment'] ?? '')))) { http_response_code(403); echo htmlspecialchars(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a impressão da NFS-e') : 'V11.50 Multiempresa: impressão NFS-e pelo F11 está liberada somente em HOMOLOGAÇÃO.', ENT_QUOTES, 'UTF-8'); exit; }
   if (strtoupper(trim((string)($doc['source_type'] ?? ''))) !== 'PEDIDO' || (int)($doc['source_id'] ?? 0) <= 0) { http_response_code(403); echo 'V11.50 Multiempresa: somente NFS-e originada de PEDIDO está homologada.'; exit; }
 }
 try{$prest=fiscal_nfce_document_participant($pdo,$cid,$docId,'PRESTADOR');$tom=fiscal_nfce_document_participant($pdo,$cid,$docId,'TOMADOR');}catch(Throwable $e){$prest=[];$tom=[];}

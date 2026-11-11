@@ -387,8 +387,9 @@ if (!function_exists('fiscal_multi_company_document_homologation_assert')) {
 
     $cfg = fiscal_company_config($pdo, $companyId);
     $environment = strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO')));
-    if ($environment !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.46 Multiempresa: ' . $docLabel . ' pelo F11 está liberada somente em HOMOLOGAÇÃO. Produção permanece bloqueada.');
+    // V12: produção liberada por Grupo Empresarial; sem a liberação, somente HOMOLOGAÇÃO.
+    if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, $environment))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a ' . $docLabel) : ('V11.46 Multiempresa: ' . $docLabel . ' pelo F11 está liberada somente em HOMOLOGAÇÃO.'));
     }
     if (empty($cfg['fiscal_emission_enabled'])) {
       throw new RuntimeException('Habilite a emissão fiscal nas Configurações Fiscais da empresa selecionada.');
@@ -404,7 +405,7 @@ if (!function_exists('fiscal_multi_company_document_homologation_assert')) {
         ? (function_exists('fiscal_nfe_config_problems') ? fiscal_nfe_config_problems($pdo, $companyId) : [])
         : (function_exists('fiscal_nfce_config_problems') ? fiscal_nfce_config_problems($pdo, $companyId) : []);
       if ($problems) {
-        throw new RuntimeException($docLabel . ' em homologação ainda não está pronta: ' . implode(' ', $problems));
+        throw new RuntimeException($docLabel . ' ainda não está pronta na empresa selecionada: ' . implode(' ', $problems));
       }
     }
     return $cfg;
@@ -446,8 +447,8 @@ if (!function_exists('fiscal_multi_company_cancel_homologation_assert')) {
     if (strtoupper(trim((string)($doc['status'] ?? ''))) !== 'AUTORIZADA') {
       throw new RuntimeException('V11.47 Multiempresa: somente documento AUTORIZADO pode ser cancelado.');
     }
-    if (strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.47 Multiempresa: somente documento emitido em HOMOLOGAÇÃO pode ser cancelado pelo F11.');
+    if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('o cancelamento de nota') : 'V11.47 Multiempresa: somente documento emitido em HOMOLOGAÇÃO pode ser cancelado pelo F11.');
     }
     if (strtoupper(trim((string)($doc['source_type'] ?? ''))) !== 'PEDIDO' || (int)($doc['source_id'] ?? 0) <= 0) {
       throw new RuntimeException('V11.47 Multiempresa: nesta etapa o cancelamento pelo F11 está homologado somente para documento originado de Pedido. Documentos de O.S. permanecem na fila fiscal exclusiva.');
@@ -480,8 +481,8 @@ if (!function_exists('fiscal_multi_company_cancel_homologation_assert')) {
     }
 
     $cfg = fiscal_company_config($pdo, $companyId);
-    if (strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO'))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.47 Multiempresa: cancelamento fiscal pelo F11 está liberado somente em HOMOLOGAÇÃO. Produção permanece bloqueada.');
+    if (strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO'))) !== strtoupper(trim((string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException('Multiempresa (F11): o ambiente atual da empresa (' . strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO'))) . ') é diferente do ambiente em que a nota foi emitida.');
     }
     if (empty($cfg['fiscal_emission_enabled'])) {
       throw new RuntimeException('A emissão fiscal está desativada nas Configurações Fiscais da empresa selecionada.');
@@ -531,8 +532,8 @@ if (!function_exists('fiscal_multi_company_cce_homologation_assert')) {
     if (strtoupper(trim((string)($doc['status'] ?? ''))) !== 'AUTORIZADA') {
       throw new RuntimeException('V11.48 Multiempresa: somente NF-e AUTORIZADA pode receber Carta de Correção.');
     }
-    if (strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.48 Multiempresa: Carta de Correção pelo F11 está liberada somente em HOMOLOGAÇÃO. Produção permanece bloqueada.');
+    if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a Carta de Correção') : 'V11.48 Multiempresa: Carta de Correção pelo F11 está liberada somente em HOMOLOGAÇÃO.');
     }
     if (strtoupper(trim((string)($doc['source_type'] ?? ''))) !== 'PEDIDO' || (int)($doc['source_id'] ?? 0) <= 0) {
       throw new RuntimeException('V11.48 Multiempresa: nesta etapa a Carta de Correção pelo F11 está homologada somente para NF-e originada de Pedido. Documentos de O.S. permanecem na fila fiscal exclusiva.');
@@ -543,8 +544,8 @@ if (!function_exists('fiscal_multi_company_cce_homologation_assert')) {
     }
 
     $cfg = fiscal_company_config($pdo, $companyId);
-    if (strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO'))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.48 Multiempresa: a empresa selecionada não está configurada em HOMOLOGAÇÃO.');
+    if (strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO'))) !== strtoupper(trim((string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException('Multiempresa (F11): o ambiente atual da empresa é diferente do ambiente em que a NF-e foi emitida.');
     }
     if (empty($cfg['fiscal_emission_enabled'])) {
       throw new RuntimeException('A emissão fiscal está desativada nas Configurações Fiscais da empresa selecionada.');
@@ -589,8 +590,8 @@ if (!function_exists('fiscal_multi_company_inutilization_homologation_assert')) 
     }
 
     $cfg = fiscal_company_config($pdo, $companyId);
-    if (strtoupper(trim((string)($cfg['environment'] ?? 'HOMOLOGACAO'))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.49 Multiempresa: inutilização pelo F11 está liberada somente em HOMOLOGAÇÃO. Produção permanece bloqueada.');
+    if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($cfg['environment'] ?? 'HOMOLOGACAO')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a inutilização') : 'V11.49 Multiempresa: inutilização pelo F11 está liberada somente em HOMOLOGAÇÃO.');
     }
     if (empty($cfg['fiscal_emission_enabled'])) {
       throw new RuntimeException('A emissão fiscal está desativada nas Configurações Fiscais da empresa selecionada.');
@@ -6445,8 +6446,8 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
     $adapter = strtoupper((string)($cfg['emission_adapter'] ?? 'NFEPHP'));
     if ($adapter !== 'NFEPHP') throw new RuntimeException('A contingência automática desta versão requer NFePHP/sped-nfe como motor de emissão fiscal.');
 
-    if ($multiCompanyFiscalCross && strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.46 Multiempresa: documento fiscal fora de HOMOLOGAÇÃO permanece bloqueado no F11.');
+    if ($multiCompanyFiscalCross && !(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a nota') : 'V11.46 Multiempresa: documento fiscal fora de HOMOLOGAÇÃO permanece bloqueado no F11.');
     }
     $docLabel = fiscal_doc_model_label($model);
     if (strtoupper((string)($doc['status'] ?? '')) === 'AUTORIZADA') throw new RuntimeException('Esta ' . $docLabel . ' já está autorizada.');
@@ -6508,7 +6509,7 @@ if (!function_exists('fiscal_nfce_authorize_document')) {
     }
     $isOfflinePending = $model === '65' && (in_array($emissionType, ['NFC_OFFLINE','OFFLINE'], true) || in_array($statusUpper, ['CONTINGENCIA','EM_CONTINGENCIA','PENDENTE_CONTINGENCIA','OFFLINE'], true));
     if ($multiCompanyFiscalCross && $isOfflinePending) {
-      throw new RuntimeException('V11.46 Multiempresa: contingência/offline ainda não foi homologada no F11. Use somente emissão normal em HOMOLOGAÇÃO.');
+      throw new RuntimeException('Multiempresa (F11): contingência/offline ainda não foi homologada no F11. Use a emissão normal ou entre diretamente na empresa.');
     }
     // Multiempresa em homologação não entra automaticamente em contingência. Se a SEFAZ
     // de homologação estiver indisponível, mantém o documento pendente para nova tentativa.
@@ -6648,8 +6649,8 @@ if (!function_exists('fiscal_nfce_consult_document_status')) {
       ? fiscal_multi_company_document_homologation_assert($pdo, $companyId, $model, 'consultar')
       : fiscal_company_config($pdo, $companyId);
     if (strtoupper((string)($cfg['emission_adapter'] ?? 'NFEPHP')) !== 'NFEPHP') throw new RuntimeException('Consulta disponível nesta etapa para o motor NFePHP/sped-nfe.');
-    if ($multiCompanyFiscalCross && strtoupper(trim((string)($doc['environment'] ?? ''))) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.46 Multiempresa: consulta de documento fora de HOMOLOGAÇÃO permanece bloqueada no F11.');
+    if ($multiCompanyFiscalCross && !(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a consulta da nota') : 'V11.46 Multiempresa: consulta de documento fora de HOMOLOGAÇÃO permanece bloqueada no F11.');
     }
     $docLabel = fiscal_doc_model_label($model);
     $accessKey = preg_replace('/\D+/', '', (string)($doc['access_key'] ?? ''));

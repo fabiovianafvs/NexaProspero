@@ -40,9 +40,9 @@ if ($nfcePrintCrossContext) {
     echo htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
     exit;
   }
-  if (strtoupper((string)($doc['environment'] ?? '')) !== 'HOMOLOGACAO') {
+  if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $cid, (string)($doc['environment'] ?? '')))) {
     http_response_code(403);
-    echo 'V11.46 Multiempresa: impressão fiscal em PRODUÇÃO permanece bloqueada no F11.';
+    echo htmlspecialchars(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a impressão da nota') : 'V11.46 Multiempresa: impressão fiscal em PRODUÇÃO permanece bloqueada no F11.', ENT_QUOTES, 'UTF-8');
     exit;
   }
 }

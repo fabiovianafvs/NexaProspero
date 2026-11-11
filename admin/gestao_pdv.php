@@ -72,7 +72,8 @@ if ($pdvCrossContext && !$pdvMobileMode) {
     // desta etapa é HOMOLOGAÇÃO; produção continua deliberadamente bloqueada.
     $pdvFiscalEnvironmentF11 = strtoupper(trim((string)($pdvFiscalCfgF11['environment'] ?? '')));
     $pdvFiscalEmissionEnabledF11 = !empty($pdvFiscalCfgF11['fiscal_emission_enabled']);
-    $pdvFiscalHomologationAllowedF11 = $pdvFiscalEnvironmentF11 === 'HOMOLOGACAO'
+    // V12: produção também, quando liberada para o Grupo Empresarial.
+    $pdvFiscalHomologationAllowedF11 = (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, $pdvFiscalEnvironmentF11))
       && $pdvFiscalEmissionEnabledF11;
     $pdvNfceHomologationF11 = $pdvFiscalHomologationAllowedF11 && !empty($pdvFiscalCfgF11['nfce_enabled']);
     $pdvNfeHomologationF11 = $pdvFiscalHomologationAllowedF11 && !empty($pdvFiscalCfgF11['nfe_enabled']);
@@ -318,19 +319,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'final
     if ($pdvCrossContext) {
       if ($requestedCheckoutOption === '') $requestedCheckoutOption = 'none';
       if (!in_array($requestedCheckoutOption, ['none','nfce','nfe'], true)) {
-        throw new RuntimeException('V11.46 Multiempresa: no F11 somente NFC-e/NF-e em HOMOLOGAÇÃO ou Somente gravar pedido estão liberados. NFS-e continua bloqueada.');
+        throw new RuntimeException('V11.46 Multiempresa: no F11 somente NFC-e/NF-e ou Somente gravar pedido estão liberados. NFS-e continua bloqueada.');
       }
       if ($requestedCheckoutOption === 'nfce' && !$pdvNfceHomologationF11) {
         if (function_exists('fiscal_multi_company_nfce_homologation_assert')) {
           fiscal_multi_company_nfce_homologation_assert($pdo, $companyId, 'emitir');
         }
-        throw new RuntimeException('V11.46 Multiempresa: a NFC-e da empresa selecionada não está habilitada em HOMOLOGAÇÃO ou o perfil não possui permissão fiscal.');
+        throw new RuntimeException('V11.46 Multiempresa: a NFC-e da empresa selecionada não está liberada (ambiente/emissão da empresa ou, em produção, liberação do Grupo Empresarial) ou o perfil não possui permissão fiscal.');
       }
       if ($requestedCheckoutOption === 'nfe' && !$pdvNfeHomologationF11) {
         if (function_exists('fiscal_multi_company_nfe_homologation_assert')) {
           fiscal_multi_company_nfe_homologation_assert($pdo, $companyId, 'emitir');
         }
-        throw new RuntimeException('V11.46 Multiempresa: a NF-e da empresa selecionada não está habilitada em HOMOLOGAÇÃO ou o perfil não possui permissão fiscal.');
+        throw new RuntimeException('V11.46 Multiempresa: a NF-e da empresa selecionada não está liberada (ambiente/emissão da empresa ou, em produção, liberação do Grupo Empresarial) ou o perfil não possui permissão fiscal.');
       }
       $_POST['emit_doc_after'] = $requestedCheckoutOption;
       $fiscalCfgPost = $pdvFiscalCfgF11 ?: ['order_auto_print_enabled'=>1, 'order_print_disabled'=>0];
@@ -495,8 +496,8 @@ $pdvFiscalModalDescription = $pdvCrossContext
   ? ($pdvMobileMode
       ? 'V11.46 Multiempresa: Venda Mobile continua somente como Pedido nesta etapa; os testes de NFC-e/NF-e em HOMOLOGAÇÃO são feitos pelo Pedido PDV padrão.'
       : (($pdvNfceHomologationF11 || $pdvNfeHomologationF11)
-          ? 'V11.46 Multiempresa: os documentos fiscais habilitados (NFC-e e/ou NF-e) estão liberados somente em HOMOLOGAÇÃO. NFS-e e produção continuam bloqueadas.'
-          : 'Multiempresa: nenhuma opção fiscal foi liberada. Confira abaixo o diagnóstico da empresa selecionada; no F11 esta etapa aceita somente HOMOLOGAÇÃO.'))
+          ? 'Multiempresa (F11): as notas habilitadas na empresa selecionada (NFC-e e/ou NF-e) podem ser emitidas. NFS-e é emitida pela tela de NFS-e.'
+          : 'Multiempresa (F11): nenhuma opção fiscal foi liberada. Confira abaixo o diagnóstico da empresa selecionada (ambiente, emissão habilitada e, para produção, a liberação do Grupo Empresarial).'))
   : ($pdvCanSaveOrder
   ? 'Escolha se deseja emitir agora ou apenas gravar o pedido.'
   : ($pdvFiscalChoiceCount > 1 ? 'Escolha o documento fiscal que deseja emitir.' : 'Confirme o documento fiscal que deseja emitir.'));
@@ -630,7 +631,7 @@ gestao_flash();
 ?>
 <?php if ($pdvCrossContext): ?>
   <?php if (!$pdvMobileMode && ($pdvNfceHomologationF11 || $pdvNfeHomologationF11)): ?>
-    <div class="msg ok"><strong>V11.46 · Fiscal Multiempresa em HOMOLOGAÇÃO.</strong> O Pedido PDV pode gravar a venda e transmitir NFC-e modelo 65 ou NF-e modelo 55 usando exclusivamente configuração, série e certificado da empresa selecionada pelo F11. <strong>Produção e NFS-e continuam bloqueadas.</strong> O estoque já é baixado na venda e não será baixado novamente pela emissão fiscal.</div>
+    <div class="msg ok"><strong>Fiscal Multiempresa (F11) · ambiente <?= htmlspecialchars((string)($pdvFiscalEnvironmentF11 ?? ''), ENT_QUOTES, 'UTF-8') ?>.</strong> O Pedido PDV pode gravar a venda e transmitir NFC-e modelo 65 ou NF-e modelo 55 usando exclusivamente configuração, série e certificado da empresa selecionada pelo F11. <strong>NFS-e é emitida pela tela de NFS-e.</strong> O estoque já é baixado na venda e não será baixado novamente pela emissão fiscal.</div>
     <?php if ($pdvFiscalStatusF11 !== ''): ?><div class="msg" style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><strong>Diagnóstico fiscal F11:</strong> <?= gestao_h($pdvFiscalStatusF11) ?></div><?php endif; ?>
   <?php elseif ($pdvMobileMode): ?>
     <div class="msg ok"><strong>V11.27/V11.46 · Venda Mobile Multiempresa.</strong> A Venda Mobile continua operacional na empresa selecionada, mas nesta etapa fiscal grava somente o Pedido. Para testar NFC-e ou NF-e em HOMOLOGAÇÃO, use o Pedido PDV padrão.</div>

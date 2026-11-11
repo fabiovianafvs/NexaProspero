@@ -53,8 +53,8 @@ function nfce_action_current_doc(PDO $pdo, int $companyId, int $docId, int $pedi
     if (function_exists('fiscal_multi_company_document_homologation_assert')) {
       fiscal_multi_company_document_homologation_assert($pdo, $companyId, $model, 'consultar');
     }
-    if (strtoupper((string)($doc['environment'] ?? '')) !== 'HOMOLOGACAO') {
-      throw new RuntimeException('V11.46 Multiempresa: documento fiscal fora de HOMOLOGAÇÃO bloqueado no F11.');
+    if (!(function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, $companyId, (string)($doc['environment'] ?? '')))) {
+      throw new RuntimeException(function_exists('multi_company_fiscal_environment_message') ? multi_company_fiscal_environment_message('a nota') : 'V11.46 Multiempresa: documento fiscal fora de HOMOLOGAÇÃO bloqueado no F11.');
     }
   }
   return $doc;

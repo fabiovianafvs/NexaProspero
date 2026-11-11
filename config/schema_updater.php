@@ -570,6 +570,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '26ece734af31ba39200b0471ac3bf182c86c04d0f9918fa26d7c835fbcf86df9',
         'order' => 202611100200,
       ],
+      [
+        'id' => '20261111_multiempresa_fiscal_producao_v12',
+        'module' => 'multiempresa_fiscal_producao',
+        'version' => 202611110100,
+        'label' => 'Multiempresa - Nota fiscal em produção pelo F11',
+        'description' => 'Cria a opção, por Grupo Empresarial, que libera a emissão e os eventos de NF-e/NFC-e/NFS-e em PRODUÇÃO pela troca de empresa (F11). Vem desligada.',
+        'file' => __DIR__ . '/../db/20261111_multiempresa_fiscal_producao_v12.sql',
+        'sha256' => 'eb3dbcd7101f79fc7515d0e652ab040ebf90d9c5f351a44841fc4cd74fdaca35',
+        'order' => 202611110100,
+      ],
     ];
   }
 }

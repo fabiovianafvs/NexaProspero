@@ -120,7 +120,8 @@ try {
       // V11.46: Central de Pedidos pode emitir/reemitir NFC-e e NF-e somente em HOMOLOGAÇÃO.
       $fiscalDocPermission = function_exists('multi_company_context_permission_allowed')
         && multi_company_context_permission_allowed($pdo, 'fiscal_documentos');
-      $homologation = strtoupper(trim((string)($fiscalCfgPedidos['environment'] ?? ''))) === 'HOMOLOGACAO';
+      // V12: produção também, quando liberada para o Grupo Empresarial.
+      $homologation = function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)$ordersCompanyId, (string)($fiscalCfgPedidos['environment'] ?? ''));
       $canEmitNfcePedidos = $fiscalDocPermission && $homologation && $fiscalEmissionEnabledPedidos && !empty($fiscalCfgPedidos['nfce_enabled']);
       $canEmitNfePedidos = $fiscalDocPermission && $homologation && $fiscalEmissionEnabledPedidos && !empty($fiscalCfgPedidos['nfe_enabled']);
       $canEmitNfsePedidos = false;

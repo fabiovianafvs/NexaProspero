@@ -352,7 +352,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                   <?php endif; ?>
                 <?php elseif ($fiscalReadOnlyF11): ?>
                   <?php if ($accessKeyDigits !== ''): ?><button class="btn btn-sm nfce-doc-copy-key" type="button" data-copy-access-key="<?= fiscal_h($accessKeyDigits) ?>">Copiar chave de acesso</button><?php endif; ?>
-                  <?php if ($isNfse && $fiscalNfseF11Allowed && strtoupper(trim((string)($r['environment'] ?? ''))) === 'HOMOLOGACAO'): ?>
+                  <?php if ($isNfse && $fiscalNfseF11Allowed && (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)$cid, (string)($r['environment'] ?? '')))): ?>
                     <?php if ($pedidoId > 0): ?><a class="btn btn-sm btn-primary" href="<?= fiscal_h(function_exists('multi_company_context_url') ? multi_company_context_url('fiscal_nfse_nacional.php?pedido_id=' . $pedidoId) : ('fiscal_nfse_nacional.php?pedido_id=' . $pedidoId)) ?>">Abrir NFS-e · Homologação</a><?php endif; ?>
                     <?php if (in_array($statusDoc,['AUTORIZADA','CANCELADA'],true)): ?>
                       <a class="btn btn-sm btn-primary" data-no-processing href="<?= fiscal_h(function_exists('multi_company_context_url') ? multi_company_context_url('fiscal_nfse_imprimir.php?doc_id=' . $docId . '&return_to=' . rawurlencode($printReturnTo)) : ('fiscal_nfse_imprimir.php?doc_id=' . $docId . '&return_to=' . rawurlencode($printReturnTo))) ?>">Imprimir NFS-e</a>
@@ -361,7 +361,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                     <?php
                       $f11NfseCancelDocAllowed = $fiscalNfseCancelF11Allowed
                         && $statusDoc === 'AUTORIZADA'
-                        && strtoupper(trim((string)($r['environment'] ?? ''))) === 'HOMOLOGACAO'
+                        && (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)$cid, (string)($r['environment'] ?? '')))
                         && strtoupper(trim((string)($r['source_type'] ?? ''))) === 'PEDIDO'
                         && $pedidoId > 0
                         && strtoupper(trim((string)($r['provider_code'] ?? ''))) === 'PRONIM';
@@ -369,7 +369,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                     <?php if ($f11NfseCancelDocAllowed): ?>
                       <a class="btn btn-sm" href="<?= fiscal_h(function_exists('multi_company_context_url') ? multi_company_context_url('fiscal_nfse_nacional.php?pedido_id=' . $pedidoId) : ('fiscal_nfse_nacional.php?pedido_id=' . $pedidoId)) ?>">Cancelar NFS-e · Homologação</a>
                     <?php endif; ?>
-                    <?php if ($statusDoc === 'CANCELADA' && $fiscalNfseCancelF11Allowed && strtoupper(trim((string)($r['environment'] ?? ''))) === 'HOMOLOGACAO' && strtoupper(trim((string)($r['source_type'] ?? ''))) === 'PEDIDO' && $pedidoId > 0 && strtoupper(trim((string)($r['provider_code'] ?? ''))) === 'PRONIM'): ?>
+                    <?php if ($statusDoc === 'CANCELADA' && $fiscalNfseCancelF11Allowed && (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)$cid, (string)($r['environment'] ?? ''))) && strtoupper(trim((string)($r['source_type'] ?? ''))) === 'PEDIDO' && $pedidoId > 0 && strtoupper(trim((string)($r['provider_code'] ?? ''))) === 'PRONIM'): ?>
                       <a class="btn btn-sm" data-no-processing href="<?= fiscal_h(function_exists('multi_company_context_url') ? multi_company_context_url('fiscal_nfse_acao.php?action=download_cancel_event&doc_id=' . $docId . '&pedido_id=' . $pedidoId) : ('fiscal_nfse_acao.php?action=download_cancel_event&doc_id=' . $docId . '&pedido_id=' . $pedidoId)) ?>">Baixar cancelamento</a>
                     <?php endif; ?>
                   <?php elseif (!$isNfse && in_array($model, ['55','65'], true)): ?>
@@ -383,7 +383,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                     <?php
                       $f11CancelDocAllowed = $fiscalCancelF11Allowed
                         && $isAut
-                        && strtoupper(trim((string)($r['environment'] ?? ''))) === 'HOMOLOGACAO'
+                        && (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)$cid, (string)($r['environment'] ?? '')))
                         && strtoupper(trim((string)($r['source_type'] ?? ''))) === 'PEDIDO'
                         && (int)($r['source_id'] ?? 0) > 0;
                     ?>
@@ -398,7 +398,7 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                       $f11CceDocAllowed = $fiscalCceF11Allowed
                         && $model === '55'
                         && $isAut
-                        && strtoupper(trim((string)($r['environment'] ?? ''))) === 'HOMOLOGACAO'
+                        && (function_exists('multi_company_fiscal_environment_allowed') && multi_company_fiscal_environment_allowed($pdo, (int)$cid, (string)($r['environment'] ?? '')))
                         && strtoupper(trim((string)($r['source_type'] ?? ''))) === 'PEDIDO'
                         && (int)($r['source_id'] ?? 0) > 0;
                     ?>
