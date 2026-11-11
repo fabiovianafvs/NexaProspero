@@ -299,13 +299,13 @@ if (!function_exists('multi_company_context_company_operational')) {
   }
 }
 
-if (!function_exists('multi_company_context_validate_target')) {
+if (!function_exists('multi_company_context_validate_target_uncached')) {
   /**
    * Valida a troca potencial sem alterar o contexto operacional.
    * Retorna um array com ok/reason e metadados suficientes para emissão/resolução
    * de um token por aba.
    */
-  function multi_company_context_validate_target(PDO $pdo, int $userId, int $entryCompanyId, int $targetCompanyId): array {
+  function multi_company_context_validate_target_uncached(PDO $pdo, int $userId, int $entryCompanyId, int $targetCompanyId): array {
     $fail = static fn(string $reason): array => [
       'ok' => false,
       'reason' => $reason,
@@ -386,6 +386,30 @@ if (!function_exists('multi_company_context_validate_target')) {
       'group_profile_id' => isset($groupUser['group_profile_id']) && $groupUser['group_profile_id'] !== null ? (int)$groupUser['group_profile_id'] : null,
       'is_default' => (int)($access['is_default'] ?? 0) === 1,
     ];
+  }
+}
+
+if (!function_exists('multi_company_context_validate_target')) {
+  /**
+   * V12: mesma validação, guardada durante a requisição. Antes, cada checagem de
+   * permissão (menu, bootstrap, telas) repetia ~10 consultas ao banco; numa página
+   * com F11 ativo isso passava de 100 consultas só para validar o contexto.
+   * O cache vale só para a requisição atual (nada fica na sessão).
+   */
+  function multi_company_context_validate_target(PDO $pdo, int $userId, int $entryCompanyId, int $targetCompanyId): array {
+    static $memo = [];
+    $key = spl_object_id($pdo) . '|' . $userId . '|' . $entryCompanyId . '|' . $targetCompanyId;
+    if (!isset($memo[$key])) $memo[$key] = multi_company_context_validate_target_uncached($pdo, $userId, $entryCompanyId, $targetCompanyId);
+    return $memo[$key];
+  }
+}
+
+if (!function_exists('multi_company_context_profile_cached')) {
+  function multi_company_context_profile_cached(PDO $pdo, int $userId, int $entryCompanyId, int $targetCompanyId): ?array {
+    static $memo = [];
+    $key = spl_object_id($pdo) . '|' . $userId . '|' . $entryCompanyId . '|' . $targetCompanyId;
+    if (!array_key_exists($key, $memo)) $memo[$key] = multi_company_context_profile($pdo, $userId, $entryCompanyId, $targetCompanyId);
+    return $memo[$key];
   }
 }
 
@@ -821,7 +845,7 @@ if (!function_exists('multi_company_context_permission_allowed')) {
 
     $userId = function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : 0;
     if ($userId <= 0) return false;
-    $profile = multi_company_context_profile($pdo, $userId, $entryCompanyId, $targetCompanyId);
+    $profile = multi_company_context_profile_cached($pdo, $userId, $entryCompanyId, $targetCompanyId);
     if (!$profile) return false;
 
     $permissions = json_decode((string)($profile['permissions_json'] ?? ''), true);
@@ -898,5 +922,59 @@ if (!function_exists('multi_company_context_forget_token')) {
     if (isset($_SESSION['multi_company_context_tokens'][$token])) {
       unset($_SESSION['multi_company_context_tokens'][$token]);
     }
+  }
+}
+
+/**
+ * V12 (Multiempresa Isolado) - guardião de páginas no contexto F11.
+ *
+ * Problema corrigido: páginas que ainda não conhecem o contexto F11 (O.S., Orçamentos,
+ * CRM, Contratos, Entregas, Produção, Brain, alguns relatórios/fiscais etc.) abriam
+ * normalmente com o token mc_ctx e gravavam na EMPRESA DE ENTRADA, enquanto o
+ * cabeçalho mostrava a empresa selecionada. Agora, em contexto cruzado, somente as
+ * páginas desta lista podem abrir; as demais são recusadas pelo _bootstrap e somem
+ * do menu. Cada página da lista já trata o F11 (usa a empresa operacional ou se
+ * bloqueia sozinha). Ao homologar um módulo novo, inclua as páginas aqui.
+ */
+if (!function_exists('multi_company_cross_aware_pages')) {
+  function multi_company_cross_aware_pages(): array {
+    return [
+      'area_trabalho.php',
+      'commercial_credit_authorize.php',
+      'compras_alertas.php', 'compras_assistente.php', 'compras_cotacoes.php', 'compras_cotacoes_matriz.php', 'compras_fornecedores_avaliacao.php', 'compras_fornecedores_ranking.php', 'compras_historico_precos.php', 'compras_lista_editar.php', 'compras_listas.php', 'compras_painel.php', 'compras_pedido_conciliacao.php', 'compras_pedido_conciliar_xml.php', 'compras_pedido_receber.php', 'compras_pedidos.php',
+      'configuracoes_caixa.php', 'configuracoes_cpa.php', 'configuracoes_cre.php',
+      'dashboard.php',
+      'email_documento.php',
+      'estoque_conferencia_form.php', 'estoque_conferencia_processar.php', 'estoque_conferencias.php', 'estoque_consulta.php',
+      'financeiro.php', 'financeiro_boleto_imprimir.php', 'financeiro_boleto_itau.php', 'financeiro_boleto_whatsapp.php', 'financeiro_boletos.php', 'financeiro_caixas_bancos.php', 'financeiro_cartoes.php', 'financeiro_centros_custo.php', 'financeiro_conciliacao.php', 'financeiro_contas_pagar.php', 'financeiro_contas_receber.php', 'financeiro_contas_receber_importar.php', 'financeiro_despesas_fixas.php', 'financeiro_formas_pagamento.php', 'financeiro_itau.php', 'financeiro_movimentos.php', 'financeiro_pessoas.php', 'financeiro_plano_contas.php', 'financeiro_recibo_baixa.php', 'financeiro_recibo_whatsapp.php', 'financeiro_resultado.php', 'financeiro_vales.php', 'financeiro_vales_ajax.php',
+      'fiscal_cests.php', 'fiscal_cfops.php', 'fiscal_configuracoes.php', 'fiscal_cst.php', 'fiscal_devolucao_cliente.php', 'fiscal_devolucoes.php', 'fiscal_documentos.php', 'fiscal_emissao_lote.php', 'fiscal_entrada_notas.php', 'fiscal_ibscbs.php', 'fiscal_importacoes.php', 'fiscal_importar_xml.php', 'fiscal_inutilizacao.php', 'fiscal_lookup.php', 'fiscal_ncms.php', 'fiscal_nfce_acao.php', 'fiscal_nfce_editar.php', 'fiscal_nfce_imprimir.php', 'fiscal_nfce_pedido.php', 'fiscal_nfse_acao.php', 'fiscal_nfse_cancelar.php', 'fiscal_nfse_consultar_dps.php', 'fiscal_nfse_imprimir.php', 'fiscal_nfse_nacional.php', 'fiscal_nota_manual.php', 'fiscal_operacoes.php', 'fiscal_radar_xml.php', 'fiscal_relatorio_inutilizacoes.php', 'fiscal_saidas.php', 'fiscal_st_uf.php', 'fiscal_tabelas.php', 'fiscal_tributacoes.php', 'fiscal_xml_entrada.php',
+      'gestao.php', 'gestao_caixa.php', 'gestao_clientes.php', 'gestao_clientes_importar.php', 'gestao_comandas.php', 'gestao_comandas_agentes.php', 'gestao_comandas_checkout.php', 'gestao_comandas_config.php', 'gestao_comandas_impressao.php', 'gestao_comandas_mobile.php', 'gestao_comandas_print_api.php', 'gestao_comandas_qrcode.php', 'gestao_formas_pagamento.php', 'gestao_pdv.php', 'gestao_pdv_checkout.php', 'gestao_pdv_mobile.php', 'gestao_pdv_resumido.php', 'gestao_pedido_detalhado.php',
+      'grid_preferencias.php',
+      'importacao_anexos_cplus4.php', 'importacao_anexos_cplus4_api.php',
+      'index.php',
+      'logout.php',
+      'modulo_em_breve.php',
+      'multiempresa_acessos.php', 'multiempresa_contexto.php',
+      'pedido.php', 'pedido_editar.php', 'pedido_finalizado.php', 'pedido_print.php', 'pedido_print_conferencia.php', 'pedido_print_cozinha.php', 'pedido_print_evento.php', 'pedido_print_producao.php', 'pedido_regularizacao.php', 'pedido_relatorio_produtos.php', 'pedido_status.php', 'pedido_whatsapp.php',
+      'pedidos.php', 'pedidos_contratos_lote.php',
+      'pessoa_aniversario_whatsapp.php', 'pessoa_cep_lookup.php', 'pessoa_cnpj_lookup.php',
+      'produto_form.php', 'produto_gtin_lookup.php',
+      'produtos.php',
+      'relatorio_estoque.php', 'relatorio_fluxo_caixa.php', 'relatorio_inadimplencia.php', 'relatorio_movimentos_caixa.php',
+      'usuario_form.php',
+      'usuarios.php', 'usuarios_perfis.php',
+      'utilitarios_manutencao_categorias.php', 'utilitarios_manutencao_tributacoes.php',
+      'whatsapp.php', 'whatsapp_api.php', 'whatsapp_modelos.php',
+    ];
+  }
+}
+
+if (!function_exists('multi_company_cross_page_allowed')) {
+  function multi_company_cross_page_allowed(string $page): bool {
+    $page = strtolower(basename(trim($page)));
+    if ($page === '') return false;
+    static $set = null;
+    if ($set === null) $set = array_fill_keys(multi_company_cross_aware_pages(), true);
+    return isset($set[$page]);
   }
 }

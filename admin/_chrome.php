@@ -559,6 +559,9 @@ function admin_topbar(string $title, string $active=''): void {
                 $children[$childKey] = $child;
                 continue;
               }
+              // V12: no F11 cruzado, esconde as telas que ainda não trabalham com a empresa selecionada.
+              if ($isCrossV11_25 && function_exists('multi_company_cross_page_allowed')
+                  && !multi_company_cross_page_allowed((string)parse_url((string)($child[1] ?? ''), PHP_URL_PATH))) continue;
               // V11.45.2: novas telas reaproveitam permissões já existentes,
               // sem criar novos tokens nem exigir migração de perfis.
               if ((string)$key === 'relatorios' && (string)$childKey === 'relatorio_movimentos_caixa' && $isCrossV11_25) continue;
@@ -634,6 +637,11 @@ function admin_topbar(string $title, string $active=''): void {
           continue;
         }
 
+        // V12: no F11 cruzado, itens de menu de telas que ainda não trabalham com a empresa selecionada somem.
+        if (defined('MULTI_COMPANY_CONTEXT_VALID') && MULTI_COMPANY_CONTEXT_VALID === true
+            && defined('MULTI_COMPANY_CONTEXT_ID') && (int)MULTI_COMPANY_CONTEXT_ID !== (int)COMPANY_ID
+            && function_exists('multi_company_cross_page_allowed')
+            && !multi_company_cross_page_allowed((string)parse_url((string)($it[1] ?? ''), PHP_URL_PATH))) continue;
         if (!saas_admin_nav_allowed($pdoAdmin, (int)COMPANY_ID, (string)$key)) continue;
         if (function_exists('access_admin_nav_allowed') && !access_admin_nav_allowed($pdoAdmin, (int)COMPANY_ID, (string)$key)) continue;
         $filtered[$key] = $it;

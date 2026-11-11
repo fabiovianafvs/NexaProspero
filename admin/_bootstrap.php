@@ -562,6 +562,12 @@ if ($isCrossMultiCompany && $pageLower === 'email_documento.php' && !in_array(st
   access_render_denied('V11.23 Multiempresa: neste ciclo somente Boleto e Recibo podem ser enviados por E-mail no contexto F11. Os demais tipos de documento ainda devem ser enviados acessando diretamente a empresa.');
 }
 
+// V12: fail-closed geral. Em contexto F11 cruzado, qualquer página que ainda não trata a
+// empresa selecionada é recusada (antes ela abria e gravava na empresa de entrada).
+if ($isCrossMultiCompany && function_exists('multi_company_cross_page_allowed') && !multi_company_cross_page_allowed($pageLower)) {
+  access_render_denied('Multiempresa (F11): esta função ainda não trabalha com a empresa selecionada. Para usá-la, volte para a empresa de entrada pela tecla F11 ou acesse diretamente o endereço desta empresa.');
+}
+
 if ($isCrossMultiCompany && in_array($pageLower, array_merge(['pedidos.php','pedido_print.php'], $salesPrintingPages ?? []), true)) {
   // Permissão efetiva já validada acima; a página fará também o isolamento por company_id.
 } elseif ($isCrossMultiCompany && in_array($pageLower, ['usuarios.php','usuarios_perfis.php','multiempresa_acessos.php'], true) && function_exists('access_is_company_master') && access_is_company_master()) {
