@@ -1067,12 +1067,12 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
           <input class="field" value="<?= (int)$id > 0 ? ('#' . htmlspecialchars((string)company_sequence_display($produto, 'produtos'))) : 'Novo' ?>" readonly>
         </div>
         <div class="row product-barcode-field">
-          <label>Código de barras <?php if (access_is_company_master()): ?><a href="#" id="gtinCfgLink" style="font-weight:600;font-size:11px;margin-left:6px">configurar consulta</a><?php endif; ?></label>
-          <div style="display:flex;gap:6px;align-items:center">
+          <label>Código de barras</label>
+          <div style="display:flex;gap:6px;align-items:stretch">
             <input class="field" name="codigo_barras" id="codigoBarrasInput" value="<?= htmlspecialchars((string)($produto['codigo_barras'] ?? '')) ?>" placeholder="GTIN ou SEM GTIN" inputmode="text" maxlength="80" autocomplete="off" style="flex:1;min-width:0">
-            <button class="btn" type="button" id="gtinLookupBtn" title="Buscar nome, foto e NCM pelo código de barras" style="white-space:nowrap">Buscar dados</button>
+            <button class="btn" type="button" id="gtinLookupBtn" title="Buscar nome, foto e NCM pelo código de barras" style="flex:0 0 auto;min-height:0;padding:0 12px;white-space:nowrap">Buscar</button>
+            <?php if (access_is_company_master()): ?><button class="btn" type="button" id="gtinCfgLink" title="Configurar consulta (token do Cosmos)" aria-label="Configurar consulta" style="flex:0 0 auto;min-height:0;padding:0 10px">&#9881;</button><?php endif; ?>
           </div>
-          <div class="help" id="gtinLookupMsg"></div>
           <input type="hidden" name="imagem_url" id="imagemUrlInput" value="">
         </div>
         <div class="row product-name-field">
@@ -1807,7 +1807,7 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
 .product-composition-panel{grid-column:1/-1;border:1px solid #c7d7f2;border-radius:18px;background:#f8fbff;padding:14px}.product-composition-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}.product-composition-head>div:first-child strong{display:block;color:#0b1f5b;font-size:15px}.product-composition-head>div:first-child span{display:block;color:#64748b;font-size:11px;margin-top:3px;max-width:850px}.product-composition-stock-summary{min-width:210px;border:1px solid #dbeafe;border-radius:14px;background:#fff;padding:9px 12px;display:grid;gap:2px}.product-composition-stock-summary small{font-size:10px;color:#64748b;font-weight:800}.product-composition-stock-summary b{font-size:18px;color:#0b1f5b}.product-composition-flags{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.product-composition-explanation{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:12px}.product-composition-settings{display:grid;grid-template-columns:minmax(220px,360px);margin-bottom:12px}.product-composition-table-wrap{overflow:auto;border:1px solid #dbeafe;border-radius:14px;background:#fff}.product-composition-table{width:100%;border-collapse:collapse;min-width:760px}.product-composition-table th,.product-composition-table td{padding:9px;border-bottom:1px solid #eef4ff;text-align:left;vertical-align:middle}.product-composition-table th{background:#f1f5ff;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em}.product-composition-table tbody tr:last-child td{border-bottom:0}.product-composition-table th:nth-child(1){width:46%}.product-composition-table th:nth-child(2){width:22%}.product-composition-table th:nth-child(3){width:20%}.composition-material-stock{font-size:12px;font-weight:850;color:#334155}.product-composition-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}@media(max-width:760px){.product-composition-head{display:grid}.product-composition-stock-summary{min-width:0}.product-composition-settings{grid-template-columns:1fr}}
 .options-builder{display:grid;gap:14px}
 .product-main-line,.product-secondary-line,.product-commercial-line,.product-flags-panel,.product-stock-panel{grid-column:1/-1}
-.product-main-line{display:grid;grid-template-columns:minmax(110px,.55fr) minmax(180px,1fr) minmax(280px,2.2fr) minmax(90px,.55fr) minmax(120px,.65fr);gap:10px;align-items:end}
+.product-main-line{display:grid;grid-template-columns:minmax(110px,.55fr) minmax(290px,1.45fr) minmax(240px,2fr) minmax(90px,.55fr) minmax(120px,.65fr);gap:10px;align-items:end}
 .product-secondary-line{display:grid;grid-template-columns:minmax(110px,.55fr) minmax(260px,1.6fr) minmax(130px,.7fr) minmax(280px,1.6fr);gap:10px;align-items:end}
 .product-commercial-line{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:8px;align-items:end}.product-commercial-line .product-code-compact label{white-space:nowrap}.product-commercial-line .product-code-compact .field{min-width:0}
 .product-lookup-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}.product-lookup-button{white-space:nowrap;min-height:42px}
@@ -2577,11 +2577,10 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
 (() => {
   const input = document.getElementById('codigoBarrasInput');
   const btn = document.getElementById('gtinLookupBtn');
-  const msg = document.getElementById('gtinLookupMsg');
   if (!input || !btn) return;
   const form = input.form;
   const field = (name) => form ? form.querySelector('[name="' + name + '"]') : null;
-  const say = (text, bad) => { msg.textContent = text; msg.style.color = bad ? '#b91c1c' : '#047857'; };
+  const say = (text) => alert(text);
   const setIfEmpty = (el, value) => {
     if (!el || !value) return false;
     const cur = String(el.value || '').trim();
@@ -2593,12 +2592,12 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
   };
   async function lookup() {
     const gtin = String(input.value || '').replace(/\D+/g, '');
-    if (gtin.length < 8) { say('Digite ou leia o código de barras (8 a 14 números).', true); return; }
-    btn.disabled = true; say('Buscando…', false); msg.style.color = '#475569';
+    if (gtin.length < 8) { say('Digite ou leia o código de barras (8 a 14 números).'); return; }
+    btn.disabled = true; btn.textContent = 'Buscando…';
     try {
       const res = await fetch('produto_gtin_lookup.php?gtin=' + encodeURIComponent(gtin), { credentials: 'same-origin' });
       const j = await res.json();
-      if (!j.ok) { say(j.message || 'Não encontrado.', true); return; }
+      if (!j.ok) { say(j.message || 'Não encontrado.'); return; }
       const d = j.data || {};
       const nome = field('nome');
       if (nome && d.name) {
@@ -2606,7 +2605,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
         if (cur === '' || (cur !== d.name && confirm('Trocar o nome do produto por:\n' + d.name + ' ?'))) nome.value = d.name;
       }
       setIfEmpty(field('gtin_tributavel'), gtin);
-      const ncm = setIfEmpty(document.getElementById('fiscalNcmInput'), d.ncm);
+      setIfEmpty(document.getElementById('fiscalNcmInput'), d.ncm);
       setIfEmpty(document.getElementById('fiscalCestInput'), d.cest);
       const fileInput = field('imagem');
       if (d.image_url && (!fileInput || !fileInput.files || !fileInput.files.length)) {
@@ -2614,14 +2613,10 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
         if (prev) prev.src = d.image_url;
         document.getElementById('imagemUrlInput').value = d.image_url;
       }
-      const parts = ['Encontrado em ' + d.source + '.'];
-      if (d.image_url) parts.push('A foto será gravada ao salvar.');
-      if (ncm) parts.push('Confira o NCM antes de emitir nota.');
-      say(parts.join(' '), false);
     } catch (e) {
-      say('Não foi possível consultar agora.', true);
+      say('Não foi possível consultar agora.');
     } finally {
-      btn.disabled = false;
+      btn.disabled = false; btn.textContent = 'Buscar';
     }
   }
   btn.addEventListener('click', lookup);
