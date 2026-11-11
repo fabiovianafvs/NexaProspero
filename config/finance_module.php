@@ -758,6 +758,47 @@ if (!function_exists('finance_bank_options')) {
   }
 }
 
+if (!function_exists('finance_default_bank_account_id')) {
+  /**
+   * Caixa/Banco usado quando um lançamento chega sem conta (forma de pagamento sem
+   * conta, baixa sem banco etc.). Ordem: o escolhido em Configurações de caixa;
+   * senão o primeiro Caixa ativo; senão a primeira conta ativa. 0 = nenhuma conta.
+   */
+  function finance_default_bank_account_id(PDO $pdo, int $companyId): int {
+    static $cache = [];
+    if ($companyId <= 0) return 0;
+    if (isset($cache[$companyId])) return $cache[$companyId];
+    $id = 0;
+    try {
+      $cfg = function_exists('config_store_get') ? (config_store_get($pdo, $companyId, 'cash_settings') ?: []) : [];
+      $want = (int)($cfg['default_bank_account_id'] ?? 0);
+      if ($want > 0) {
+        $st = $pdo->prepare('SELECT id FROM finance_bank_accounts WHERE company_id=? AND id=? AND active=1');
+        $st->execute([$companyId, $want]);
+        $id = (int)($st->fetchColumn() ?: 0);
+      }
+      if ($id <= 0) {
+        $st = $pdo->prepare("SELECT id FROM finance_bank_accounts WHERE company_id=? AND active=1 ORDER BY CASE WHEN type='CAIXA' THEN 0 ELSE 1 END, id ASC LIMIT 1");
+        $st->execute([$companyId]);
+        $id = (int)($st->fetchColumn() ?: 0);
+      }
+    } catch (Throwable $e) {
+      $id = 0;
+    }
+    return $cache[$companyId] = $id;
+  }
+}
+
+if (!function_exists('finance_movement_bank')) {
+  /** Conta do lançamento: a informada ou, se vazia, o Caixa/Banco padrão. Nunca grava sem conta quando a empresa tem alguma ativa. */
+  function finance_movement_bank(PDO $pdo, int $companyId, $bankId): ?int {
+    $bankId = (int)$bankId;
+    if ($bankId > 0) return $bankId;
+    $default = finance_default_bank_account_id($pdo, $companyId);
+    return $default > 0 ? $default : null;
+  }
+}
+
 if (!function_exists('finance_validate_bank_account')) {
   function finance_validate_bank_account(PDO $pdo, int $companyId, ?int $bankId): bool {
     $bankId = (int)($bankId ?? 0);
@@ -995,7 +1036,7 @@ if (!function_exists('finance_create_movement_from_settlement')) {
       (int)($title['person_id'] ?? 0) ?: null,
       (int)($title['chart_account_id'] ?? 0),
       (int)($title['cost_center_id'] ?? 0) ?: null,
-      (int)($settlement['bank_account_id'] ?? 0) ?: null,
+      finance_movement_bank($pdo, $companyId, $settlement['bank_account_id'] ?? 0),
       $originType,
       $originId,
       $descPrefix . ' #' . $originId . ' - ' . (string)($title['description'] ?? ''),
@@ -1137,7 +1178,7 @@ if (!function_exists('finance_create_split_movement')) {
       (int)($title['person_id'] ?? 0) ?: null,
       (int)($title['chart_account_id'] ?? 0),
       (int)($title['cost_center_id'] ?? 0) ?: null,
-      (int)($split['bank_account_id'] ?? 0) ?: null,
+      finance_movement_bank($pdo, $companyId, $split['bank_account_id'] ?? 0),
       strtoupper($originType),
       $originId,
       $description,
@@ -1396,7 +1437,7 @@ if (!function_exists('finance_settle_titles_bulk')) {
           $type = $originType === 'RECEBER' ? 'CREDITO' : 'DEBITO';
           $desc=$description . (trim((string)$split['payment_method'])!==''?' · '.trim((string)$split['payment_method']):'');
           $st=$pdo->prepare('INSERT INTO finance_movements (company_id, movement_date, type, person_id, chart_account_id, cost_center_id, bank_account_id, origin_type, origin_id, description, document_number, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)');
-          $st->execute([$companyId,$settlementDate,$type,$samePerson?:null,$chartId,$sameCost?:null,(int)($split['bank_account_id']??0)?:null,$originType.'_MULTI',$desc,'MULTI-'.count($settlements),(float)$split['amount'],$notes!==''?$notes:null]);
+          $st->execute([$companyId,$settlementDate,$type,$samePerson?:null,$chartId,$sameCost?:null,finance_movement_bank($pdo,$companyId,$split['bank_account_id']??0),$originType.'_MULTI',$desc,'MULTI-'.count($settlements),(float)$split['amount'],$notes!==''?$notes:null]);
           $movementIds[$si]=(int)$pdo->lastInsertId();
         }
         foreach ($allocations as $a) {

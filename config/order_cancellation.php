@@ -204,7 +204,7 @@ if (!function_exists('nexa_cancel_insert_finance_reversal')) {
     if ($amount <= 0 || !nexa_cancel_table_exists($pdo, 'finance_movements')) return 0;
     $columns = ['company_id','movement_date','type','person_id','chart_account_id','cost_center_id','bank_account_id','origin_type','origin_id','description','document_number','amount','notes'];
     $values = ['?', 'CURDATE()', "'DEBITO'", '?','?','?','?',"'ESTORNO_PEDIDO'",'?','?','?','?','?'];
-    $params = [$companyId, $personId ?: null, $chartId ?: null, $costId ?: null, $bankId ?: null, $orderId, $description, (string)$orderId, round($amount,2), $reason];
+    $params = [$companyId, $personId ?: null, $chartId ?: null, $costId ?: null, function_exists('finance_movement_bank') ? finance_movement_bank($pdo, $companyId, $bankId) : ($bankId ?: null), $orderId, $description, (string)$orderId, round($amount,2), $reason];
     if (nexa_cancel_column_exists($pdo, 'finance_movements', 'status')) {
       $columns[] = 'status'; $values[] = "'ATIVO'";
     }

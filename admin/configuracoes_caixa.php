@@ -39,7 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       'chart_transfer_in' => (int)($_POST['chart_transfer_in'] ?? 0),
       'chart_sangria' => (int)($_POST['chart_sangria'] ?? 0),
       'chart_aporte' => (int)($_POST['chart_aporte'] ?? 0),
+      'default_bank_account_id' => (int)($_POST['default_bank_account_id'] ?? 0),
     ];
+    if ($new['default_bank_account_id'] <= 0 && finance_default_bank_account_id($pdo, $cid) > 0) throw new RuntimeException('Escolha o Caixa/Banco padrão: nenhum lançamento pode ficar sem conta.');
+    if (!finance_validate_bank_account($pdo, $cid, $new['default_bank_account_id'])) throw new RuntimeException('Caixa/Banco padrão inválido ou inativo.');
     if (!$validChart($new['chart_transfer_out'], $chartsDebito)) throw new RuntimeException('Plano de contas da transferência (saída) inválido: escolha uma conta analítica de débito.');
     if (!$validChart($new['chart_transfer_in'], $chartsCredito)) throw new RuntimeException('Plano de contas da transferência (entrada) inválido: escolha uma conta analítica de crédito.');
     if (!$validChart($new['chart_sangria'], $chartsDebito)) throw new RuntimeException('Plano de contas da sangria inválido: escolha uma conta analítica de débito.');
@@ -52,6 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $cfg = nexa_cash_settings($pdo, $cid, true);
+$cashBanks = finance_query_all($pdo, 'SELECT id, name FROM finance_bank_accounts WHERE company_id=? AND active=1 ORDER BY name ASC', [$cid]);
+$cashDefaultBank = (int)$cfg['default_bank_account_id'] ?: finance_default_bank_account_id($pdo, $cid);
 
 finance_admin_start('Configurações de caixa', 'configuracoes_caixa');
 finance_page_header('Configurações de caixa', 'Planos de contas padrão para transferência, sangria e aporte.');
@@ -66,6 +71,13 @@ if ($cashCfgCross) echo '<div class="msg err">Estas configurações pertencem à
 <form method="post" class="finance-form">
   <input type="hidden" name="cash_cfg_csrf" value="<?= finance_h($cashCfgCsrf) ?>">
   <div class="finance-card"><div class="finance-muted">Para exigir abertura e fechamento de caixa de um usuário, marque <b>Ativar Caixa Terminal</b> no cadastro dele em Usuários. Os demais usuários vendem e lançam sem abrir caixa.</div></div>
+
+  <div class="finance-card">
+    <div class="finance-card-head"><div><h2 class="finance-subtitle">Caixa/Banco padrão</h2><div class="finance-muted">Usado automaticamente quando um lançamento chega sem Caixa/Banco (forma de pagamento sem conta, baixa sem banco, vendas do PDV etc.). Assim nenhum movimento fica sem conta.</div></div></div>
+    <div class="cashcfg-grid">
+      <div class="cashcfg-option"><label>Caixa/Banco padrão *</label><select name="default_bank_account_id" required><?php finance_select_options($cashBanks, $cashDefaultBank ?: null, 'Selecione'); ?></select><small>Para vendas irem para o banco certo, informe a conta em cada forma de pagamento; este padrão é só a garantia.</small></div>
+    </div>
+  </div>
 
   <div class="finance-card">
     <div class="finance-card-head"><div><h2 class="finance-subtitle">Planos de contas padrão</h2><div class="finance-muted">Já vêm preenchidos nas telas; podem ser trocados em cada lançamento.</div></div></div>

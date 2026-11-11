@@ -616,7 +616,7 @@ if (!function_exists('os_billing_finalize_order')) {
                     $receivableId=$receivableIds[0] ?? null;
                 }else{
                     $pdo->prepare("INSERT INTO finance_movements (company_id,movement_date,type,person_id,chart_account_id,cost_center_id,bank_account_id,origin_type,origin_id,description,document_number,amount,notes) VALUES (?,CURDATE(),'CREDITO',?,?,?,?,'PEDIDO',?,?,?,?,?)")
-                        ->execute(array($companyId,$customerId?:null,$chartId,$costId?:null,$bankId?:null,$pedidoId,$desc,(string)$orderNumber,$amount,$notes));
+                        ->execute(array($companyId,$customerId?:null,$chartId,$costId?:null,(function_exists('finance_movement_bank')?finance_movement_bank($pdo,$companyId,$bankId):($bankId?:null)),$pedidoId,$desc,(string)$orderNumber,$amount,$notes));
                     $movementId=(int)$pdo->lastInsertId();
                     if($session && !empty($payment['affects_cash'])) gestao_create_cash_operation($pdo,$companyId,$userId,(int)$session['id'],'VENDA',$amount,$bankId?:null,null,$costId?:null,$desc,'',$pedidoId);
                 }

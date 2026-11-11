@@ -278,6 +278,7 @@ try {
       throw new RuntimeException('A pessoa selecionada não pertence à empresa escolhida no F11 ou está inativa.');
     }
     $bankId = (int)($_POST['bank_account_id'] ?? 0) ?: null;
+    if (!$bankId) throw new RuntimeException('Informe o Caixa/Banco do movimento.');
     if (function_exists('finance_assert_cash_account_effective')) {
       finance_assert_cash_account_effective($pdo, $cid, $bankId, 'O Caixa/Banco selecionado não pertence à empresa escolhida no F11 ou está inativo.');
     } elseif (function_exists('access_assert_cash_account')) {
@@ -341,6 +342,11 @@ $statusFilter = trim((string)($_GET['status'] ?? 'ATIVO'));
 if (!in_array($statusFilter, ['ATIVO','CANCELADO',''], true)) $statusFilter = 'ATIVO';
 $q = trim((string)($_GET['q'] ?? ''));
 $bankFilter = (int)($_GET['bank_account_id'] ?? 0);
+$noBankFilter = $bankFilter === -1; // "Sem Caixa/Banco informado"
+if ($bankFilter < 0) $bankFilter = 0;
+// Ver lançamentos sem conta: só quem enxerga todos os caixas (administrador ou F11 homologado).
+$canSeeNoBank = $financeCrossMovementScope || !function_exists('access_user_cash_account_ids') || (function_exists('access_is_company_master') && access_is_company_master());
+if (!$canSeeNoBank) $noBankFilter = false;
 $movementPeriodCfg = nexa_screen_performance_get($pdo, $cid);
 $movementInitialPeriod = nexa_screen_performance_period((int)($movementPeriodCfg['movements_days'] ?? 30));
 $ini = finance_date_or_null($_GET['ini'] ?? '') ?: $movementInitialPeriod['from'];
@@ -367,7 +373,9 @@ if ($q !== '') {
   array_push($params, $like, $like, $like, $like, $like, $like);
 }
 $allowedBankIds = null; // null = todos os caixas/bancos
-if ($bankFilter > 0) {
+if ($noBankFilter) {
+  $where[] = 'NOT EXISTS (SELECT 1 FROM finance_bank_accounts nb WHERE nb.company_id=m.company_id AND nb.id=m.bank_account_id)';
+} elseif ($bankFilter > 0) {
   if ($financeCrossMovementScope) {
     if (!function_exists('finance_validate_bank_account') || !finance_validate_bank_account($pdo, $cid, $bankFilter)) {
       throw new RuntimeException('O Caixa/Banco filtrado não pertence à empresa escolhida no F11 ou está inativo.');
@@ -377,7 +385,8 @@ if ($bankFilter > 0) {
   }
   $where[] = 'm.bank_account_id = ?';
   $params[] = $bankFilter;
-} elseif (!$financeCrossMovementScope && function_exists('access_user_cash_account_ids') && !access_is_company_master()) {
+}
+if (!$noBankFilter && $bankFilter <= 0 && !$financeCrossMovementScope && function_exists('access_user_cash_account_ids') && !access_is_company_master()) {
   $allowedBankIds = access_user_cash_account_ids($pdo, $cid);
   if (!$allowedBankIds) {
     $where[] = '0=1';
@@ -457,7 +466,12 @@ $saldoFinalPeriodo = round($saldoInicialPeriodo + $saldoMovPeriodo, 2);
 // bater com o total. Mostra à parte o que não pertence a um banco ativo
 // (lançamentos sem Caixa/Banco e contas inativas com movimento).
 $saldoPorConta = [];
-if ($bankFilter <= 0) {
+if ($noBankFilter) {
+  $nbSigned = "CASE WHEN m.type='CREDITO' THEN m.amount WHEN m.type='DEBITO' THEN -m.amount ELSE 0 END";
+  $nb = finance_query_one($pdo, "SELECT COALESCE(SUM(CASE WHEN m.movement_date < ? THEN $nbSigned ELSE 0 END),0) AS antes, COALESCE(SUM(CASE WHEN m.movement_date >= ? THEN $nbSigned ELSE 0 END),0) AS periodo FROM finance_movements m LEFT JOIN finance_bank_accounts b ON b.company_id=m.company_id AND b.id=m.bank_account_id WHERE m.company_id=? AND b.id IS NULL AND m.movement_date <= ? AND (m.status IS NULL OR m.status='' OR m.status='ATIVO')", [$ini, $ini, $cid, $fim]) ?: [];
+  $saldoInicialPeriodo = round((float)($nb['antes'] ?? 0), 2);
+  $saldoFinalPeriodo = round($saldoInicialPeriodo + (float)($nb['periodo'] ?? 0), 2);
+} elseif ($bankFilter <= 0) {
   $signed = "CASE WHEN m.type='CREDITO' THEN m.amount WHEN m.type='DEBITO' THEN -m.amount ELSE 0 END";
   $activeMov = "(m.status IS NULL OR m.status='' OR m.status='ATIVO')";
   $accSql = 'SELECT b.id, b.name, b.active, b.initial_balance, COUNT(m.id) AS qtd,'
@@ -482,7 +496,9 @@ if ($bankFilter <= 0) {
     $noBank = finance_query_one($pdo, "SELECT COUNT(*) AS qtd, COALESCE(SUM(CASE WHEN m.movement_date < ? THEN $signed ELSE 0 END),0) AS antes, COALESCE(SUM(CASE WHEN m.movement_date >= ? THEN $signed ELSE 0 END),0) AS periodo FROM finance_movements m LEFT JOIN finance_bank_accounts b ON b.company_id=m.company_id AND b.id=m.bank_account_id WHERE m.company_id=? AND b.id IS NULL AND m.movement_date <= ? AND $activeMov", [$ini, $ini, $cid, $fim]) ?: [];
     if ((int)($noBank['qtd'] ?? 0) > 0) {
       $ini0 = round((float)$noBank['antes'], 2);
-      $saldoPorConta[] = ['name' => 'Sem Caixa/Banco informado', 'extra' => true, 'ini' => $ini0, 'fim' => round($ini0 + (float)$noBank['periodo'], 2)];
+      $nbUrl = 'financeiro_movimentos.php?' . http_build_query(['ini' => $ini, 'fim' => $fim, 'bank_account_id' => -1]);
+      if ($financeCrossContext && function_exists('multi_company_context_url')) $nbUrl = multi_company_context_url($nbUrl);
+      $saldoPorConta[] = ['name' => 'Sem Caixa/Banco informado', 'url' => $nbUrl, 'extra' => true, 'ini' => $ini0, 'fim' => round($ini0 + (float)$noBank['periodo'], 2)];
     }
   }
   $saldoInicialPeriodo = round(array_sum(array_column($saldoPorConta, 'ini')), 2);
@@ -492,6 +508,7 @@ if ($bankFilter <= 0) {
 $filterArgs = ['ini' => $ini, 'fim' => $fim];
 if ($typeFilter !== '') $filterArgs['type'] = $typeFilter;
 if ($bankFilter > 0) $filterArgs['bank_account_id'] = $bankFilter;
+if ($noBankFilter) $filterArgs['bank_account_id'] = -1;
 if ($statusFilter !== 'ATIVO') $filterArgs['status'] = $statusFilter;
 if ($q !== '') $filterArgs['q'] = $q;
 $listUrl = 'financeiro_movimentos.php' . ($filterArgs ? '?' . http_build_query($filterArgs) : '');
@@ -612,11 +629,11 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
     <thead><tr><th style="text-align:left;padding:4px 6px">Caixa/Banco</th><th style="text-align:right;padding:4px 6px">Saldo inicial</th><th style="text-align:right;padding:4px 6px">Saldo final</th></tr></thead>
     <tbody>
     <?php foreach ($saldoPorConta as $sc): ?>
-      <tr style="border-top:1px solid rgba(2,6,23,.08)<?= $sc['extra'] ? ';color:#b45309;font-weight:700' : '' ?>"><td style="padding:4px 6px"><?= finance_h($sc['name']) ?></td><td style="text-align:right;padding:4px 6px">R$ <?= finance_money_br($sc['ini']) ?></td><td style="text-align:right;padding:4px 6px">R$ <?= finance_money_br($sc['fim']) ?></td></tr>
+      <tr style="border-top:1px solid rgba(2,6,23,.08)<?= $sc['extra'] ? ';color:#b45309;font-weight:700' : '' ?>"><td style="padding:4px 6px"><?php if (!empty($sc['url'])): ?><a href="<?= finance_h($sc['url']) ?>" style="color:inherit"><?= finance_h($sc['name']) ?></a><?php else: ?><?= finance_h($sc['name']) ?><?php endif; ?></td><td style="text-align:right;padding:4px 6px">R$ <?= finance_money_br($sc['ini']) ?></td><td style="text-align:right;padding:4px 6px">R$ <?= finance_money_br($sc['fim']) ?></td></tr>
     <?php endforeach; ?>
     </tbody>
   </table>
-  <?php if ($temExtra): ?><div class="finance-muted" style="font-size:12px;margin-top:4px">As linhas em destaque entram no total de "Todos", mas não aparecem quando você filtra um banco. Para corrigir, informe o Caixa/Banco nesses lançamentos ou reative a conta.</div><?php endif; ?>
+  <?php if ($temExtra): ?><div class="finance-muted" style="font-size:12px;margin-top:4px">As linhas em destaque entram no total de "Todos", mas não aparecem quando você filtra um banco. Clique em "Sem Caixa/Banco informado" para ver os lançamentos<?php if (!$financeCrossContext && function_exists('access_is_company_master') && access_is_company_master()): ?> ou corrija de uma vez em <a href="utilitarios_financeiro_sem_banco.php">Utilitários &gt; Lançamentos sem Caixa/Banco</a><?php endif; ?>.</div><?php endif; ?>
 </details>
 <?php endif; ?>
 
@@ -625,7 +642,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div><label>Data final</label><input type="date" name="fim" value="<?= finance_h($fim) ?>"></div>
   <div><label>Tipo</label><select name="type"><option value="">Todos</option><option value="CREDITO" <?= $typeFilter==='CREDITO'?'selected':'' ?>>Créditos</option><option value="DEBITO" <?= $typeFilter==='DEBITO'?'selected':'' ?>>Débitos</option></select></div>
   <div><label>Status</label><select name="status"><option value="ATIVO" <?= $statusFilter==='ATIVO'?'selected':'' ?>>Ativos</option><option value="CANCELADO" <?= $statusFilter==='CANCELADO'?'selected':'' ?>>Cancelados</option><option value="" <?= $statusFilter===''?'selected':'' ?>>Todos</option></select></div>
-  <div><label>Caixa/Banco</label><select name="bank_account_id"><option value="">Todos</option><?php foreach($banks as $bank): ?><option value="<?= (int)$bank['id'] ?>" <?= $bankFilter===(int)$bank['id']?'selected':'' ?>><?= finance_h($bank['name'] ?? '') ?></option><?php endforeach; ?></select></div>
+  <div><label>Caixa/Banco</label><select name="bank_account_id"><option value="">Todos</option><?php foreach($banks as $bank): ?><option value="<?= (int)$bank['id'] ?>" <?= $bankFilter===(int)$bank['id']?'selected':'' ?>><?= finance_h($bank['name'] ?? '') ?></option><?php endforeach; ?><?php if ($canSeeNoBank): ?><option value="-1" <?= $noBankFilter?'selected':'' ?>>Sem Caixa/Banco informado</option><?php endif; ?></select></div>
   <div class="history"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento, pessoa, plano ou motivo"></div>
   <div class="finance-filter-actions"><button class="btn">Filtrar</button><a class="btn" href="<?= finance_h($clearUrl) ?>">Limpar</a></div>
 </form><script src="/assets/nexa-lembrar-filtros.js?v=1"></script></div>
@@ -719,7 +736,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
   <div><label>Valor</label><input name="amount" inputmode="decimal" value="<?= finance_money_br($edit['amount'] ?? 0) ?>" required></div>
   <div><label>Nº documento</label><input name="document_number" value="<?= finance_h($edit['document_number'] ?? '') ?>"></div>
   <div class="nexa-movement-search-field"><label>Pessoa</label><select name="person_id" id="nexaMovementPerson"><?php finance_select_options($people, $edit['person_id'] ?? '', 'Opcional'); ?></select></div>
-  <div class="nexa-movement-search-field"><label>Conta/Caixa</label><select name="bank_account_id" id="nexaMovementBank"><?php finance_select_options($banks, $edit['bank_account_id'] ?? '', 'Opcional'); ?></select></div>
+  <div class="nexa-movement-search-field"><label>Conta/Caixa *</label><select name="bank_account_id" id="nexaMovementBank" required><?php finance_select_options($banks, $edit['bank_account_id'] ?? '', 'Selecione'); ?></select></div>
   <div class="nexa-movement-search-field"><label>Plano de contas *</label><select name="chart_account_id" id="nexaMovementChart" required><?php finance_select_options($charts, $edit['chart_account_id'] ?? '', 'Selecione conta analítica'); ?></select></div>
   <div class="nexa-movement-search-field"><label>Centro de custo</label><select name="cost_center_id" id="nexaMovementCost"><?php finance_select_options($costs, $edit['cost_center_id'] ?? '', 'Opcional'); ?></select></div>
   <div class="nexa-movement-full"><label>Histórico</label><input name="description" value="<?= finance_h($edit['description'] ?? '') ?>"></div></div></div><div class="finance-form-section"><h3>Observações</h3><textarea name="notes" rows="3"><?= finance_h($edit['notes'] ?? '') ?></textarea></div><?php if($editId && $edit): ?><div class="finance-form-section"><h3>Origem</h3><div class="finance-form-grid three"><div><label>Origem</label><input readonly value="<?= finance_h($edit['origin_type'] ?? 'MANUAL') ?>"></div><div><label>ID origem</label><input readonly value="<?= finance_h($edit['origin_id'] ?? '') ?>"></div><div><label>Status</label><input readonly value="<?= finance_h($edit['status'] ?? 'ATIVO') ?>"></div></div></div><?php endif; ?><div class="finance-form-actions"><a class="btn" href="<?= finance_h($listUrl) ?>">Cancelar</a><button class="btn btn-primary"><?= $editId ? 'Salvar alterações' : 'Lançar movimento' ?></button></div></form></div></div>

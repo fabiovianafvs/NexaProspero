@@ -825,7 +825,7 @@ if (!function_exists('receivable_payment_editor')) {
     if (!$paymentMethods) {
       echo '<div class="settlement-payment-legacy">';
       echo '<div><label>Meio pagamento</label><input name="payment_method" placeholder="Pix, dinheiro, cartão..."></div>';
-      echo '<div><label>Conta/Caixa</label><select name="bank_account_id">'; finance_select_options($banks, '', 'Opcional'); echo '</select></div>';
+      echo '<div><label>Conta/Caixa</label><select name="bank_account_id">'; finance_select_options($banks, '', 'Caixa/Banco padrão'); echo '</select></div>';
       echo '</div>';
       return;
     }

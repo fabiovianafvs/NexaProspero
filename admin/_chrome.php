@@ -395,6 +395,7 @@ function admin_topbar(string $title, string $active=''): void {
       'manutencao_tributacoes' => ['Manutenção de Tributações', 'utilitarios_manutencao_tributacoes.php'],
       'recuperar_vendedores' => ['Recuperar Vendedores de Vendas', 'utilitarios_recuperar_vendedores.php'],
       'regularizacao_nfe_rejeitada' => ['Regularização de NF-e rejeitada', 'utilitarios_regularizacao_nfe.php'],
+      'financeiro_sem_banco' => ['Lançamentos sem Caixa/Banco', 'utilitarios_financeiro_sem_banco.php'],
     ]],
     'params'     => ['Configurações','parametros.php', [
       'params' => ['Configurações gerais', 'parametros.php'],
@@ -476,7 +477,7 @@ function admin_topbar(string $title, string $active=''): void {
               $childKey = (string)$childKey;
               $allowed = false;
               // Disponibilizar apenas ao administrador da propria empresa, sem F11.
-              if ($childKey === 'regularizacao_nfe_rejeitada') {
+              if ($childKey === 'regularizacao_nfe_rejeitada' || $childKey === 'financeiro_sem_banco') {
                 $allowed = !$isCrossV11_25 && function_exists('access_is_company_master') && access_is_company_master();
                 if ($allowed) $children[$childKey] = $child;
                 continue;

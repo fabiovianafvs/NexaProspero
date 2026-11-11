@@ -194,7 +194,7 @@ if (!function_exists('voucher_settle_customer_return')) {
     if ($chartId <= 0) throw new RuntimeException('Configure um plano de contas de débito para registrar a devolução em dinheiro.');
     $description = 'Devolução de cliente - documento #' . $docNo;
     $pdo->prepare("INSERT INTO finance_movements (company_id,movement_date,type,person_id,chart_account_id,cost_center_id,bank_account_id,origin_type,origin_id,description,document_number,amount,notes) VALUES (?,CURDATE(),'DEBITO',?,?,NULL,?,'DEVOLUCAO_CLIENTE',?,?,?,?,?)")
-      ->execute([$companyId,$personId,$chartId,$bankId ?: null,$documentId,$description,$docNo,$amount,$notes !== '' ? $notes : null]);
+      ->execute([$companyId,$personId,$chartId,finance_movement_bank($pdo,$companyId,$bankId),$documentId,$description,$docNo,$amount,$notes !== '' ? $notes : null]);
     $movementId = (int)$pdo->lastInsertId();
     $pdo->prepare("INSERT INTO gestao_cash_operations (company_id,cash_session_id,user_id,type,amount,bank_account_id,chart_account_id,cost_center_id,movement_id,order_id,description,notes) VALUES (?,?,?,'ESTORNO',?,?,?,NULL,?,NULL,?,?)")
       ->execute([$companyId,$session ? (int)$session['id'] : null,$userId ?: null,$amount,$bankId ?: null,$chartId,$movementId,$description,$notes !== '' ? $notes : null]);

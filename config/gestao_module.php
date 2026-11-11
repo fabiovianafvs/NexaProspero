@@ -822,7 +822,7 @@ if (!function_exists('gestao_create_cash_operation')) {
     if ($amount > 0 && $chartId) {
       $movType = in_array($type, ['SANGRIA'], true) ? 'DEBITO' : 'CREDITO';
       $st = $pdo->prepare('INSERT INTO finance_movements (company_id, movement_date, type, person_id, chart_account_id, cost_center_id, bank_account_id, origin_type, origin_id, description, document_number, amount, notes) VALUES (?, CURDATE(), ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-      $st->execute([$companyId, $movType, $chartId, $costId ?: null, $bankId ?: null, 'CAIXA_' . $type, $sessionId, $description, $orderId ? (string)$orderId : '', $amount, $notes !== '' ? $notes : null]);
+      $st->execute([$companyId, $movType, $chartId, $costId ?: null, finance_movement_bank($pdo, $companyId, $bankId), 'CAIXA_' . $type, $sessionId, $description, $orderId ? (string)$orderId : '', $amount, $notes !== '' ? $notes : null]);
       $movementId = (int)$pdo->lastInsertId();
     }
     $st = $pdo->prepare('INSERT INTO gestao_cash_operations (company_id, cash_session_id, user_id, type, amount, bank_account_id, chart_account_id, cost_center_id, movement_id, order_id, description, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -1968,7 +1968,7 @@ Ref.: " . $addressReference);
           $receivableId = $receivableIds[0] ?? null;
         } else {
           $pdo->prepare("INSERT INTO finance_movements (company_id, movement_date, type, person_id, chart_account_id, cost_center_id, bank_account_id, origin_type, origin_id, description, document_number, amount, notes) VALUES (?, CURDATE(), 'CREDITO', ?, ?, ?, ?, 'PEDIDO', ?, ?, ?, ?, ?)")
-            ->execute([$companyId, $customerId ?: null, $chartId, $costId ?: null, $bankId ?: null, $orderId, 'Venda PDV #' . $orderNumber . ' - ' . (string)$payment['name'], (string)$orderNumber, $amount, $notes ?: null]);
+            ->execute([$companyId, $customerId ?: null, $chartId, $costId ?: null, finance_movement_bank($pdo, $companyId, $bankId), $orderId, 'Venda PDV #' . $orderNumber . ' - ' . (string)$payment['name'], (string)$orderNumber, $amount, $notes ?: null]);
           $movementId = (int)$pdo->lastInsertId();
           if ($session && !empty($payment['affects_cash'])) {
             gestao_create_cash_operation($pdo, $companyId, $userId, (int)$session['id'], 'VENDA', $amount, $bankId ?: null, null, $costId ?: null, 'Venda PDV #' . $orderNumber . ' - ' . (string)$payment['name'], '', $orderId);

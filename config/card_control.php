@@ -232,12 +232,12 @@ if (!function_exists('card_control_settle_installments')) {
         $descBase='Recebimento cartão Pedido #'.$orderId.' '.$parc.'/'.$tot.' - '.trim((string)($row['payment_name']??'Cartão'));
         $creditAmount=($fee>0 && $feeChart>0)?$gross:$net;
         $pdo->prepare("INSERT INTO finance_movements (company_id,movement_date,type,person_id,chart_account_id,cost_center_id,bank_account_id,origin_type,origin_id,description,document_number,amount,notes) VALUES (?,?,'CREDITO',?,?,?,?,'CARTAO',?,?,?,?,?)")
-          ->execute([$companyId,$paymentDate,(int)($row['person_id']??0)?:null,$chartId,$costId?:null,$bankId,$installmentId,$descBase,(string)$orderId,$creditAmount,$notes?:null]);
+          ->execute([$companyId,$paymentDate,(int)($row['person_id']??0)?:null,$chartId,$costId?:null,finance_movement_bank($pdo,$companyId,$bankId),$installmentId,$descBase,(string)$orderId,$creditAmount,$notes?:null]);
         $creditMovementId=(int)$pdo->lastInsertId();
         $feeMovementId=null;
         if($fee>0 && $feeChart>0){
           $pdo->prepare("INSERT INTO finance_movements (company_id,movement_date,type,person_id,chart_account_id,cost_center_id,bank_account_id,origin_type,origin_id,description,document_number,amount,notes) VALUES (?,?,'DEBITO',?,?,?,?,'CARTAO_TAXA',?,?,?,?,?)")
-            ->execute([$companyId,$paymentDate,(int)($row['person_id']??0)?:null,$feeChart,$costId?:null,$bankId,$installmentId,'Taxa de cartão Pedido #'.$orderId.' '.$parc.'/'.$tot,(string)$orderId,$fee,$notes?:null]);
+            ->execute([$companyId,$paymentDate,(int)($row['person_id']??0)?:null,$feeChart,$costId?:null,finance_movement_bank($pdo,$companyId,$bankId),$installmentId,'Taxa de cartão Pedido #'.$orderId.' '.$parc.'/'.$tot,(string)$orderId,$fee,$notes?:null]);
           $feeMovementId=(int)$pdo->lastInsertId();
         }
         $pdo->prepare("UPDATE finance_card_installments SET status='RECEBIDO',payment_date=?,received_at=NOW(),bank_account_id=?,credit_movement_id=?,fee_movement_id=?,settled_by=?,settlement_notes=?,updated_at=NOW() WHERE company_id=? AND id=?")

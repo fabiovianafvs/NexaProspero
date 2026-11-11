@@ -14,11 +14,11 @@ $pageLower = strtolower($page);
 
 // Utilitarios: ativacao fiscal sensivel, exclusivamente pela empresa do login.
 // Nao permitir perfil comum ou empresa selecionada pelo F11.
-if ($pageLower === 'utilitarios_regularizacao_nfe.php') {
+if ($pageLower === 'utilitarios_regularizacao_nfe.php' || $pageLower === 'utilitarios_financeiro_sem_banco.php') {
   $cross = defined('MULTI_COMPANY_CONTEXT_VALID') && MULTI_COMPANY_CONTEXT_VALID === true
     && defined('MULTI_COMPANY_CONTEXT_ID') && (int)MULTI_COMPANY_CONTEXT_ID !== (int)COMPANY_ID;
   if ($cross || !function_exists('access_is_company_master') || !access_is_company_master()) {
-    access_render_denied('Esta configuracao fiscal e exclusiva do administrador da empresa de entrada e nao pode ser alterada pelo F11.');
+    access_render_denied($pageLower === 'utilitarios_financeiro_sem_banco.php' ? 'Este utilitario e exclusivo do administrador da empresa de entrada e nao pode ser usado pelo F11.' : 'Esta configuracao fiscal e exclusiva do administrador da empresa de entrada e nao pode ser alterada pelo F11.');
   }
   return;
 }

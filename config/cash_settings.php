@@ -26,6 +26,7 @@ if (!function_exists('nexa_cash_settings_defaults')) {
       'chart_transfer_in' => 0,
       'chart_sangria' => 0,
       'chart_aporte' => 0,
+      'default_bank_account_id' => 0,
     ];
   }
 }
@@ -39,7 +40,7 @@ if (!function_exists('nexa_cash_settings')) {
     try {
       $stored = config_store_get($pdo, $companyId, 'cash_settings') ?: [];
       $cfg['disable_user_cash'] = !empty($stored['disable_user_cash']);
-      foreach (['chart_transfer_out', 'chart_transfer_in', 'chart_sangria', 'chart_aporte'] as $k) {
+      foreach (['chart_transfer_out', 'chart_transfer_in', 'chart_sangria', 'chart_aporte', 'default_bank_account_id'] as $k) {
         $cfg[$k] = max(0, (int)($stored[$k] ?? 0));
       }
     } catch (Throwable $e) {
@@ -53,7 +54,7 @@ if (!function_exists('nexa_cash_settings_save')) {
   function nexa_cash_settings_save(PDO $pdo, int $companyId, array $changes): array {
     $cfg = array_merge(nexa_cash_settings($pdo, $companyId, true), array_intersect_key($changes, nexa_cash_settings_defaults()));
     $cfg['disable_user_cash'] = !empty($cfg['disable_user_cash']);
-    foreach (['chart_transfer_out', 'chart_transfer_in', 'chart_sangria', 'chart_aporte'] as $k) $cfg[$k] = max(0, (int)$cfg[$k]);
+    foreach (['chart_transfer_out', 'chart_transfer_in', 'chart_sangria', 'chart_aporte', 'default_bank_account_id'] as $k) $cfg[$k] = max(0, (int)$cfg[$k]);
     config_store_set($pdo, $companyId, 'cash_settings', $cfg);
     return nexa_cash_settings($pdo, $companyId, true);
   }

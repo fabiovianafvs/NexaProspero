@@ -478,7 +478,7 @@ if (!function_exists('bank_recon_create_movement')) {
     $pdo->beginTransaction();
     try {
       $st=$pdo->prepare('INSERT INTO finance_movements (company_id,movement_date,type,person_id,chart_account_id,cost_center_id,bank_account_id,origin_type,origin_id,description,document_number,amount,notes,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,\'ATIVO\')');
-      $st->execute([$companyId,(string)$item['posted_date'],$direction,$personId,$chartId,$costId,$bankId,'OFX',$itemId,$description,$document ?: null,abs((float)$item['amount']),$notes]);
+      $st->execute([$companyId,(string)$item['posted_date'],$direction,$personId,$chartId,$costId,finance_movement_bank($pdo,$companyId,$bankId),'OFX',$itemId,$description,$document ?: null,abs((float)$item['amount']),$notes]);
       $movementId=(int)$pdo->lastInsertId();
       bank_recon_mark_reconciled($pdo,$companyId,$itemId,'MOVIMENTO_DIRETO','MOVIMENTO',$movementId,null,$movementId,$userId);
       $pdo->commit();

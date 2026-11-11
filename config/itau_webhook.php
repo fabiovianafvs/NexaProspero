@@ -299,7 +299,7 @@ if (!function_exists('itau_webhook_create_bank_fee_movement')) {
         if(trim($description)!=='')$desc.=' · '.trim($description);
         $notes='Tarifa descontada pelo Itaú na liquidação da cobrança #'.$chargeId.'.';
         $ins=$pdo->prepare("INSERT INTO finance_movements (company_id,movement_date,type,person_id,chart_account_id,cost_center_id,bank_account_id,origin_type,origin_id,description,document_number,amount,notes,status) VALUES (?,?,'DEBITO',NULL,?,?,?,'BOLETO_TARIFA',?,?,?,?,?,'ATIVO')");
-        $ins->execute([$companyId,$date,(int)$chart['id'],(int)($title['cost_center_id']??0)?:null,$bankId,$chargeId,$desc,(string)($title['document_number']??''),$fee,$notes]);
+        $ins->execute([$companyId,$date,(int)$chart['id'],(int)($title['cost_center_id']??0)?:null,finance_movement_bank($pdo,$companyId,$bankId),$chargeId,$desc,(string)($title['document_number']??''),$fee,$notes]);
         return (int)$pdo->lastInsertId();
     }
 }
