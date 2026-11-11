@@ -132,6 +132,18 @@ done
 mysql "$HML_DB" -e "UPDATE companies SET custom_domain=NULL WHERE LOWER(custom_domain)='$HML_HOST';
                     UPDATE companies SET custom_domain='$HML_HOST' WHERE slug='$TEST_COMPANY_SLUG';"
 
+# Endereços extras de homologação (adicionar_endereco_homologacao.sh): refaz o vínculo
+# endereço -> empresa na cópia nova do banco.
+if [ -f /etc/nexa/homolog_enderecos.conf ]; then
+  while read -r extra_host extra_slug _; do
+    [[ "$extra_host" =~ ^[a-z0-9-]+\.nexaprospero\.com\.br$ ]] || continue
+    [[ "$extra_slug" =~ ^[a-z0-9-]+$ ]] || continue
+    mysql "$HML_DB" -e "UPDATE companies SET custom_domain=NULL WHERE LOWER(custom_domain)='$extra_host';
+                        UPDATE companies SET custom_domain='$extra_host' WHERE slug='$extra_slug';"
+    ok "Endereço extra: $extra_host -> $extra_slug"
+  done < /etc/nexa/homolog_enderecos.conf
+fi
+
 restantes=0
 for t in fiscal_company_config finance_bank_billing_configs finance_bank_credentials finance_bank_services \
          inter_pix_config pagbank_config saas_reseller_pagbank_config; do
