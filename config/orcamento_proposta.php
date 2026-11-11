@@ -157,11 +157,12 @@ if (!function_exists('orc_proposta_data')) {
 
 if (!function_exists('orc_proposta_logo_file')) {
   /**
-   * Logo da empresa recortada (sem a margem branca/transparente em volta) e em JPEG
-   * com fundo branco, para ocupar todo o quadro do cabeçalho. Fica em cache em
-   * uploads/logos/. Sem GD ou em erro, devolve o arquivo original. '' = sem logo.
+   * Logo da empresa recortada (sem a margem branca/transparente em volta), para ocupar
+   * todo o quadro do cabeçalho. Sem perda de qualidade: PNG com o mesmo pixel do
+   * original. $forPdf = PNG com fundo branco (o gerador de PDF não aceita transparência).
+   * Cache em uploads/logos/. Sem GD ou em erro, devolve o arquivo original. '' = sem logo.
    */
-  function orc_proposta_logo_file(int $companyId): string {
+  function orc_proposta_logo_file(int $companyId, bool $forPdf = false): string {
     if ($companyId <= 0) return '';
     try {
       if (!function_exists('load_business_config')) { $f = __DIR__ . '/load_config.php'; if (is_file($f)) require_once $f; }
@@ -172,40 +173,45 @@ if (!function_exists('orc_proposta_logo_file')) {
       $dir = __DIR__ . '/../uploads/logos/';
       $src = $dir . $file;
       if ($file === '' || !is_file($src)) return '';
-      if (!function_exists('imagecreatefromstring')) return $src;
-      $cache = $dir . 'proposta-' . md5($file . '|' . (string)filemtime($src) . '|v1') . '.jpg';
+      if (!function_exists('imagecreatefromstring') || preg_match('/\.svg$/i', $file)) return $forPdf ? '' : $src;
+      $cache = $dir . 'proposta-' . md5($file . '|' . (string)filemtime($src) . '|v2' . ($forPdf ? '|pdf' : '')) . '.png';
       if (is_file($cache)) return $cache;
       $im = @imagecreatefromstring((string)file_get_contents($src));
       if (!$im) return $src;
+      if (!imageistruecolor($im)) imagepalettetotruecolor($im);
       $w = imagesx($im); $h = imagesy($im);
-      $flat = imagecreatetruecolor($w, $h);
-      imagefill($flat, 0, 0, imagecolorallocate($flat, 255, 255, 255));
-      imagecopy($flat, $im, 0, 0, 0, 0, $w, $h);
-      imagedestroy($im);
-      // Procura a área com desenho (pixels que não são quase brancos).
-      $step = max(1, (int)floor(max($w, $h) / 800));
+      // Área com desenho: pixel visível (não transparente) e que não seja quase branco.
       $minX = $w; $minY = $h; $maxX = -1; $maxY = -1;
+      $step = max(1, (int)floor(sqrt(($w * $h) / 4000000)));
       for ($y = 0; $y < $h; $y += $step) {
         for ($x = 0; $x < $w; $x += $step) {
-          $c = imagecolorat($flat, $x, $y);
-          if ((($c >> 16) & 255) < 235 || (($c >> 8) & 255) < 235 || ($c & 255) < 235) {
-            if ($x < $minX) $minX = $x; if ($x > $maxX) $maxX = $x;
-            if ($y < $minY) $minY = $y; if ($y > $maxY) $maxY = $y;
-          }
+          $c = imagecolorat($im, $x, $y);
+          if ((($c >> 24) & 127) > 100) continue;
+          if ((($c >> 16) & 255) > 238 && (($c >> 8) & 255) > 238 && ($c & 255) > 238) continue;
+          if ($x < $minX) $minX = $x; if ($x > $maxX) $maxX = $x;
+          if ($y < $minY) $minY = $y; if ($y > $maxY) $maxY = $y;
         }
       }
-      if ($maxX >= $minX && $maxY >= $minY) {
-        $pad = (int)ceil(max($maxX - $minX, $maxY - $minY) * 0.02) + $step;
-        $minX = max(0, $minX - $pad); $minY = max(0, $minY - $pad);
-        $maxX = min($w - 1, $maxX + $pad); $maxY = min($h - 1, $maxY + $pad);
-        $cw = $maxX - $minX + 1; $ch = $maxY - $minY + 1;
-        $crop = imagecreatetruecolor($cw, $ch);
-        imagecopy($crop, $flat, 0, 0, $minX, $minY, $cw, $ch);
-        imagedestroy($flat);
-        $flat = $crop;
+      if ($maxX < $minX || $maxY < $minY) { $minX = 0; $minY = 0; $maxX = $w - 1; $maxY = $h - 1; }
+      $pad = (int)ceil(max($maxX - $minX, $maxY - $minY) * 0.02) + $step;
+      $minX = max(0, $minX - $pad); $minY = max(0, $minY - $pad);
+      $maxX = min($w - 1, $maxX + $pad); $maxY = min($h - 1, $maxY + $pad);
+      $cw = $maxX - $minX + 1; $ch = $maxY - $minY + 1;
+      $out = imagecreatetruecolor($cw, $ch);
+      if ($forPdf) {
+        imagefill($out, 0, 0, imagecolorallocate($out, 255, 255, 255));
+        imagealphablending($out, true);
+        imagecopy($out, $im, 0, 0, $minX, $minY, $cw, $ch);
+        imagesavealpha($out, false);
+      } else {
+        imagealphablending($out, false);
+        imagesavealpha($out, true);
+        imagefill($out, 0, 0, imagecolorallocatealpha($out, 255, 255, 255, 127));
+        imagecopy($out, $im, 0, 0, $minX, $minY, $cw, $ch);
       }
-      $ok = @imagejpeg($flat, $cache, 92);
-      imagedestroy($flat);
+      imagedestroy($im);
+      $ok = @imagepng($out, $cache, 6);
+      imagedestroy($out);
       return $ok ? $cache : $src;
     } catch (Throwable $e) {
       return '';
@@ -242,7 +248,7 @@ if (!function_exists('orc_proposta_pdf_build')) {
     $pdf->Rect($m, $top, $W, $h);
     $pdf->Line($m + 52, $top, $m + 52, $top + $h);
     $pdf->Line($m + 128, $top, $m + 128, $top + $h);
-    $logo = orc_proposta_logo_file($companyId);
+    $logo = orc_proposta_logo_file($companyId, true);
     if ($logo !== '' && !preg_match('/\\.(jpe?g|png)$/i', $logo)) $logo = '';
     if ($logo !== '') {
       try {
