@@ -30,7 +30,7 @@ try {
   }
 } catch (Throwable $e) {
   http_response_code(422);
-  ?><!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Boleto indisponível</title><style>body{font-family:Arial,sans-serif;background:#f6f8fc;margin:0;padding:24px;color:#0f172a}.box{max-width:760px;margin:50px auto;background:#fff;border:1px solid #fecaca;border-radius:20px;padding:22px}.btn{display:inline-block;margin-top:14px;padding:10px 14px;border-radius:12px;background:#0b1f5b;color:#fff;text-decoration:none;font-weight:800}</style></head><body><div class="box"><h2>Boleto indisponível</h2><p><?= boleto_document_h($e->getMessage()) ?></p><a class="btn" href="<?= boleto_document_h($returnTo) ?>">Voltar</a></div></body></html><?php
+  ?><!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Boleto indisponível</title><style>body{font-family:Arial,sans-serif;background:#f6f8fc;margin:0;padding:24px;color:#0f172a}.box{max-width:760px;margin:50px auto;background:#fff;border:1px solid #fecaca;border-radius:20px;padding:22px}.btn{display:inline-block;margin-top:14px;padding:10px 14px;border-radius:12px;background:#0b1f5b;color:#fff;text-decoration:none;font-weight:800}</style></head><body><div class="box"><h2>Boleto indisponível</h2><p><?= boleto_document_h($e->getMessage()) ?></p><a class="btn" href="<?= boleto_document_h($returnTo) ?>" onclick="window.close();var u=this.href;setTimeout(function(){location.href=u;},300);return false;">Voltar</a></div></body></html><?php
   exit;
 }
 
@@ -55,7 +55,7 @@ if ($isItau || $isSicoob) {
   <!doctype html>
   <html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Boleto <?= $isItau ? 'Itaú' : 'Sicoob' ?> #<?= (int)($data['receivable_id'] ?? 0) ?></title>
   <style>*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column}.toolbar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:12px;background:#0b1f5b}.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;text-decoration:none;font-weight:900;cursor:pointer}.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}iframe{flex:1;width:100%;border:0;background:#fff}</style></head><body>
-  <div class="toolbar"><a class="btn primary" href="<?= boleto_document_h($pdfUrl) ?>" target="_blank">Abrir PDF para imprimir</a><a class="btn" href="<?= boleto_document_h($returnTo) ?>">Voltar</a></div>
+  <div class="toolbar"><a class="btn primary" href="<?= boleto_document_h($pdfUrl) ?>" target="_blank">Abrir PDF para imprimir</a><a class="btn" href="<?= boleto_document_h($returnTo) ?>" onclick="window.close();var u=this.href;setTimeout(function(){location.href=u;},300);return false;">Voltar</a></div>
   <iframe src="<?= boleto_document_h($pdfUrl) ?>" title="Boleto"></iframe>
   </body></html>  <?php
   exit;
@@ -71,7 +71,7 @@ if ($isItau || $isSicoob) {
 </style>
 </head>
 <body>
-<div class="toolbar"><button class="btn primary" type="button" onclick="window.print()">Imprimir</button><a class="btn" href="<?= boleto_document_h($pdfUrl) ?>" target="_blank">Abrir PDF</a><a class="btn" href="<?= boleto_document_h($returnTo) ?>">Voltar</a></div>
+<div class="toolbar"><button class="btn primary" type="button" onclick="window.print()">Imprimir</button><a class="btn" href="<?= boleto_document_h($pdfUrl) ?>" target="_blank">Abrir PDF</a><a class="btn" href="<?= boleto_document_h($returnTo) ?>" onclick="window.close();var u=this.href;setTimeout(function(){location.href=u;},300);return false;">Voltar</a></div>
 <main class="sheet">
   <section class="boleto">
     <div class="header"><div class="bank"><?php if($isSicoob): ?><div class="bank-brand"><svg class="sicoob-brand-svg" viewBox="0 0 220 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sicoob"><rect x="0" y="9" width="42" height="42" rx="4" fill="#007a5e"/><text x="21" y="37" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="700" fill="#ffffff">S</text><text x="54" y="39" font-family="Arial,Helvetica,sans-serif" font-size="30" font-weight="700" fill="#006b51">SICOOB</text></svg></div><?php else: ?><?= boleto_document_h($bank) ?><?php endif; ?></div><div class="bank-code"><?= boleto_document_h($bankCodeDisplay) ?></div><div class="linha"><?= boleto_document_h($data['linha_digitavel'] ?? '') ?></div></div>
