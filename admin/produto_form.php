@@ -714,9 +714,10 @@ if ($fiscalEnabled && function_exists('fiscal_product_operation_cfops')) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'save') {
   $nome = trim((string)($_POST['nome'] ?? ''));
-  // Sem Comandas/Delivery, não apaga a descrição já gravada quando o campo está oculto.
-  $descricao = $productOrderOptionsEnabled
-    ? trim((string)($_POST['descricao'] ?? ''))
+  // A descrição (catálogo de pedidos) fica sempre visível; se o campo não vier no
+  // envio, mantém a já gravada.
+  $descricao = array_key_exists('descricao', $_POST)
+    ? trim((string)$_POST['descricao'])
     : (string)($produto['descricao'] ?? '');
   $categoria = trim((string)($_POST['categoria'] ?? ''));
   $grupoProducao = trim((string)($_POST['grupo_producao'] ?? ''));
@@ -1582,11 +1583,12 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
       </datalist>
       <?php endif; ?>
 
-      <?php if ($productOrderOptionsEnabled): ?>
       <div class="row" style="grid-column:1/-1;">
-        <label>Descrição (aparece no catálogo e no detalhe)</label>
-        <textarea class="field" name="descricao" rows="4" placeholder="Ex: Mussarela, provolone, parmesão e catupiry."><?= htmlspecialchars((string)$produto['descricao']) ?></textarea>
+        <label>Descrição / observação (aparece no catálogo de pedidos e no detalhe)</label>
+        <textarea class="field" name="descricao" rows="3" placeholder="Ex: Mussarela, provolone, parmesão e catupiry."><?= htmlspecialchars((string)$produto['descricao']) ?></textarea>
       </div>
+
+      <?php if ($productOrderOptionsEnabled): ?>
 
       <div class="row" style="grid-column:1/-1;" id="adicionaisProduto">
         <label>Adicionais e escolhas do produto</label>
