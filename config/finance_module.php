@@ -790,12 +790,56 @@ if (!function_exists('finance_default_bank_account_id')) {
 }
 
 if (!function_exists('finance_movement_bank')) {
-  /** Conta do lançamento: a informada ou, se vazia, o Caixa/Banco padrão. Nunca grava sem conta quando a empresa tem alguma ativa. */
+  /**
+   * Conta do lançamento quando a rotina não informou nenhuma. Ordem:
+   *  1) caixa aberto do usuário logado (Caixa Terminal);
+   *  2) Caixa/Banco padrão do cadastro do usuário (Usuários > caixa padrão);
+   *  3) Caixa/Banco padrão da empresa (Configurações de caixa).
+   * Rotinas sem usuário (webhooks, crons) vão direto para o 3.
+   */
   function finance_movement_bank(PDO $pdo, int $companyId, $bankId): ?int {
     $bankId = (int)$bankId;
     if ($bankId > 0) return $bankId;
+    $user = finance_user_cash_bank_account_id($pdo, $companyId);
+    if ($user > 0) return $user;
     $default = finance_default_bank_account_id($pdo, $companyId);
     return $default > 0 ? $default : null;
+  }
+}
+
+if (!function_exists('finance_user_cash_bank_account_id')) {
+  /** Caixa do usuário logado nesta empresa: sessão de caixa aberta ou caixa padrão do cadastro. 0 = nenhum. */
+  function finance_user_cash_bank_account_id(PDO $pdo, int $companyId): int {
+    static $cache = [];
+    if (PHP_SAPI === 'cli' || $companyId <= 0 || !function_exists('auth_user_id')) return 0;
+    // No F11 o usuário é de outra empresa: o caixa dele não vale aqui.
+    if (!defined('COMPANY_ID') || (int)COMPANY_ID !== $companyId) return 0;
+    $userId = (int)(auth_user_id() ?? 0);
+    if ($userId <= 0) return 0;
+    $key = $companyId . ':' . $userId;
+    if (isset($cache[$key])) return $cache[$key];
+    $id = 0;
+    $active = static function (int $bid) use ($pdo, $companyId): bool {
+      if ($bid <= 0) return false;
+      $st = $pdo->prepare('SELECT 1 FROM finance_bank_accounts WHERE company_id=? AND id=? AND active=1');
+      $st->execute([$companyId, $bid]);
+      return (bool)$st->fetchColumn();
+    };
+    try {
+      $st = $pdo->prepare("SELECT bank_account_id FROM gestao_cash_sessions WHERE company_id=? AND user_id=? AND status='ABERTO' ORDER BY id DESC LIMIT 1");
+      $st->execute([$companyId, $userId]);
+      $bid = (int)($st->fetchColumn() ?: 0);
+      if ($active($bid)) $id = $bid;
+    } catch (Throwable $e) {}
+    if ($id <= 0) {
+      try {
+        $st = $pdo->prepare('SELECT default_cash_bank_account_id FROM users WHERE company_id=? AND id=? LIMIT 1');
+        $st->execute([$companyId, $userId]);
+        $bid = (int)($st->fetchColumn() ?: 0);
+        if ($active($bid)) $id = $bid;
+      } catch (Throwable $e) {}
+    }
+    return $cache[$key] = $id;
   }
 }
 

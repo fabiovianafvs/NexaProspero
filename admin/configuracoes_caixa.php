@@ -73,7 +73,7 @@ if ($cashCfgCross) echo '<div class="msg err">Estas configurações pertencem à
   <div class="finance-card"><div class="finance-muted">Para exigir abertura e fechamento de caixa de um usuário, marque <b>Ativar Caixa Terminal</b> no cadastro dele em Usuários. Os demais usuários vendem e lançam sem abrir caixa.</div></div>
 
   <div class="finance-card">
-    <div class="finance-card-head"><div><h2 class="finance-subtitle">Caixa/Banco padrão</h2><div class="finance-muted">Usado automaticamente quando um lançamento chega sem Caixa/Banco (forma de pagamento sem conta, baixa sem banco, vendas do PDV etc.). Assim nenhum movimento fica sem conta.</div></div></div>
+    <div class="finance-card-head"><div><h2 class="finance-subtitle">Caixa/Banco padrão</h2><div class="finance-muted">Quando um lançamento chega sem Caixa/Banco (forma de pagamento sem conta, baixa sem banco etc.), o sistema usa, nesta ordem: o caixa aberto do usuário (Caixa Terminal), o caixa padrão do cadastro do usuário e, por último, este padrão da empresa (também usado por rotinas automáticas, como retorno de boletos). Assim nenhum movimento fica sem conta.</div></div></div>
     <div class="cashcfg-grid">
       <div class="cashcfg-option"><label>Caixa/Banco padrão *</label><select name="default_bank_account_id" required><?php finance_select_options($cashBanks, $cashDefaultBank ?: null, 'Selecione'); ?></select><small>Para vendas irem para o banco certo, informe a conta em cada forma de pagamento; este padrão é só a garantia.</small></div>
     </div>
