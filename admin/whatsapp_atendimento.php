@@ -33,9 +33,9 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-sidehead input{flex:1;border:0;border-radius:10px;padding:9px 12px;background:#fff;font:inherit}
 .waa-btn{border:1px solid #d1d7db;background:#fff;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;color:#0b1f5b;font-size:13px;white-space:nowrap}
 .waa-btn.g{background:var(--g);border-color:var(--g);color:#fff}.waa-btn.r{color:#b91c1c}.waa-btn:disabled{opacity:.5;cursor:default}
-.waa-tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+.waa-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line)}
 .waa-tab{border:0;background:#f0f2f5;border-radius:999px;padding:6px 11px;font-weight:700;font-size:12px;cursor:pointer;color:#54656f;white-space:nowrap}
-.waa-tab.on{background:#d9fdd3;color:#008069}.waa-tab b{background:var(--g);color:#fff;border-radius:999px;padding:1px 6px;margin-left:4px;font-size:11px}
+.waa-tab.on{background:#d9fdd3;color:#008069}.waa-tab b{background:var(--g);color:#fff;border-radius:999px;padding:1px 6px;margin-left:4px;font-size:11px}.waa-tab b.n{background:#8696a0}
 .waa-list{flex:1;min-height:0;overflow-y:auto}
 .waa-item{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;align-items:center}
 .waa-item:hover{background:#f5f6f6}.waa-item.on{background:#f0f2f5}
@@ -100,8 +100,8 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <button class="waa-tab on" data-tab="fila">Fila</button>
       <button class="waa-tab" data-tab="meus">Meus</button>
       <button class="waa-tab" data-tab="atendimento" title="Todas as conversas em atendimento">Atendendo</button>
-      <button class="waa-tab" data-tab="robo" title="Conversas com o robô agora">Robô</button>
-      <button class="waa-tab" data-tab="finalizados">Finalizados</button>
+      <button class="waa-tab" data-tab="robo" title="Conversas com o robô (o número conta as das últimas 24 horas)">Robô</button>
+      <button class="waa-tab" data-tab="finalizados" title="Conversas finalizadas (o número conta as de hoje)">Finalizados</button>
     </div>
     <div class="waa-list" id="waaList"><div class="waa-empty">Carregando…</div></div>
     <div class="waa-sidehead" style="justify-content:space-between"><span class="waa-rt" id="waaRt"></span><a class="waa-rt" href="whatsapp_chatbot.php">Configurar chatbot</a></div>
@@ -258,7 +258,8 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       document.querySelectorAll('.waa-tab').forEach((b) => {
         const n = d.counts[b.dataset.tab];
         b.classList.toggle('on', b.dataset.tab === tab);
-        b.innerHTML = esc(b.textContent.replace(/\d+$/, '').trim()) + (n ? ' <b>' + n + '</b>' : '');
+        const quiet = b.dataset.tab === 'robo' || b.dataset.tab === 'finalizados';
+        b.innerHTML = esc(b.textContent.replace(/\d+$/, '').trim()) + (n ? ' <b' + (quiet ? ' class="n"' : '') + '>' + n + '</b>' : '');
       });
       const fila = d.counts.fila || 0, meus = d.counts.meus || 0;
       document.title = (fila + meus > 0 ? '(' + (fila + meus) + ') ' : '') + 'Atendimento WhatsApp';

@@ -58,9 +58,13 @@ if (!function_exists('whatsapp_att_list')) {
     [$scope, $scopeParams] = whatsapp_att_scope($pdo, $companyId, $userId, $supervisor);
 
     $counts = [];
+    // Robô: conversas com movimento nas últimas 24 horas; Finalizados: encerrados hoje.
+    $countExtra = [
+      'robo' => " AND s.last_message_at >= '" . date('Y-m-d H:i:s', time() - 86400) . "'",
+      'finalizados' => " AND s.closed_at >= '" . date('Y-m-d') . " 00:00:00'",
+    ];
     foreach ($tabs as $key => [$label, $cond]) {
-      if ($key === 'finalizados' || $key === 'robo') continue;
-      $c = str_replace(':me', (string)$userId, $cond);
+      $c = str_replace(':me', (string)$userId, $cond) . ($countExtra[$key] ?? '');
       $st = $pdo->prepare("SELECT COUNT(*) FROM whatsapp_bot_sessions s WHERE s.company_id=? AND $c AND $scope");
       $st->execute(array_merge([$companyId], $scopeParams));
       $counts[$key] = (int)$st->fetchColumn();
