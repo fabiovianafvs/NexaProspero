@@ -590,6 +590,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'db480a9bbc6369e37e27d121b6b931b969ed073d527545b20c36dfd997f4b304',
         'order' => 202611110200,
       ],
+      [
+        'id' => '20261112_contatos_pessoas_v1',
+        'module' => 'contatos_pessoas',
+        'version' => 202611120100,
+        'label' => 'Contatos das pessoas',
+        'description' => 'Cria os contatos das pessoas (quem chama, contador, financeiro...) usados no cadastro de pessoas e no Atendimento WhatsApp, e liga a conversa ao contato.',
+        'file' => __DIR__ . '/../db/20261112_contatos_pessoas_v1.sql',
+        'sha256' => '13b466aafeb4fbfe141a607df721badb449f08e79700327e7c6a5f4d75a7d9c9',
+        'order' => 202611120100,
+      ],
     ];
   }
 }

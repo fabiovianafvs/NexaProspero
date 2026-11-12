@@ -114,17 +114,25 @@ if (!function_exists('whatsapp_bot_save_config')) {
     $cfg = whatsapp_bot_config($pdo, $companyId);
     $def = whatsapp_bot_defaults();
     $module = whatsapp_bot_module_enabled($pdo, $companyId);
-    $cfg['enabled'] = !empty($input['enabled']) && $module;
-    foreach (['welcome' => 1000, 'queue_text' => 1000, 'close_text' => 1000] as $k => $max) {
-      $cfg[$k] = mb_substr(trim((string)($input[$k] ?? $cfg[$k])), 0, $max) ?: $def[$k];
+    // section = 'robo' (robô e mensagens) ou 'crm': grava só aquela parte da tela.
+    $section = (string)($input['section'] ?? '');
+    if ($section !== 'crm') {
+      $cfg['enabled'] = !empty($input['enabled']) && $module;
+      foreach (['welcome' => 1000, 'queue_text' => 1000, 'close_text' => 1000] as $k => $max) {
+        $cfg[$k] = mb_substr(trim((string)($input[$k] ?? $cfg[$k])), 0, $max) ?: $def[$k];
+      }
+      // Mensagem ao aceitar pode ficar vazia (não envia nada).
+      $cfg['accept_text'] = mb_substr(trim((string)($input['accept_text'] ?? $cfg['accept_text'])), 0, 1000);
+      $cfg['sign_messages'] = !empty($input['sign_messages']);
+      $cfg['pause_hours'] = max(1, min(72, (int)($input['pause_hours'] ?? 2)));
+    } else {
+      $cfg['enabled'] = !empty($cfg['enabled']) && $module;
     }
-    // Mensagem ao aceitar pode ficar vazia (não envia nada).
-    $cfg['accept_text'] = mb_substr(trim((string)($input['accept_text'] ?? $cfg['accept_text'])), 0, 1000);
-    $cfg['sign_messages'] = !empty($input['sign_messages']);
-    $cfg['pause_hours'] = max(1, min(72, (int)($input['pause_hours'] ?? 2)));
-    $cfg['crm_responsible_user_id'] = max(0, (int)($input['crm_responsible_user_id'] ?? 0));
-    $cfg['crm_status_id'] = max(0, (int)($input['crm_status_id'] ?? 0));
-    $cfg['crm_service_type_id'] = max(0, (int)($input['crm_service_type_id'] ?? 0));
+    if ($section !== 'robo') {
+      $cfg['crm_responsible_user_id'] = max(0, (int)($input['crm_responsible_user_id'] ?? 0));
+      $cfg['crm_status_id'] = max(0, (int)($input['crm_status_id'] ?? 0));
+      $cfg['crm_service_type_id'] = max(0, (int)($input['crm_service_type_id'] ?? 0));
+    }
     config_store_set($pdo, $companyId, 'whatsapp_bot', $cfg);
     // As mensagens recebidas chegam ao sistema sempre que o módulo está liberado
     // (mesmo com o robô desligado, a tela de Atendimento continua funcionando).
@@ -586,7 +594,7 @@ if (!function_exists('whatsapp_chat_find_or_create')) {
 
 if (!function_exists('whatsapp_chat_update')) {
   function whatsapp_chat_update(PDO $pdo, int $companyId, int $chatId, array $fields): void {
-    $allowed = ['contact','phone','push_name','state','status','data_json','paused_until','doc_attempts','doc_attempts_since','department_id','user_id','person_id','unread','queued_at','accepted_at','closed_at','human_at','crm_attendance_id','last_message_at','answers_json'];
+    $allowed = ['contact','phone','push_name','state','status','data_json','paused_until','doc_attempts','doc_attempts_since','department_id','user_id','person_id','contact_id','unread','queued_at','accepted_at','closed_at','human_at','crm_attendance_id','last_message_at','answers_json'];
     $sets = []; $params = [];
     foreach ($fields as $k => $v) {
       if ($k === 'data') { $k = 'data_json'; $v = json_encode($v ?: new stdClass(), JSON_UNESCAPED_UNICODE); }
@@ -830,6 +838,47 @@ if (!function_exists('whatsapp_bot_order_status')) {
   }
 }
 
+if (!function_exists('whatsapp_bot_contact_link')) {
+  /**
+   * Campos para ligar a conversa ao contato/pessoa pelo número: primeiro o cadastro de
+   * Contatos (quem chama, contador... de um cliente), depois o WhatsApp/telefone da pessoa.
+   * Só preenche o que a conversa ainda não tem.
+   */
+  function whatsapp_bot_contact_link(PDO $pdo, int $companyId, array $chat, string $phone): array {
+    $upd = [];
+    if ($phone === '') return $upd;
+    $hasContactCol = whatsapp_bot_sessions_has_contact($pdo);
+    if ($hasContactCol && empty($chat['contact_id'])) {
+      try {
+        if (!function_exists('person_contact_find_by_phone')) require_once __DIR__ . '/person_contacts.php';
+        $c = person_contact_find_by_phone($pdo, $companyId, $phone);
+        if ($c) {
+          $upd['contact_id'] = (int)$c['id'];
+          if (empty($chat['person_id']) && (int)($c['person_id'] ?? 0) > 0) $upd['person_id'] = (int)$c['person_id'];
+        }
+      } catch (Throwable $e) {}
+    }
+    if (empty($chat['person_id']) && empty($upd['person_id'])) {
+      try { $p = whatsapp_bot_find_person($pdo, $companyId, $phone); if ($p) $upd['person_id'] = (int)$p['id']; } catch (Throwable $e) {}
+    }
+    return $upd;
+  }
+}
+
+if (!function_exists('whatsapp_bot_sessions_has_contact')) {
+  function whatsapp_bot_sessions_has_contact(PDO $pdo): bool {
+    static $memo = [];
+    $key = spl_object_id($pdo);
+    if (array_key_exists($key, $memo)) return $memo[$key];
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'whatsapp_bot_sessions' AND column_name = 'contact_id'");
+      return $memo[$key] = (int)$st->fetchColumn() === 1;
+    } catch (Throwable $e) {
+      return $memo[$key] = false;
+    }
+  }
+}
+
 if (!function_exists('whatsapp_bot_find_person')) {
   /** Pessoa do cadastro com este telefone/WhatsApp. */
   function whatsapp_bot_find_person(PDO $pdo, int $companyId, string $phone): ?array {
@@ -1058,8 +1107,8 @@ if (!function_exists('whatsapp_bot_handle')) {
       if ($phone !== '' && $phone !== (string)$chat['phone']) $upd['phone'] = $phone;
       $pushName = mb_substr(trim((string)($payload['push_name'] ?? '')), 0, 120);
       if ($pushName !== '' && $pushName !== (string)$chat['push_name']) $upd['push_name'] = $pushName;
-      if (empty($chat['person_id']) && ($phone !== '' || !empty($chat['phone']))) {
-        try { $p = whatsapp_bot_find_person($pdo, $companyId, $phone !== '' ? $phone : (string)$chat['phone']); if ($p) $upd['person_id'] = (int)$p['id']; } catch (Throwable $e) {}
+      if ((empty($chat['person_id']) || empty($chat['contact_id'])) && ($phone !== '' || !empty($chat['phone']))) {
+        $upd += whatsapp_bot_contact_link($pdo, $companyId, $chat, $phone !== '' ? $phone : (string)$chat['phone']);
       }
       if ($upd) { whatsapp_chat_update($pdo, $companyId, (int)$chat['id'], $upd); $chat = array_merge($chat, $upd); }
 

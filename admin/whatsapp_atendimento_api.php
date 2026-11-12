@@ -54,6 +54,31 @@ try {
       $st = $pdo->prepare('SELECT id, name FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND is_active=1 ORDER BY name, id');
       $st->execute((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid]));
       $out(['ok' => true, 'departments' => array_map(static fn($d) => ['id' => (int)$d['id'], 'name' => (string)$d['name']], whatsapp_departments($pdo, $cid)), 'users' => $st->fetchAll(PDO::FETCH_ASSOC) ?: []]);
+
+    case 'contacts':
+      // Nova conversa: busca no cadastro de Contatos e no WhatsApp/telefone das pessoas.
+      require_once __DIR__ . '/../config/person_contacts.php';
+      $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
+      $items = [];
+      if (mb_strlen($q) >= 2) {
+        foreach (person_contacts_search($pdo, $cid, $q, 15, true) as $r) {
+          $ph = trim((string)($r['whatsapp'] ?? '')) ?: trim((string)($r['phone'] ?? ''));
+          if ($ph === '') continue;
+          $items[] = ['name' => (string)$r['name'], 'role' => (string)($r['role'] ?? ''), 'company' => (string)($r['person_name'] ?? ''), 'phone' => $ph];
+        }
+        $like = '%' . $q . '%';
+        $digits = person_contact_digits($q);
+        $sql = "SELECT name, whatsapp, phone FROM finance_people WHERE company_id=? AND (COALESCE(whatsapp,'')<>'' OR COALESCE(phone,'')<>'') AND (name LIKE ? OR document LIKE ?";
+        $params = [$cid, $like, $like];
+        if (strlen($digits) >= 4) { $sql .= " OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(whatsapp,''),'(',''),')',''),'-',''),' ','') LIKE ?"; $params[] = '%' . $digits . '%'; }
+        $st = $pdo->prepare($sql . ') ORDER BY name LIMIT 15');
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+          $ph = trim((string)($r['whatsapp'] ?? '')) ?: trim((string)($r['phone'] ?? ''));
+          $items[] = ['name' => (string)$r['name'], 'role' => 'Cadastro', 'company' => '', 'phone' => $ph];
+        }
+      }
+      $out(['ok' => true, 'items' => array_slice($items, 0, 25)]);
   }
 
   if (!$isPost) $out(['ok' => false, 'error' => 'Ação inválida.'], 400);

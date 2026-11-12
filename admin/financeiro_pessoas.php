@@ -62,6 +62,44 @@ $paUploadAllowed = $paCan('pessoas_anexos_incluir');
 $paDeleteAllowed = $paCan('pessoas_anexos_remover');
 $paAccessAllowed = $paViewAllowed || $paUploadAllowed || $paDeleteAllowed; // mostra a aba
 $paAction = (string)($_REQUEST['action'] ?? '');
+// Aba Contatos (quem chama, contador, financeiro...): config/person_contacts.php.
+require_once __DIR__ . '/../config/person_contacts.php';
+$pcReady = person_contacts_ready($pdo);
+if (in_array($paAction, ['pc_save','pc_delete'], true)) {
+  if (($_SERVER['REQUEST_METHOD']??'GET') !== 'POST') {http_response_code(405);exit('Método não permitido.');}
+  if (!hash_equals(fp_grid_csrf_token(),(string)($_POST['csrf']??''))) {http_response_code(403);exit('Sessão expirada.');}
+  $personId = max(0,(int)($_POST['person_id'] ?? 0));
+  if ($personId <= 0 || !pa_person_exists($pdo,$cid,$personId)) { http_response_code(404); exit('Pessoa não encontrada.'); }
+  if ($customerCrossContext) {
+    $field = $financePersonCrossContext ? 'is_supplier' : 'is_customer';
+    $stmt=$pdo->prepare('SELECT '.$field.' FROM finance_people WHERE company_id=? AND id=? LIMIT 1');
+    $stmt->execute([$cid,$personId]);
+    if (!$stmt->fetchColumn()) { http_response_code(403);exit('Acesso não autorizado.'); }
+  }
+  try {
+    if ($paAction === 'pc_save') {
+      $contactId = (int)($_POST['contact_id'] ?? 0);
+      if ($contactId > 0) { $cur = person_contact_get($pdo,$cid,$contactId); if (!$cur || (int)$cur['person_id'] !== $personId) throw new RuntimeException('Contato não encontrado.'); }
+      person_contact_save($pdo,$cid,['id'=>$contactId,'person_id'=>$personId] + array_intersect_key($_POST, array_flip(['name','role','whatsapp','phone','email','notes','is_primary','active'])) + ['active'=>0]);
+      $msg = 'Contato salvo.';
+    } else {
+      $contactId = (int)($_POST['contact_id'] ?? 0);
+      $cur = person_contact_get($pdo,$cid,$contactId);
+      if (!$cur || (int)$cur['person_id'] !== $personId) throw new RuntimeException('Contato não encontrado.');
+      person_contact_delete($pdo,$cid,$contactId);
+      $msg = 'Contato excluído.';
+    }
+  } catch (Throwable $e) {
+    $msg = 'Falha: '.$e->getMessage();
+  }
+  $params=['edit'=>$personId,'tab'=>'contatos','pc_result'=>$msg];
+  if ($customerCrossContext) {
+    $params['role']=$financePersonCrossContext?'supplier':'customer';
+    $params[$financePersonCrossContext?'mc_finance':'mc_customer']='1';
+  }
+  header('Location: financeiro_pessoas.php?'.http_build_query($params),true,303);
+  exit;
+}
 if (in_array($paAction, ['pa_upload','pa_delete','pa_download','pa_view'], true)) {
   $paActionAllowed = ['pa_upload' => $paUploadAllowed, 'pa_delete' => $paDeleteAllowed, 'pa_download' => $paViewAllowed, 'pa_view' => $paViewAllowed][$paAction];
   if (!$paActionAllowed) {http_response_code(403);exit('Seu perfil de usuário não tem permissão para esta ação nos anexos de pessoas.');}
@@ -618,7 +656,8 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       <a class="finance-modal-close" href="financeiro_pessoas.php" aria-label="Fechar">×</a>
     </div>
 
-    <?php if ((int)($edit['id'] ?? 0) > 0 && $paAccessAllowed): ?>
+    <?php $pcContacts = ((int)($edit['id'] ?? 0) > 0 && $pcReady) ? person_contacts_by_person($pdo, $cid, (int)$edit['id']) : []; ?>
+    <?php if ((int)($edit['id'] ?? 0) > 0 && ($paAccessAllowed || $pcReady)): ?>
     <style>
     .pa-tabs{display:flex;gap:8px;margin:12px 0 16px;border-bottom:1px solid #d9e5f4;padding-bottom:9px}
     .pa-tabs button{min-width:110px;border:1px solid #cbd5e1;padding:9px 15px;border-radius:9px;background:white;color:#334155;cursor:pointer;font-weight:700}
@@ -633,8 +672,9 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
     @media(max-width:640px){.pa-upload-field{flex-basis:100%;min-width:0}.pa-upload-submit{width:100%}}
     </style>
     <div class="pa-tabs" role="tablist" aria-label="Abas do cadastro de pessoa">
-      <button type="button" role="tab" id="paTabDados" aria-controls="financePersonForm" aria-selected="true">Dados</button>
-      <button type="button" role="tab" id="paTabAnexos" aria-controls="paPanel" aria-selected="false">Anexos (<?=count($paRows)?>)</button>
+      <button type="button" role="tab" id="paTabDados" aria-controls="financePersonForm" aria-selected="true" data-pa-tab="dados">Dados</button>
+      <?php if ($pcReady): ?><button type="button" role="tab" id="paTabContatos" aria-controls="pcPanel" aria-selected="false" data-pa-tab="contatos">Contatos (<?=count($pcContacts)?>)</button><?php endif; ?>
+      <?php if ($paAccessAllowed): ?><button type="button" role="tab" id="paTabAnexos" aria-controls="paPanel" aria-selected="false" data-pa-tab="anexos">Anexos (<?=count($paRows)?>)</button><?php endif; ?>
     </div>
     <?php endif; ?>
     <form method="post" class="finance-form" id="financePersonForm">
@@ -826,16 +866,73 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       <?php endforeach; ?></tbody></table></div>
       <?php endif; endif; ?>
     </section>
+    <?php endif; ?>
+    <?php if ((int)($edit['id'] ?? 0) > 0 && $pcReady): $pcRoles = person_contact_roles(); ?>
+    <section id="pcPanel" role="tabpanel" aria-labelledby="paTabContatos" hidden style="padding:12px 4px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div><h3 style="margin:0">Contatos</h3><p class="finance-muted" style="margin:4px 0 0">Quem fala pela empresa: responsável, financeiro, contador, compras... O WhatsApp do contato identifica de qual cliente é a conversa no Atendimento.</p></div>
+        <button type="button" class="btn btn-primary" id="pcNewBtn">+ Novo contato</button>
+      </div>
+      <?php if (isset($_GET['pc_result'])): ?><div class="msg <?= str_starts_with((string)$_GET['pc_result'], 'Falha') ? 'err' : 'ok' ?>" style="margin-top:10px"><?=finance_h((string)$_GET['pc_result'])?></div><?php endif; ?>
+      <form method="post" id="pcForm" class="finance-form" style="display:none;margin-top:12px;border:1px solid #dbeafe;border-radius:12px;padding:12px;background:#f8fbff">
+        <input type="hidden" name="action" value="pc_save"><input type="hidden" name="person_id" value="<?= (int)$editId ?>"><input type="hidden" name="contact_id" id="pcId" value="0">
+        <input type="hidden" name="csrf" value="<?=finance_h(fp_grid_csrf_token())?>">
+        <div class="finance-form-grid three">
+          <div><label>Nome *</label><input name="name" id="pcName" maxlength="120" required></div>
+          <div><label>Função</label><input name="role" id="pcRole" maxlength="60" list="pcRoles" placeholder="Ex.: Financeiro, Contador"><datalist id="pcRoles"><?php foreach ($pcRoles as $r): ?><option value="<?=finance_h($r)?>"><?php endforeach; ?></datalist></div>
+          <div><label>WhatsApp</label><input name="whatsapp" id="pcWa" maxlength="30" inputmode="tel" placeholder="(31) 99999-9999"></div>
+          <div><label>Telefone</label><input name="phone" id="pcPhone" maxlength="30" inputmode="tel"></div>
+          <div><label>E-mail</label><input name="email" id="pcEmail" maxlength="150" type="email"></div>
+          <div><label>Observação</label><input name="notes" id="pcNotes" maxlength="500"></div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="is_primary" value="1" id="pcPrimary"> Contato principal</label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="active" value="1" id="pcActive" checked> Ativo</label>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn" id="pcCancel">Cancelar</button><button class="btn btn-primary" type="submit">Salvar contato</button></div>
+      </form>
+      <?php if (!$pcContacts): ?><p class="finance-muted" style="margin-top:12px">Nenhum contato cadastrado.</p><?php else: ?>
+      <div style="overflow-x:auto;margin-top:12px"><table class="pa-list"><thead><tr><th>Nome</th><th>Função</th><th>WhatsApp</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>
+      <?php foreach ($pcContacts as $ct): ?>
+        <tr<?= (int)$ct['active'] ? '' : ' style="opacity:.55"' ?>>
+          <td><strong><?=finance_h($ct['name'])?></strong><?= (int)$ct['is_primary'] ? ' <span class="badge ok">Principal</span>' : '' ?><?= (int)$ct['active'] ? '' : ' <span class="finance-muted">(inativo)</span>' ?><?php if (!empty($ct['notes'])): ?><br><span class="finance-muted"><?=finance_h($ct['notes'])?></span><?php endif; ?></td>
+          <td><?=finance_h($ct['role'] ?? '')?></td><td><?=finance_h($ct['whatsapp'] ?? '')?></td><td><?=finance_h($ct['phone'] ?? '')?></td><td><?=finance_h($ct['email'] ?? '')?></td>
+          <td><div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-sm js-pc-edit" data-contact='<?=finance_h(json_encode(['id'=>(int)$ct['id'],'name'=>$ct['name'],'role'=>$ct['role'],'whatsapp'=>$ct['whatsapp'],'phone'=>$ct['phone'],'email'=>$ct['email'],'notes'=>$ct['notes'],'is_primary'=>(int)$ct['is_primary'],'active'=>(int)$ct['active']], JSON_UNESCAPED_UNICODE))?>'>Editar</button>
+            <form method="post" onsubmit="return confirm('Excluir este contato?')"><input type="hidden" name="action" value="pc_delete"><input type="hidden" name="person_id" value="<?= (int)$editId ?>"><input type="hidden" name="contact_id" value="<?= (int)$ct['id'] ?>"><input type="hidden" name="csrf" value="<?=finance_h(fp_grid_csrf_token())?>"><button class="btn btn-sm btn-danger" type="submit">Excluir</button></form>
+          </div></td>
+        </tr>
+      <?php endforeach; ?></tbody></table></div>
+      <?php endif; ?>
+    </section>
+    <script>
+      (function(){
+        const f=document.getElementById('pcForm');if(!f)return;
+        const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v==null?'':v;};
+        const open=(c)=>{c=c||{};set('pcId',c.id||0);set('pcName',c.name);set('pcRole',c.role);set('pcWa',c.whatsapp);set('pcPhone',c.phone);set('pcEmail',c.email);set('pcNotes',c.notes);document.getElementById('pcPrimary').checked=!!c.is_primary;document.getElementById('pcActive').checked=c.id?!!c.active:true;f.style.display='';document.getElementById('pcName').focus();};
+        document.getElementById('pcNewBtn').addEventListener('click',()=>open({}));
+        document.getElementById('pcCancel').addEventListener('click',()=>{f.style.display='none';});
+        document.querySelectorAll('.js-pc-edit').forEach(b=>b.addEventListener('click',()=>{try{open(JSON.parse(b.dataset.contact||'{}'))}catch(e){open({})}}));
+      })();
+    </script>
+    <?php endif; ?>
+    <?php if ((int)($edit['id'] ?? 0) > 0 && ($paAccessAllowed || $pcReady)): ?>
     <script>
       document.addEventListener('DOMContentLoaded',function(){
-        const dados=document.getElementById('paTabDados'),anexos=document.getElementById('paTabAnexos');
-        const form=document.getElementById('financePersonForm'),panel=document.getElementById('paPanel');
-        const extras=document.getElementById('paFormExtras');
-        if(!dados||!anexos||!form||!panel)return;
-        const activate=(which)=>{const a=which==='anexos';form.style.display=a?'none':'';panel.hidden=!a;panel.style.display=a?'block':'none';if(extras)extras.style.display=a?'none':'';dados.setAttribute('aria-selected',String(!a));anexos.setAttribute('aria-selected',String(a));};
-        dados.addEventListener('click',()=>activate('dados'));
-        anexos.addEventListener('click',()=>activate('anexos'));
-        activate(<?=json_encode((string)($_GET['tab']??'')==='anexos'?'anexos':'dados')?>);
+        // Abas do cadastro: Dados / Contatos / Anexos.
+        const form=document.getElementById('financePersonForm'),extras=document.getElementById('paFormExtras');
+        const panels={contatos:document.getElementById('pcPanel'),anexos:document.getElementById('paPanel')};
+        const tabs=Array.from(document.querySelectorAll('[data-pa-tab]'));
+        if(!form||!tabs.length)return;
+        const activate=(which)=>{
+          if(which!=='dados'&&!panels[which])which='dados';
+          const dados=which==='dados';
+          form.style.display=dados?'':'none';if(extras)extras.style.display=dados?'':'none';
+          Object.entries(panels).forEach(([k,p])=>{if(!p)return;p.hidden=k!==which;p.style.display=k===which?'block':'none';});
+          tabs.forEach(t=>t.setAttribute('aria-selected',String(t.dataset.paTab===which)));
+        };
+        tabs.forEach(t=>t.addEventListener('click',()=>activate(t.dataset.paTab)));
+        activate(<?=json_encode(in_array((string)($_GET['tab']??''),['anexos','contatos'],true)?(string)$_GET['tab']:'dados')?>);
       });
     </script>
     <?php endif; ?>

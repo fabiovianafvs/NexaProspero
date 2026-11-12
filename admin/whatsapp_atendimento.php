@@ -68,6 +68,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-banner{background:#fff8c5;padding:8px 14px;font-size:13px;color:#54656f;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .waa-modal{position:fixed;inset:0;background:rgba(11,20,26,.45);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}.waa-modal.on{display:flex}
 .waa-card{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:420px;display:grid;gap:10px}
+.waa-cres{position:absolute;left:0;right:0;top:100%;z-index:5;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.12);max-height:240px;overflow:auto}.waa-cres:empty{display:none}.waa-cres button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:8px 10px;cursor:pointer;font:inherit}.waa-cres button:hover{background:#f0fdf4}.waa-cres button span{font-size:11px;font-weight:800;color:#3730a3;background:#eef2ff;border-radius:6px;padding:1px 6px}.waa-cres small{display:block;color:#64748b}.waa-cres-empty{padding:10px;color:#64748b;font-size:13px}
 .waa-card h3{margin:0;color:#0b1f5b}.waa-card label{font-size:12px;font-weight:700;color:#334155}.waa-card select,.waa-card input,.waa-card textarea{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font:inherit}
 .waa-rt{font-size:11px;color:var(--mut)}
 .waa-answers{background:#eef6ff;border-bottom:1px solid var(--line);padding:8px 14px;font-size:13px;color:#1e3a5f;display:flex;gap:6px 16px;flex-wrap:wrap}.waa-answers b{color:#0b1f5b}
@@ -146,6 +147,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 </div></div>
 <div class="waa-modal" id="mNew"><div class="waa-card">
   <h3>Nova conversa</h3>
+  <div style="position:relative"><label>Buscar contato (nome, cliente, telefone)</label><input id="nSearch" autocomplete="off" placeholder="Digite para buscar no cadastro de contatos e pessoas"><div id="nResults" class="waa-cres"></div></div>
   <div><label>Celular com DDD</label><input id="nPhone" inputmode="tel" placeholder="(31) 99999-9999"></div>
   <div><label>Mensagem</label><textarea id="nText" rows="3"></textarea></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="nGo">Enviar</button></div>
@@ -204,6 +206,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
           <div class="waa-meta">
             <div class="waa-row"><span class="waa-name">${esc(c.name)}</span><span class="waa-time">${esc(tm(c.last_at))}</span></div>
             <div class="waa-row"><span class="waa-prev">${c.last_direction === 'OUT' ? '↪ ' : ''}${esc(c.preview)}</span>${c.unread ? '<span class="waa-unread">' + c.unread + '</span>' : ''}</div>
+            ${c.company_label || c.contact_role ? '<div class="waa-prev" style="font-size:12px">' + esc([c.contact_role, c.company_label].filter(Boolean).join(' · ')) + '</div>' : ''}
             <div class="waa-tags">${c.department ? '<span class="waa-tag">' + esc(c.department) + '</span>' : ''}${c.user ? '<span class="waa-tag u">' + esc(c.user) + '</span>' : (c.status === 'ATENDIMENTO' ? '<span class="waa-tag u">Celular</span>' : '')}</div>
           </div>
         </div>`).join('');
@@ -235,7 +238,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     const c = chat;
     $('waaAv').textContent = ini(c.name);
     $('waaName').textContent = c.name;
-    const parts = [c.phone, STATUS[c.status] || c.status];
+    const parts = [c.contact_role, c.company_label, c.phone, STATUS[c.status] || c.status];
     if (c.department) parts.push(c.department);
     if (c.user) parts.push('com ' + c.user); else if (c.status === 'ATENDIMENTO') parts.push('respondido pelo celular');
     $('waaSub').textContent = parts.filter(Boolean).join(' · ');
@@ -358,7 +361,24 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   $('fGo').addEventListener('click', async () => { $('mFinish').classList.remove('on'); await act('finish', { notify: $('fNotify').checked ? 1 : '' }); });
   $('waaCrm').addEventListener('click', () => { $('cNote').value = ''; open('mCrm'); });
   $('cGo').addEventListener('click', async () => { $('mCrm').classList.remove('on'); const d = await act('crm', { note: $('cNote').value }); if (d) alert('Atendimento nº ' + d.crm_id + ' gerado no CRM.'); });
-  $('waaNew').addEventListener('click', () => { $('nPhone').value = ''; $('nText').value = ''; open('mNew'); $('nPhone').focus(); });
+  const startNew = (phone = '', who = '') => { $('nPhone').value = phone; $('nText').value = ''; $('nSearch').value = who; $('nResults').innerHTML = ''; open('mNew'); (phone ? $('nText') : $('nSearch')).focus(); };
+  $('waaNew').addEventListener('click', () => startNew());
+  // Busca no cadastro de Contatos (quem chama, contador...) e no WhatsApp/telefone das pessoas.
+  let nTimer = null;
+  $('nSearch').addEventListener('input', () => {
+    clearTimeout(nTimer);
+    const q = $('nSearch').value.trim();
+    if (q.length < 2) { $('nResults').innerHTML = ''; return; }
+    nTimer = setTimeout(async () => {
+      try {
+        const d = await api('contacts', { q });
+        $('nResults').innerHTML = (d.items || []).map((r, i) => `<button type="button" data-i="${i}"><b>${esc(r.name)}</b>${r.role ? ' <span>' + esc(r.role) + '</span>' : ''}<small>${esc([r.company, r.phone].filter(Boolean).join(' · '))}</small></button>`).join('') || '<div class="waa-cres-empty">Nada encontrado.</div>';
+        $('nResults').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const r = d.items[+b.dataset.i]; $('nPhone').value = r.phone; $('nSearch').value = r.name + (r.company ? ' · ' + r.company : ''); $('nResults').innerHTML = ''; $('nText').focus(); }));
+      } catch (e) { $('nResults').innerHTML = '<div class="waa-cres-empty">' + esc(e.message) + '</div>'; }
+    }, 250);
+  });
+  // Aberto pela tela de Contatos do Chatbot ("Chamar").
+  try { const u = new URL(location.href); if (u.searchParams.get('novo')) startNew(u.searchParams.get('novo'), u.searchParams.get('nome') || ''); } catch (_) {}
   $('nGo').addEventListener('click', async () => {
     try {
       const d = await api('new', { phone: $('nPhone').value, text: $('nText').value }, true);

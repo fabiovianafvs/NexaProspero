@@ -67,23 +67,25 @@ if (!function_exists('whatsapp_att_list')) {
     }
 
     $cond = str_replace(':me', (string)$userId, $tabs[$tab][1]);
+    $ct = whatsapp_att_contact_sql($pdo);
     $where = "s.company_id=? AND $cond AND $scope";
     $params = array_merge([$companyId], $scopeParams);
     $q = trim($q);
     if ($q !== '') {
       $digits = whatsapp_bot_digits($q);
-      $where .= ' AND (s.push_name LIKE ? OR p.name LIKE ?' . ($digits !== '' ? ' OR s.phone LIKE ?' : '') . ')';
+      $where .= ' AND (s.push_name LIKE ? OR p.name LIKE ?' . ($ct['search'] !== '' ? ' OR ' . $ct['search'] : '') . ($digits !== '' ? ' OR s.phone LIKE ?' : '') . ')';
       $params[] = '%' . $q . '%';
       $params[] = '%' . $q . '%';
+      if ($ct['search'] !== '') $params[] = '%' . $q . '%';
       if ($digits !== '') $params[] = '%' . $digits . '%';
     }
     $order = $tab === 'fila' ? 's.queued_at ASC, s.id ASC' : 's.last_message_at DESC, s.id DESC';
     $st = $pdo->prepare("SELECT s.id, s.contact, s.phone, s.push_name, s.status, s.department_id, s.user_id, s.unread, s.last_preview, s.last_direction,
-        s.last_message_at, s.queued_at, s.accepted_at, s.person_id, p.name AS person_name, d.name AS department_name, u.name AS user_name
+        s.last_message_at, s.queued_at, s.accepted_at, s.person_id, p.name AS person_name, d.name AS department_name, u.name AS user_name{$ct['cols']}
       FROM whatsapp_bot_sessions s
       LEFT JOIN finance_people p ON p.company_id=s.company_id AND p.id=s.person_id
       LEFT JOIN whatsapp_departments d ON d.company_id=s.company_id AND d.id=s.department_id
-      LEFT JOIN users u ON u.company_id=s.company_id AND u.id=s.user_id
+      LEFT JOIN users u ON u.company_id=s.company_id AND u.id=s.user_id{$ct['join']}
       WHERE $where ORDER BY $order LIMIT 200");
     $st->execute($params);
     $rows = [];
@@ -103,7 +105,9 @@ if (!function_exists('whatsapp_att_phone_label')) {
 
 if (!function_exists('whatsapp_att_row')) {
   function whatsapp_att_row(array $r): array {
-    $name = trim((string)($r['person_name'] ?? '')) ?: trim((string)($r['push_name'] ?? ''));
+    // Contato cadastrado (quem chama) vem primeiro; a empresa/pessoa dele aparece junto.
+    $contactName = trim((string)($r['contact_name'] ?? ''));
+    $name = $contactName !== '' ? $contactName : (trim((string)($r['person_name'] ?? '')) ?: trim((string)($r['push_name'] ?? '')));
     $phone = whatsapp_att_phone_label((string)($r['phone'] ?? ''));
     return [
       'id' => (int)$r['id'],
@@ -120,17 +124,33 @@ if (!function_exists('whatsapp_att_row')) {
       'last_at' => (string)($r['last_message_at'] ?? ''),
       'queued_at' => (string)($r['queued_at'] ?? ''),
       'person_id' => (int)($r['person_id'] ?? 0),
+      'contact_id' => (int)($r['contact_id'] ?? 0),
+      'contact_role' => trim((string)($r['contact_role'] ?? '')),
+      'company_label' => $contactName !== '' ? trim((string)($r['person_name'] ?? '')) : '',
+    ];
+  }
+}
+
+if (!function_exists('whatsapp_att_contact_sql')) {
+  /** Junção com o cadastro de Contatos (quando instalado). */
+  function whatsapp_att_contact_sql(PDO $pdo): array {
+    if (!function_exists('whatsapp_bot_sessions_has_contact') || !whatsapp_bot_sessions_has_contact($pdo)) return ['cols' => '', 'join' => '', 'search' => ''];
+    return [
+      'cols' => ', s.contact_id, ct.name AS contact_name, ct.role AS contact_role',
+      'join' => "\n      LEFT JOIN person_contacts ct ON ct.company_id=s.company_id AND ct.id=s.contact_id",
+      'search' => 'ct.name LIKE ?',
     ];
   }
 }
 
 if (!function_exists('whatsapp_att_chat_info')) {
   function whatsapp_att_chat_info(PDO $pdo, int $companyId, int $chatId): array {
-    $st = $pdo->prepare("SELECT s.*, p.name AS person_name, d.name AS department_name, u.name AS user_name
+    $ct = whatsapp_att_contact_sql($pdo);
+    $st = $pdo->prepare("SELECT s.*, p.name AS person_name, d.name AS department_name, u.name AS user_name{$ct['cols']}
       FROM whatsapp_bot_sessions s
       LEFT JOIN finance_people p ON p.company_id=s.company_id AND p.id=s.person_id
       LEFT JOIN whatsapp_departments d ON d.company_id=s.company_id AND d.id=s.department_id
-      LEFT JOIN users u ON u.company_id=s.company_id AND u.id=s.user_id
+      LEFT JOIN users u ON u.company_id=s.company_id AND u.id=s.user_id{$ct['join']}
       WHERE s.company_id=? AND s.id=? LIMIT 1");
     $st->execute([$companyId, $chatId]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
@@ -329,9 +349,8 @@ if (!function_exists('whatsapp_att_new_chat')) {
     if (strlen($d) === 10 || strlen($d) === 11) $d = '55' . $d;
     if (strlen($d) < 12 || strlen($d) > 13) throw new RuntimeException('Informe o celular com DDD.');
     $chat = whatsapp_chat_find_or_create($pdo, $companyId, $d . '@s.whatsapp.net', $d);
-    if (empty($chat['person_id'])) {
-      try { $p = whatsapp_bot_find_person($pdo, $companyId, $d); if ($p) whatsapp_chat_update($pdo, $companyId, (int)$chat['id'], ['person_id' => (int)$p['id']]); } catch (Throwable $e) {}
-    }
+    $link = whatsapp_bot_contact_link($pdo, $companyId, $chat, $d);
+    if ($link) whatsapp_chat_update($pdo, $companyId, (int)$chat['id'], $link);
     $chat = whatsapp_chat_get($pdo, $companyId, (int)$chat['id']) ?? $chat;
     if (!($chat['status'] === 'ATENDIMENTO' && (int)$chat['user_id'] > 0 && (int)$chat['user_id'] !== $userId)) {
       $chat = whatsapp_att_accept($pdo, $companyId, $chat, $userId, false, false);

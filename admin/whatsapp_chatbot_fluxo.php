@@ -70,7 +70,7 @@ admin_topbar($flow ? 'Fluxo: ' . $flow['name'] : 'Novo fluxo do chatbot', 'whats
 <?php if ($msg !== ''): ?><div class="msg ok"><?= wfx_h($msg) ?></div><?php endif; ?>
 <?php if ($err !== ''): ?><div class="msg err"><?= wfx_h($err) ?></div><?php endif; ?>
 <?php if (!$ready): ?><div class="msg err">Aplique "WhatsApp - Fluxos e repetir pedido" no Atualizador do Banco para usar os fluxos.</div><?php else: ?>
-<div><a class="btn" href="whatsapp_chatbot.php#fluxos">← Voltar ao Chatbot</a></div>
+<div><a class="btn" href="whatsapp_chatbot.php?aba=fluxos">← Voltar à lista de fluxos</a></div>
 
 <form method="post" class="wfx-card">
   <input type="hidden" name="csrf" value="<?= wfx_h($csrf) ?>"><input type="hidden" name="action" value="flow_save"><input type="hidden" name="flow_id" value="<?= (int)($flow['id'] ?? 0) ?>">
