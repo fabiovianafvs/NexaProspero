@@ -19,6 +19,7 @@ $abas = [
   'contatos' => 'Contatos',
   'rapidas' => 'Mensagens rápidas',
   'robo' => 'Robô e mensagens padrão',
+  'horario' => 'Horário de atendimento',
   'crm' => 'CRM',
 ];
 $aba = (string)($_GET['aba'] ?? 'menu');
@@ -62,6 +63,7 @@ if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = (string)($_POST['action'] ?? '');
   $aba = $abaOf[$action] ?? $aba;
   if ($action === 'save' && ($_POST['section'] ?? '') === 'crm') $aba = 'crm';
+  if ($action === 'save' && ($_POST['section'] ?? '') === 'horario') $aba = 'horario';
   $go = static function (string $ok) use (&$aba) { header('Location: whatsapp_chatbot.php?aba=' . rawurlencode($aba) . '&ok=' . rawurlencode($ok)); exit; };
   try {
     if ($csrf === '' || !hash_equals($csrf, (string)($_POST['csrf'] ?? ''))) throw new RuntimeException('Sessão expirada. Atualize a página e tente novamente.');
@@ -71,6 +73,7 @@ if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $on = whatsapp_bot_config($pdo, $cid)['enabled'];
         if (!$res['ok']) throw new RuntimeException('Configuração salva, mas o WhatsApp não confirmou: ' . $res['message']);
         if (($_POST['section'] ?? '') === 'crm') $go('Configuração do CRM salva.');
+        if (($_POST['section'] ?? '') === 'horario') $go('Horário de atendimento salvo.');
         $go(($on ? 'Configuração salva. O robô está LIGADO.' : 'Configuração salva. O robô está desligado: as conversas novas vão direto para a fila do Atendimento.') . ($res['message'] !== '' ? ' ' . $res['message'] : ''));
       case 'node_save':
         // O campo do modal chama "node_action" para não se misturar com a ação do formulário.
@@ -353,6 +356,30 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   $groupNames = [];
   foreach (whatsapp_bot_group_company_ids($pdo, $cid, ['group_receivables' => true]) as $gid) $groupNames[] = whatsapp_bot_company_name($pdo, (int)$gid);
 ?>
+<?php if ($aba === 'horario'):
+  $dayNames = whatsapp_bot_day_names();
+  $openNow = whatsapp_bot_hours_open($cfg);
+?>
+<section class="wab-card" id="horario">
+  <div class="wab-head">
+    <div><h2>Horário de atendimento</h2><div class="wab-muted">Fora do horário, o robô envia a mensagem de "fora do horário" no início da conversa e, ao transferir para um setor, avisa que a resposta vem no próximo horário.
+      <?php if ($cfg['hours_enabled']): ?><br>Agora: <?= $openNow ? '<span class="wab-chip" style="background:#dcfce7;color:#166534">ABERTO</span>' : '<span class="wab-chip off" style="background:#fee2e2;color:#991b1b">FORA DO HORÁRIO</span>' ?> (<?= wab_h(date('d/m/Y H:i')) ?>)<?php else: ?><br><span class="wab-chip off">Controle de horário desligado</span> — o robô atende igual a qualquer hora.<?php endif; ?></div></div>
+    <div class="wab-btns"><button class="btn btn-primary" type="button" onclick="wabOpen('mHorario')">Editar</button></div>
+  </div>
+  <table class="wab-table" style="margin-top:10px"><thead><tr><th>Dia</th><th>Horário</th></tr></thead><tbody>
+  <?php foreach ([1, 2, 3, 4, 5, 6, 0] as $d): $lbl = whatsapp_bot_hours_day_label($cfg['hours'][$d]); ?>
+    <tr><td><b><?= wab_h($dayNames[$d]) ?></b></td><td><?= $lbl === 'fechado' ? '<span class="wab-chip off">fechado</span>' : wab_h($lbl) ?></td></tr>
+  <?php endforeach; ?>
+  </tbody></table>
+  <table class="wab-table" style="margin-top:12px"><tbody>
+    <tr><th style="width:280px;vertical-align:top">Feriados / dias fechados</th><td style="white-space:pre-wrap"><?= trim($cfg['holidays']) !== '' ? wab_h($cfg['holidays']) : '<span class="wab-muted">Nenhum</span>' ?></td></tr>
+    <tr><th style="vertical-align:top">Mensagem fora do horário</th><td style="white-space:pre-wrap"><?= wab_h($cfg['offhours_text']) ?></td></tr>
+    <tr><th style="vertical-align:top">Ao transferir para um setor fora do horário</th><td style="white-space:pre-wrap"><?= wab_h($cfg['offhours_queue_text']) ?></td></tr>
+    <tr><th>Fora do horário, o robô</th><td><?= $cfg['offhours_menu'] ? 'continua mostrando o menu (2ª via, consultas...)' : 'só envia o aviso e deixa a conversa na fila' ?></td></tr>
+  </tbody></table>
+</section>
+<?php endif; ?>
+
 <?php if ($aba === 'robo'):
   $sumRobo = [
     'Boas-vindas' => $cfg['welcome'],
@@ -414,6 +441,30 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     <?php else: ?>
       <div class="wab-muted">2ª via com várias empresas: disponível quando esta empresa faz parte de um <b>Grupo Empresarial</b> com outras empresas (Central SaaS).</div>
     <?php endif; ?>
+  </div>
+  <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+</form></div>
+
+<div class="wab-modal" id="mHorario"><form method="post" class="wab-card" style="max-width:860px;max-height:92vh;overflow:auto">
+  <input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="section" value="horario">
+  <h2>Horário de atendimento</h2>
+  <label class="wab-switch"><input type="checkbox" name="hours_enabled" value="1" <?= $cfg['hours_enabled'] ? 'checked' : '' ?>> Controlar o horário de atendimento</label>
+  <div class="wab-muted" style="margin:6px 0 10px">Até dois períodos por dia (ex.: 08:00 às 12:00 e 13:30 às 18:00). Deixe o segundo em branco se não houver intervalo.</div>
+  <table class="wab-table"><thead><tr><th>Dia</th><th>Aberto</th><th>Período 1</th><th>Período 2 (opcional)</th></tr></thead><tbody>
+  <?php foreach ([1, 2, 3, 4, 5, 6, 0] as $d): $h = $cfg['hours'][$d]; ?>
+    <tr>
+      <td><b><?= wab_h(whatsapp_bot_day_names()[$d]) ?></b></td>
+      <td><input type="checkbox" name="hours[<?= $d ?>][on]" value="1" <?= $h['on'] ? 'checked' : '' ?>></td>
+      <td style="white-space:nowrap"><input type="time" name="hours[<?= $d ?>][a]" value="<?= wab_h($h['a']) ?>"> às <input type="time" name="hours[<?= $d ?>][b]" value="<?= wab_h($h['b']) ?>"></td>
+      <td style="white-space:nowrap"><input type="time" name="hours[<?= $d ?>][c]" value="<?= wab_h($h['c']) ?>"> às <input type="time" name="hours[<?= $d ?>][d]" value="<?= wab_h($h['d']) ?>"></td>
+    </tr>
+  <?php endforeach; ?>
+  </tbody></table>
+  <div class="wab-grid" style="margin-top:12px">
+    <div class="wab-field"><label>Mensagem fora do horário ({nome}, {empresa}, {horarios} = lista dos horários)</label><textarea name="offhours_text" maxlength="1000" rows="6"><?= wab_h($cfg['offhours_text']) ?></textarea></div>
+    <div class="wab-field"><label>Ao transferir para um setor fora do horário ({setor})</label><textarea name="offhours_queue_text" maxlength="1000" rows="6"><?= wab_h($cfg['offhours_queue_text']) ?></textarea></div>
+    <div class="wab-field"><label>Feriados / dias fechados (um por linha: 25/12 todo ano, ou 20/11/2026)</label><textarea name="holidays" maxlength="2000" rows="4" placeholder="01/01&#10;21/04&#10;25/12"><?= wab_h($cfg['holidays']) ?></textarea></div>
+    <div class="wab-field"><label style="display:flex;gap:8px;align-items:flex-start;font-size:14px;font-weight:600"><input type="checkbox" name="offhours_menu" value="1" <?= $cfg['offhours_menu'] ? 'checked' : '' ?> style="margin-top:3px"> Fora do horário, depois do aviso o robô continua mostrando o menu (2ª via de boleto, consulta de pedido...). Desmarcado: só envia o aviso e deixa a conversa na fila.</label></div>
   </div>
   <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
 </form></div>

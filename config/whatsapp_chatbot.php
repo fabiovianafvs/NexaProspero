@@ -74,7 +74,112 @@ if (!function_exists('whatsapp_bot_defaults')) {
       'crm_service_type_id' => 0,
       // 2ª via: consultar também as outras empresas do mesmo Grupo Empresarial (pelo CPF/CNPJ).
       'group_receivables' => false,
+      // Horário de atendimento (dia da semana 0=domingo ... 6=sábado; até 2 períodos por dia).
+      'hours_enabled' => false,
+      'hours' => whatsapp_bot_hours_default(),
+      'holidays' => '',
+      'offhours_text' => "Olá{nome}! No momento estamos *fora do horário de atendimento*.\n\nNosso horário:\n{horarios}\n\nSua mensagem fica registrada e respondemos assim que possível. 🙂",
+      'offhours_queue_text' => "Certo! Registrei sua solicitação para *{setor}*. Como estamos fora do horário, um atendente vai responder no próximo horário de atendimento. 🙂",
+      'offhours_menu' => true,
     ];
+  }
+}
+
+if (!function_exists('whatsapp_bot_hours_default')) {
+  function whatsapp_bot_hours_default(): array {
+    $week = ['on' => 1, 'a' => '08:00', 'b' => '18:00', 'c' => '', 'd' => ''];
+    return [
+      0 => ['on' => 0, 'a' => '', 'b' => '', 'c' => '', 'd' => ''],
+      1 => $week, 2 => $week, 3 => $week, 4 => $week, 5 => $week,
+      6 => ['on' => 1, 'a' => '08:00', 'b' => '12:00', 'c' => '', 'd' => ''],
+    ];
+  }
+}
+
+if (!function_exists('whatsapp_bot_hours_norm')) {
+  /** Horários válidos (HH:MM) por dia da semana. */
+  function whatsapp_bot_hours_norm($hours): array {
+    $hm = static function ($v): string {
+      $v = trim((string)$v);
+      if (!preg_match('/^(\d{1,2}):(\d{2})$/', $v, $m) || (int)$m[1] > 23 || (int)$m[2] > 59) return '';
+      return sprintf('%02d:%02d', (int)$m[1], (int)$m[2]);
+    };
+    $out = [];
+    $src = is_array($hours) ? $hours : [];
+    for ($d = 0; $d <= 6; $d++) {
+      $r = is_array($src[$d] ?? null) ? $src[$d] : (is_array($src[(string)$d] ?? null) ? $src[(string)$d] : []);
+      $out[$d] = ['on' => !empty($r['on']) ? 1 : 0, 'a' => $hm($r['a'] ?? ''), 'b' => $hm($r['b'] ?? ''), 'c' => $hm($r['c'] ?? ''), 'd' => $hm($r['d'] ?? '')];
+    }
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_bot_day_names')) {
+  function whatsapp_bot_day_names(): array {
+    return ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  }
+}
+
+if (!function_exists('whatsapp_bot_hours_day_label')) {
+  /** "08:00 às 12:00 e 13:30 às 18:00" ou "fechado". */
+  function whatsapp_bot_hours_day_label(array $r): string {
+    if (empty($r['on'])) return 'fechado';
+    $parts = [];
+    if ($r['a'] !== '' && $r['b'] !== '') $parts[] = $r['a'] . ' às ' . $r['b'];
+    if ($r['c'] !== '' && $r['d'] !== '') $parts[] = $r['c'] . ' às ' . $r['d'];
+    return $parts ? implode(' e ', $parts) : 'fechado';
+  }
+}
+
+if (!function_exists('whatsapp_bot_hours_text')) {
+  /** Horário para a mensagem ao cliente, juntando dias seguidos iguais (ex.: "Segunda a sexta: 08:00 às 18:00"). */
+  function whatsapp_bot_hours_text(array $cfg): string {
+    $h = whatsapp_bot_hours_norm($cfg['hours'] ?? []);
+    $short = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+    $order = [1, 2, 3, 4, 5, 6, 0];
+    $lines = [];
+    $i = 0;
+    while ($i < 7) {
+      $label = whatsapp_bot_hours_day_label($h[$order[$i]]);
+      $j = $i;
+      while ($j + 1 < 7 && whatsapp_bot_hours_day_label($h[$order[$j + 1]]) === $label) $j++;
+      $days = $i === $j ? $short[$order[$i]] : $short[$order[$i]] . ($j === $i + 1 ? ' e ' : ' a ') . $short[$order[$j]];
+      $lines[] = '• ' . mb_strtoupper(mb_substr($days, 0, 1)) . mb_substr($days, 1) . ': ' . $label;
+      $i = $j + 1;
+    }
+    return implode("\n", $lines);
+  }
+}
+
+if (!function_exists('whatsapp_bot_hours_open')) {
+  /** Dentro do horário de atendimento? (sem controle de horário ligado: sempre aberto). */
+  function whatsapp_bot_hours_open(array $cfg, ?int $ts = null): bool {
+    if (empty($cfg['hours_enabled'])) return true;
+    $ts = $ts ?? time();
+    // Feriados: dd/mm (todo ano) ou dd/mm/aaaa, um por linha.
+    foreach (preg_split('/[\r\n,;]+/', (string)($cfg['holidays'] ?? '')) ?: [] as $hd) {
+      $hd = trim($hd);
+      if ($hd === '') continue;
+      if ($hd === date('d/m', $ts) || $hd === date('d/m/Y', $ts) || $hd === date('j/n', $ts)) return false;
+    }
+    $h = whatsapp_bot_hours_norm($cfg['hours'] ?? [])[(int)date('w', $ts)];
+    if (empty($h['on'])) return false;
+    $now = date('H:i', $ts);
+    foreach ([['a', 'b'], ['c', 'd']] as [$x, $y]) {
+      if ($h[$x] !== '' && $h[$y] !== '' && $now >= $h[$x] && $now < $h[$y]) return true;
+    }
+    return false;
+  }
+}
+
+if (!function_exists('whatsapp_bot_offhours_message')) {
+  function whatsapp_bot_offhours_message(PDO $pdo, int $companyId, array $cfg, string $pushName): string {
+    $name = trim($pushName);
+    return strtr((string)$cfg['offhours_text'], [
+      '{nome}' => $name !== '' ? ', ' . $name : '',
+      '{empresa}' => whatsapp_bot_company_name($pdo, $companyId),
+      '{horarios}' => whatsapp_bot_hours_text($cfg),
+    ]);
   }
 }
 
@@ -88,8 +193,11 @@ if (!function_exists('whatsapp_bot_config')) {
     $cfg['enabled'] = !empty($cfg['enabled']);
     $cfg['sign_messages'] = !empty($cfg['sign_messages']);
     $cfg['group_receivables'] = !empty($cfg['group_receivables']);
+    $cfg['hours_enabled'] = !empty($cfg['hours_enabled']);
+    $cfg['offhours_menu'] = !empty($cfg['offhours_menu']);
+    $cfg['hours'] = whatsapp_bot_hours_norm($cfg['hours']);
     $cfg['pause_hours'] = max(1, min(72, (int)$cfg['pause_hours']));
-    foreach (['welcome', 'queue_text', 'accept_text', 'close_text'] as $k) $cfg[$k] = (string)$cfg[$k];
+    foreach (['welcome', 'queue_text', 'accept_text', 'close_text', 'holidays', 'offhours_text', 'offhours_queue_text'] as $k) $cfg[$k] = (string)$cfg[$k];
     return $cfg;
   }
 }
@@ -119,6 +227,23 @@ if (!function_exists('whatsapp_bot_save_config')) {
     $module = whatsapp_bot_module_enabled($pdo, $companyId);
     // section = 'robo' (robô e mensagens) ou 'crm': grava só aquela parte da tela.
     $section = (string)($input['section'] ?? '');
+    if ($section === 'horario') {
+      // Horário de atendimento: só os campos desta parte.
+      $cfg['hours_enabled'] = !empty($input['hours_enabled']);
+      $cfg['hours'] = whatsapp_bot_hours_norm($input['hours'] ?? []);
+      $cfg['holidays'] = mb_substr(trim((string)($input['holidays'] ?? '')), 0, 2000);
+      $cfg['offhours_text'] = mb_substr(trim((string)($input['offhours_text'] ?? '')), 0, 1000) ?: $def['offhours_text'];
+      $cfg['offhours_queue_text'] = mb_substr(trim((string)($input['offhours_queue_text'] ?? '')), 0, 1000) ?: $def['offhours_queue_text'];
+      $cfg['offhours_menu'] = !empty($input['offhours_menu']);
+      if ($cfg['hours_enabled']) {
+        $any = false;
+        foreach ($cfg['hours'] as $h) if (whatsapp_bot_hours_day_label($h) !== 'fechado') $any = true;
+        if (!$any) throw new RuntimeException('Informe o horário de pelo menos um dia (ex.: 08:00 às 18:00).');
+      }
+      $cfg['enabled'] = !empty($cfg['enabled']) && $module;
+      config_store_set($pdo, $companyId, 'whatsapp_bot', $cfg);
+      return ['ok' => true, 'message' => ''];
+    }
     if ($section !== 'crm') {
       $cfg['enabled'] = !empty($input['enabled']) && $module;
       foreach (['welcome' => 1000, 'queue_text' => 1000, 'close_text' => 1000] as $k => $max) {
@@ -1188,6 +1313,8 @@ if (!function_exists('whatsapp_chat_enqueue')) {
   function whatsapp_chat_enqueue(PDO $pdo, int $companyId, array $ctx, array $cfg, ?int $departmentId, string $customText = ''): void {
     $name = whatsapp_department_name($pdo, $companyId, $departmentId) ?: 'nossa equipe';
     $text = trim($customText) !== '' ? $customText : (string)$cfg['queue_text'];
+    // Fora do horário de atendimento: avisa que a resposta vem no próximo horário.
+    if (!whatsapp_bot_hours_open($cfg)) $text = (string)$cfg['offhours_queue_text'];
     whatsapp_chat_send_text($pdo, $companyId, $ctx, strtr($text, ['{setor}' => $name]));
     $now = date('Y-m-d H:i:s');
     whatsapp_chat_update($pdo, $companyId, (int)$ctx['chat']['id'], [
@@ -1339,6 +1466,7 @@ if (!function_exists('whatsapp_bot_handle')) {
       $ctx = whatsapp_chat_ctx($pdo, $companyId, $chat);
       // Robô desligado: toda conversa nova vai direto para a fila geral.
       if (!$cfg['enabled']) {
+        if (!whatsapp_bot_hours_open($cfg)) whatsapp_chat_send_text($pdo, $companyId, $ctx, whatsapp_bot_offhours_message($pdo, $companyId, $cfg, (string)$ctx['push_name']));
         $now2 = date('Y-m-d H:i:s');
         whatsapp_chat_update($pdo, $companyId, (int)$chat['id'], ['status' => 'PENDENTE', 'department_id' => null, 'user_id' => null, 'queued_at' => $now2, 'accepted_at' => null, 'closed_at' => null, 'unread' => 1, 'state' => 'MENU', 'data' => []]);
         whatsapp_chat_notify($companyId, (int)$chat['id'], ['status' => 'PENDENTE', 'new_message' => true]);
@@ -1372,6 +1500,17 @@ if (!function_exists('whatsapp_bot_step')) {
       if (whatsapp_bot_flows_ready($pdo)) $reset['answers_json'] = null;
       $save($reset);
       $chat = array_merge($chat, $reset, ['answers_json' => null, 'state' => 'MENU', 'data' => []]);
+      if (!whatsapp_bot_hours_open($cfg)) {
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, whatsapp_bot_offhours_message($pdo, $companyId, $cfg, (string)$ctx['push_name']));
+        if (empty($cfg['offhours_menu'])) {
+          // Sem o menu fora do horário: a conversa fica na fila para a equipe responder depois.
+          $now2 = date('Y-m-d H:i:s');
+          whatsapp_chat_update($pdo, $companyId, $chatId, ['status' => 'PENDENTE', 'department_id' => null, 'user_id' => null, 'queued_at' => $now2, 'accepted_at' => null, 'closed_at' => null, 'unread' => 1, 'state' => 'MENU', 'data' => []]);
+          whatsapp_chat_log($pdo, $companyId, $chat, 'OUT', 'sistema', 'Mensagem recebida fora do horário de atendimento: conversa colocada na fila.');
+          whatsapp_chat_notify($companyId, $chatId, ['status' => 'PENDENTE', 'new_message' => true]);
+          return 'fora do horário (fila)';
+        }
+      }
       // Frase de gatilho (ex.: mensagem pronta de anúncio) inicia o fluxo direto.
       $flow = whatsapp_bot_flow_match($pdo, $companyId, $text);
       if ($flow) return whatsapp_bot_flow_start($pdo, $companyId, $ctx, $cfg, $chat, (int)$flow['id']);
