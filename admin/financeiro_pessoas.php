@@ -308,7 +308,7 @@ try {
       } else {
         gestao_create_customer_address($pdo, $cid, $personId, $addrData, $makeDefault);
       }
-      finance_redirect(function_exists('multi_company_context_url') ? multi_company_context_url('financeiro_pessoas.php?edit=' . $personId . '&role=customer&mc_customer=1&ok=' . rawurlencode('Endereço salvo.')) : ('financeiro_pessoas.php?edit=' . $personId . '&ok=' . rawurlencode('Endereço salvo.')));
+      finance_redirect(function_exists('multi_company_context_url') ? multi_company_context_url('financeiro_pessoas.php?edit=' . $personId . '&role=customer&mc_customer=1&tab=enderecos&ok=' . rawurlencode('Endereço salvo.')) : ('financeiro_pessoas.php?edit=' . $personId . '&tab=enderecos&ok=' . rawurlencode('Endereço salvo.')));
     }
 
     if ($action === 'delete_address') {
@@ -322,7 +322,7 @@ try {
         }
         $pdo->prepare('UPDATE gestao_customer_addresses SET active = 0, updated_at = NOW() WHERE company_id = ? AND person_id = ? AND id = ?')->execute([$cid, $personId, $addressId]);
       }
-      finance_redirect(function_exists('multi_company_context_url') ? multi_company_context_url('financeiro_pessoas.php?edit=' . $personId . '&role=customer&mc_customer=1&ok=' . rawurlencode('Endereço removido.')) : ('financeiro_pessoas.php?edit=' . $personId . '&ok=' . rawurlencode('Endereço removido.')));
+      finance_redirect(function_exists('multi_company_context_url') ? multi_company_context_url('financeiro_pessoas.php?edit=' . $personId . '&role=customer&mc_customer=1&tab=enderecos&ok=' . rawurlencode('Endereço removido.')) : ('financeiro_pessoas.php?edit=' . $personId . '&tab=enderecos&ok=' . rawurlencode('Endereço removido.')));
     }
 
     if ($action === 'delete') {
@@ -656,8 +656,11 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       <a class="finance-modal-close" href="financeiro_pessoas.php" aria-label="Fechar">×</a>
     </div>
 
-    <?php $pcContacts = ((int)($edit['id'] ?? 0) > 0 && $pcReady) ? person_contacts_by_person($pdo, $cid, (int)$edit['id']) : []; ?>
-    <?php if ((int)($edit['id'] ?? 0) > 0 && ($paAccessAllowed || $pcReady)): ?>
+    <?php $pcContacts = ((int)($edit['id'] ?? 0) > 0 && $pcReady) ? person_contacts_by_person($pdo, $cid, (int)$edit['id']) : [];
+      // Abas do cadastro: Dados, Endereços, Contatos e Anexos.
+      $adTab = (int)($edit['id'] ?? 0) > 0 && !$financePersonCrossContext;
+      $fpTabs = (int)($edit['id'] ?? 0) > 0 && ($paAccessAllowed || $pcReady || $adTab); ?>
+    <?php if ($fpTabs): ?>
     <style>
     .pa-tabs{display:flex;gap:8px;margin:12px 0 16px;border-bottom:1px solid #d9e5f4;padding-bottom:9px}
     .pa-tabs button{min-width:110px;border:1px solid #cbd5e1;padding:9px 15px;border-radius:9px;background:white;color:#334155;cursor:pointer;font-weight:700}
@@ -673,6 +676,7 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
     </style>
     <div class="pa-tabs" role="tablist" aria-label="Abas do cadastro de pessoa">
       <button type="button" role="tab" id="paTabDados" aria-controls="financePersonForm" aria-selected="true" data-pa-tab="dados">Dados</button>
+      <?php if ($adTab): ?><button type="button" role="tab" id="paTabEnderecos" aria-controls="adPanel" aria-selected="false" data-pa-tab="enderecos">Endereços (<?=count($personAddresses)?>)</button><?php endif; ?>
       <?php if ($pcReady): ?><button type="button" role="tab" id="paTabContatos" aria-controls="pcPanel" aria-selected="false" data-pa-tab="contatos">Contatos (<?=count($pcContacts)?>)</button><?php endif; ?>
       <?php if ($paAccessAllowed): ?><button type="button" role="tab" id="paTabAnexos" aria-controls="paPanel" aria-selected="false" data-pa-tab="anexos">Anexos (<?=count($paRows)?>)</button><?php endif; ?>
     </div>
@@ -916,29 +920,29 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       })();
     </script>
     <?php endif; ?>
-    <?php if ((int)($edit['id'] ?? 0) > 0 && ($paAccessAllowed || $pcReady)): ?>
+    <?php if ($fpTabs): ?>
     <script>
       document.addEventListener('DOMContentLoaded',function(){
         // Abas do cadastro: Dados / Contatos / Anexos.
         const form=document.getElementById('financePersonForm'),extras=document.getElementById('paFormExtras');
-        const panels={contatos:document.getElementById('pcPanel'),anexos:document.getElementById('paPanel')};
+        const panels={enderecos:document.getElementById('adPanel'),contatos:document.getElementById('pcPanel'),anexos:document.getElementById('paPanel')};
         const tabs=Array.from(document.querySelectorAll('[data-pa-tab]'));
         if(!form||!tabs.length)return;
         const activate=(which)=>{
           if(which!=='dados'&&!panels[which])which='dados';
           const dados=which==='dados';
-          form.style.display=dados?'':'none';if(extras)extras.style.display=dados?'':'none';
+          form.style.display=dados?'':'none';if(extras)extras.style.display=(dados||which==='enderecos')?'':'none';
           Object.entries(panels).forEach(([k,p])=>{if(!p)return;p.hidden=k!==which;p.style.display=k===which?'block':'none';});
           tabs.forEach(t=>t.setAttribute('aria-selected',String(t.dataset.paTab===which)));
         };
         tabs.forEach(t=>t.addEventListener('click',()=>activate(t.dataset.paTab)));
-        activate(<?=json_encode(in_array((string)($_GET['tab']??''),['anexos','contatos'],true)?(string)$_GET['tab']:'dados')?>);
+        activate(<?=json_encode(in_array((string)($_GET['tab']??''),['anexos','contatos','enderecos'],true)?(string)$_GET['tab']:'dados')?>);
       });
     </script>
     <?php endif; ?>
     <div id="paFormExtras">
     <?php if ((int)($edit['id'] ?? 0) > 0 && !$financePersonCrossContext): ?>
-      <div class="finance-form-section" style="margin-top:18px;">
+      <div class="finance-form-section" id="adPanel" role="tabpanel" aria-labelledby="paTabEnderecos" hidden style="margin-top:18px;">
         <h3>Endereços adicionais</h3>
         <p class="finance-muted">Cadastre outros locais de entrega/atendimento para esta pessoa. O endereço padrão aparece primeiro no checkout e no PDV.</p>
 

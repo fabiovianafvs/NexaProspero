@@ -55,6 +55,28 @@ try {
       $st->execute((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid]));
       $out(['ok' => true, 'departments' => array_map(static fn($d) => ['id' => (int)$d['id'], 'name' => (string)$d['name']], whatsapp_departments($pdo, $cid)), 'users' => $st->fetchAll(PDO::FETCH_ASSOC) ?: []]);
 
+    case 'profile':
+      $chat = $loadChat();
+      $out(['ok' => true, 'profile' => whatsapp_att_profile($pdo, $cid, $chat)]);
+
+    case 'people':
+      // Busca de cliente para ligar ao contato (nome, fantasia ou CPF/CNPJ).
+      $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
+      $items = [];
+      if (mb_strlen($q) >= 2) {
+        $like = '%' . $q . '%';
+        $digits = preg_replace('/\D+/', '', $q) ?? '';
+        $sql = 'SELECT id, name, fantasy_name, document FROM finance_people WHERE company_id = ? AND (name LIKE ? OR fantasy_name LIKE ? OR document LIKE ?';
+        $params = [$cid, $like, $like, $like];
+        if (strlen($digits) >= 4) { $sql .= " OR REPLACE(REPLACE(REPLACE(COALESCE(document,''),'.',''),'/',''),'-','') LIKE ?"; $params[] = '%' . $digits . '%'; }
+        $st = $pdo->prepare($sql . ') ORDER BY name, id LIMIT 20');
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+          $items[] = ['id' => (int)$r['id'], 'name' => (string)$r['name'], 'fantasy' => (string)($r['fantasy_name'] ?? ''), 'document' => whatsapp_att_doc_label((string)($r['document'] ?? ''))];
+        }
+      }
+      $out(['ok' => true, 'items' => $items]);
+
     case 'quick':
       // Mensagens rápidas ativas + dados para trocar {atendente} e {empresa}.
       $out(['ok' => true, 'items' => array_map(static fn($r) => ['shortcut' => $r['shortcut'], 'title' => $r['title'], 'text' => $r['text']], whatsapp_quick_replies($pdo, $cid, true)),
@@ -69,18 +91,18 @@ try {
         foreach (person_contacts_search($pdo, $cid, $q, 15, true) as $r) {
           $ph = trim((string)($r['whatsapp'] ?? '')) ?: trim((string)($r['phone'] ?? ''));
           if ($ph === '') continue;
-          $items[] = ['name' => (string)$r['name'], 'role' => (string)($r['role'] ?? ''), 'company' => (string)($r['person_name'] ?? ''), 'phone' => $ph];
+          $items[] = ['name' => (string)$r['name'], 'role' => (string)($r['role'] ?? ''), 'company' => (string)($r['person_name'] ?? ''), 'document' => whatsapp_att_doc_label((string)($r['person_document'] ?? '')), 'phone' => $ph];
         }
         $like = '%' . $q . '%';
         $digits = person_contact_digits($q);
-        $sql = "SELECT name, whatsapp, phone FROM finance_people WHERE company_id=? AND (COALESCE(whatsapp,'')<>'' OR COALESCE(phone,'')<>'') AND (name LIKE ? OR document LIKE ?";
+        $sql = "SELECT name, document, whatsapp, phone FROM finance_people WHERE company_id=? AND (COALESCE(whatsapp,'')<>'' OR COALESCE(phone,'')<>'') AND (name LIKE ? OR document LIKE ?";
         $params = [$cid, $like, $like];
         if (strlen($digits) >= 4) { $sql .= " OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(whatsapp,''),'(',''),')',''),'-',''),' ','') LIKE ?"; $params[] = '%' . $digits . '%'; }
         $st = $pdo->prepare($sql . ') ORDER BY name LIMIT 15');
         $st->execute($params);
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
           $ph = trim((string)($r['whatsapp'] ?? '')) ?: trim((string)($r['phone'] ?? ''));
-          $items[] = ['name' => (string)$r['name'], 'role' => 'Cadastro', 'company' => '', 'phone' => $ph];
+          $items[] = ['name' => (string)$r['name'], 'role' => 'Cadastro', 'company' => '', 'document' => whatsapp_att_doc_label((string)($r['document'] ?? '')), 'phone' => $ph];
         }
       }
       $out(['ok' => true, 'items' => array_slice($items, 0, 25)]);
@@ -113,6 +135,10 @@ try {
     case 'crm':
       $id = whatsapp_att_crm($pdo, $cid, $loadChat(), $uid, (string)($_POST['note'] ?? ''));
       $out(['ok' => true, 'crm_id' => $id]);
+
+    case 'contact_save':
+      $id = whatsapp_att_contact_save($pdo, $cid, $loadChat(), $_POST);
+      $out(['ok' => true, 'contact_id' => $id]);
 
     case 'new':
       $id = whatsapp_att_new_chat($pdo, $cid, $uid, (string)($_POST['phone'] ?? ''), (string)($_POST['text'] ?? ''));

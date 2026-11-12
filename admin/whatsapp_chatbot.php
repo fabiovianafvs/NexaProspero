@@ -300,7 +300,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     <?php foreach ($contacts as $c): $callPhone = trim((string)($c['whatsapp'] ?? '')) ?: trim((string)($c['phone'] ?? '')); ?>
       <tr<?= (int)$c['active'] ? '' : ' style="opacity:.55"' ?>>
         <td><b><?= wab_h($c['name']) ?></b><?= (int)$c['is_primary'] ? ' <span class="wab-chip">Principal</span>' : '' ?><?= (int)$c['active'] ? '' : ' <span class="wab-chip off">inativo</span>' ?><?php if (!empty($c['role'])): ?><br><span class="wab-muted"><?= wab_h($c['role']) ?></span><?php endif; ?></td>
-        <td><?= !empty($c['person_name']) ? wab_h($c['person_name']) : '<span class="wab-muted">Sem cliente</span>' ?></td>
+        <td><?= !empty($c['person_name']) ? wab_h($c['person_name']) . (!empty($c['person_document']) ? '<br><span class="wab-muted">' . wab_h($c['person_document']) . '</span>' : '') : '<span class="wab-muted">Sem cliente</span>' ?></td>
         <td><?= wab_h($c['whatsapp'] ?? '') ?></td>
         <td><?= wab_h($c['phone'] ?? '') ?></td>
         <td><?= wab_h($c['email'] ?? '') ?></td>

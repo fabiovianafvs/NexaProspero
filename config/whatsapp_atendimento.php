@@ -165,6 +165,97 @@ if (!function_exists('whatsapp_att_chat_info')) {
   }
 }
 
+if (!function_exists('whatsapp_att_doc_label')) {
+  /** CPF/CNPJ com pontuação. */
+  function whatsapp_att_doc_label(string $doc): string {
+    $d = preg_replace('/\D+/', '', $doc) ?? '';
+    if (strlen($d) === 14) return substr($d, 0, 2) . '.' . substr($d, 2, 3) . '.' . substr($d, 5, 3) . '/' . substr($d, 8, 4) . '-' . substr($d, 12);
+    if (strlen($d) === 11) return substr($d, 0, 3) . '.' . substr($d, 3, 3) . '.' . substr($d, 6, 3) . '-' . substr($d, 9);
+    return trim($doc);
+  }
+}
+
+if (!function_exists('whatsapp_att_profile')) {
+  /** Dados completos de quem está na conversa: contato, cliente (pessoa) e outros contatos do cliente. */
+  function whatsapp_att_profile(PDO $pdo, int $companyId, array $chat): array {
+    if (!function_exists('person_contacts_ready')) require_once __DIR__ . '/person_contacts.php';
+    $ready = person_contacts_ready($pdo) && whatsapp_bot_sessions_has_contact($pdo);
+    $out = [
+      'phone' => whatsapp_att_phone_label((string)($chat['phone'] ?? '')),
+      'push_name' => trim((string)($chat['push_name'] ?? '')),
+      'contacts_ready' => $ready,
+      'contact' => null,
+      'person' => null,
+      'contacts' => [],
+    ];
+    $contactId = $ready ? (int)($chat['contact_id'] ?? 0) : 0;
+    if ($contactId > 0 && ($c = person_contact_get($pdo, $companyId, $contactId))) {
+      $out['contact'] = [
+        'id' => (int)$c['id'], 'name' => (string)$c['name'], 'role' => (string)($c['role'] ?? ''),
+        'whatsapp' => (string)($c['whatsapp'] ?? ''), 'phone' => (string)($c['phone'] ?? ''), 'email' => (string)($c['email'] ?? ''),
+        'notes' => (string)($c['notes'] ?? ''), 'is_primary' => (int)$c['is_primary'], 'person_id' => (int)($c['person_id'] ?? 0),
+      ];
+    }
+    $personId = (int)($chat['person_id'] ?? 0);
+    if ($out['contact'] && $out['contact']['person_id'] > 0) $personId = $out['contact']['person_id'];
+    if ($personId > 0) {
+      $st = $pdo->prepare('SELECT * FROM finance_people WHERE company_id = ? AND id = ? LIMIT 1');
+      $st->execute([$companyId, $personId]);
+      if ($p = $st->fetch(PDO::FETCH_ASSOC)) {
+        $street = trim((string)($p['address'] ?? ''));
+        $num = trim((string)($p['number'] ?? ''));
+        $addr = array_filter([
+          $street !== '' ? $street . ($num !== '' ? ', ' . $num : '') : '',
+          trim((string)($p['complement'] ?? '')),
+          trim((string)($p['district'] ?? '')),
+          trim(trim((string)($p['city'] ?? '')) . '/' . trim((string)($p['state'] ?? '')), '/'),
+          trim((string)($p['zip_code'] ?? '')) !== '' ? 'CEP ' . trim((string)$p['zip_code']) : '',
+        ]);
+        $out['person'] = [
+          'id' => (int)$p['id'], 'name' => (string)$p['name'], 'fantasy_name' => (string)($p['fantasy_name'] ?? ''),
+          'document' => whatsapp_att_doc_label((string)($p['document'] ?? '')), 'person_type' => (string)($p['person_type'] ?? ''),
+          'email' => (string)($p['email'] ?? ''), 'phone' => (string)($p['phone'] ?? ''), 'whatsapp' => (string)($p['whatsapp'] ?? ''),
+          'address' => implode(' · ', $addr), 'notes' => mb_strimwidth((string)($p['notes'] ?? ''), 0, 400, '…'),
+          'url' => 'financeiro_pessoas.php?edit=' . (int)$p['id'],
+        ];
+        foreach (person_contacts_by_person($pdo, $companyId, (int)$p['id']) as $c) {
+          if (!(int)$c['active'] || (int)$c['id'] === $contactId) continue;
+          $out['contacts'][] = ['name' => (string)$c['name'], 'role' => (string)($c['role'] ?? ''), 'phone' => trim((string)($c['whatsapp'] ?? '')) ?: (string)($c['phone'] ?? ''), 'email' => (string)($c['email'] ?? '')];
+        }
+      }
+    }
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_att_contact_save')) {
+  /** Cadastra (ou altera) o contato desta conversa e liga a conversa ao cliente escolhido. */
+  function whatsapp_att_contact_save(PDO $pdo, int $companyId, array $chat, array $in): int {
+    if (!function_exists('person_contact_save')) require_once __DIR__ . '/person_contacts.php';
+    if (!person_contacts_ready($pdo) || !whatsapp_bot_sessions_has_contact($pdo)) throw new RuntimeException('Aplique "Contatos das pessoas" no Atualizador do Banco.');
+    $cur = (int)($chat['contact_id'] ?? 0) > 0 ? person_contact_get($pdo, $companyId, (int)$chat['contact_id']) : null;
+    $data = [
+      'id' => $cur ? (int)$cur['id'] : 0,
+      'person_id' => (int)($in['person_id'] ?? 0),
+      'name' => (string)($in['name'] ?? ''),
+      'role' => (string)($in['role'] ?? ''),
+      'email' => (string)($in['email'] ?? ''),
+      'notes' => (string)($in['notes'] ?? ''),
+      'whatsapp' => $cur && trim((string)($cur['whatsapp'] ?? '')) !== '' ? (string)$cur['whatsapp'] : whatsapp_att_phone_label((string)($chat['phone'] ?? '')),
+      'phone' => $cur ? (string)($cur['phone'] ?? '') : '',
+      'is_primary' => $cur ? (int)$cur['is_primary'] : 0,
+      'active' => 1,
+    ];
+    $id = person_contact_save($pdo, $companyId, $data);
+    $upd = ['contact_id' => $id];
+    if ($data['person_id'] > 0) $upd['person_id'] = $data['person_id'];
+    elseif ($cur && (int)($cur['person_id'] ?? 0) > 0 && (int)($chat['person_id'] ?? 0) === (int)$cur['person_id']) $upd['person_id'] = null;
+    whatsapp_chat_update($pdo, $companyId, (int)$chat['id'], $upd);
+    whatsapp_chat_notify($companyId, (int)$chat['id'], ['status' => 'contato']);
+    return $id;
+  }
+}
+
 if (!function_exists('whatsapp_att_messages')) {
   function whatsapp_att_messages(PDO $pdo, int $companyId, int $chatId, int $afterId = 0): array {
     $cols = 'm.id, m.direction, m.sender, m.user_id, m.msg_type, m.body, m.media_path, m.media_mime, m.media_name, m.media_size, m.send_ok, m.created_at, u.name AS user_name';

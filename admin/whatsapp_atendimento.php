@@ -7,6 +7,7 @@ declare(strict_types=1);
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/../config/whatsapp_atendimento.php';
+require_once __DIR__ . '/../config/person_contacts.php';
 if (is_file(__DIR__ . '/../config/brain_realtime.php')) require_once __DIR__ . '/../config/brain_realtime.php';
 
 $cid = (int)COMPANY_ID;
@@ -47,7 +48,12 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-empty{padding:30px 16px;color:var(--mut);text-align:center;font-size:14px}
 .waa-main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:#efeae2}
 .waa-head{background:var(--bg);padding:10px 14px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.waa-head .waa-meta{min-width:160px}.waa-sub{font-size:12px;color:var(--mut)}
+.waa-head .waa-meta{min-width:160px}.waa-profile-open{cursor:pointer}.waa-head .waa-meta.waa-profile-open:hover .waa-name{text-decoration:underline}
+.waa-card.wide{max-width:620px;max-height:92vh;overflow:auto}.waa-pf-top{display:flex;gap:12px;align-items:center}.waa-pf-top .waa-av{width:56px;height:56px;flex-basis:56px;font-size:20px}
+.waa-pf-sec{border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fff}.waa-pf-sec h4{margin:0 0 6px;font-size:13px;color:#008069;letter-spacing:.02em;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.waa-pf-grid{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:14px}.waa-pf-grid dt{color:#667781;font-size:12px;padding-top:2px}.waa-pf-grid dd{margin:0;word-break:break-word}
+.waa-pf-list{display:grid;gap:4px;font-size:13px}.waa-pf-list div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #f0f2f5;padding:4px 0}.waa-pf-list div:last-child{border-bottom:0}
+.waa-pf-sel{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;font-weight:700}.waa-sub{font-size:12px;color:var(--mut)}
 .waa-actions{display:flex;gap:6px;flex-wrap:wrap}
 .waa-msgs{flex:1;min-height:0;overflow-y:auto;padding:16px 6%;display:flex;flex-direction:column;gap:4px}
 .waa-b{max-width:65%;padding:6px 9px 4px;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;position:relative}
@@ -72,10 +78,10 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mut);text-align:center;padding:30px;background:var(--bg)}
 .waa-welcome h3{color:#41525d;margin:8px 0}
 .waa-banner{background:#fff8c5;padding:8px 14px;font-size:13px;color:#54656f;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.waa-modal{position:fixed;inset:0;background:rgba(11,20,26,.45);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}.waa-modal.on{display:flex}
+.waa-modal{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;position:fixed;inset:0;background:rgba(11,20,26,.45);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}.waa-modal.on{display:flex}
 .waa-card{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:420px;display:grid;gap:10px}
 .waa-cres{position:absolute;left:0;right:0;top:100%;z-index:5;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.12);max-height:240px;overflow:auto}.waa-cres:empty{display:none}.waa-cres button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:8px 10px;cursor:pointer;font:inherit}.waa-cres button:hover{background:#f0fdf4}.waa-cres button span{font-size:11px;font-weight:800;color:#3730a3;background:#eef2ff;border-radius:6px;padding:1px 6px}.waa-cres small{display:block;color:#64748b}.waa-cres-empty{padding:10px;color:#64748b;font-size:13px}
-.waa-card h3{margin:0;color:#0b1f5b}.waa-card label{font-size:12px;font-weight:700;color:#334155}.waa-card select,.waa-card input,.waa-card textarea{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font:inherit}
+.waa-card h3{margin:0;color:#0b1f5b}.waa-card label{font-size:12px;font-weight:700;color:#334155}.waa-card select,.waa-card input,.waa-card textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font:inherit}
 .waa-rt{font-size:11px;color:var(--mut)}
 .waa-answers{background:#eef6ff;border-bottom:1px solid var(--line);padding:8px 14px;font-size:13px;color:#1e3a5f;display:flex;gap:6px 16px;flex-wrap:wrap}.waa-answers b{color:#0b1f5b}
 .waa-back{display:none}
@@ -109,8 +115,8 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     <div id="waaChat" style="display:none;flex:1;flex-direction:column;min-height:0">
       <div class="waa-head">
         <button class="waa-btn waa-back" type="button" id="waaBack">←</button>
-        <div class="waa-av" id="waaAv"></div>
-        <div class="waa-meta"><div class="waa-name" id="waaName"></div><div class="waa-sub" id="waaSub"></div></div>
+        <div class="waa-av waa-profile-open" id="waaAv" title="Ver dados do contato"></div>
+        <div class="waa-meta waa-profile-open" title="Ver dados do contato"><div class="waa-name" id="waaName"></div><div class="waa-sub" id="waaSub"></div></div>
         <div class="waa-actions">
           <button class="waa-btn g" type="button" id="waaAccept">Aceitar</button>
           <button class="waa-btn" type="button" id="waaTransfer">Transferir</button>
@@ -158,6 +164,25 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   <div class="waa-sub">O histórico recente da conversa vai junto. Você fica como responsável.</div>
   <div><label>Observação (opcional)</label><textarea id="cNote" rows="3"></textarea></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="cGo">Gerar</button></div>
+</div></div>
+<div class="waa-modal" id="mProfile"><div class="waa-card wide">
+  <div class="waa-pf-top"><div class="waa-av" id="pfAv"></div><div style="flex:1;min-width:0"><h3 id="pfName"></h3><div class="waa-sub" id="pfSub"></div></div><button class="waa-btn" type="button" data-close>✕</button></div>
+  <div id="pfBody"><div class="waa-sub">Carregando…</div></div>
+  <form id="pfForm" style="display:none;gap:8px" class="waa-pf-sec" autocomplete="off">
+    <h4 id="pfFormTitle">Cadastrar contato</h4>
+    <div><label>Nome do contato *</label><input id="pfFName" maxlength="120" required></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label>Função</label><input id="pfFRole" maxlength="60" list="pfRoles" placeholder="Ex.: Financeiro, Contador"></div>
+      <div><label>E-mail</label><input id="pfFEmail" maxlength="150" inputmode="email"></div>
+    </div>
+    <datalist id="pfRoles"><?php foreach (person_contact_roles() as $r): ?><option value="<?= waa_h($r) ?>"><?php endforeach; ?></datalist>
+    <div style="position:relative"><label>Cliente (empresa ou pessoa a quem pertence)</label>
+      <div id="pfFPersonSel" class="waa-pf-sel" style="display:none"><span id="pfFPersonName"></span><button class="waa-btn" type="button" id="pfFPersonClear">Trocar</button></div>
+      <input id="pfFPersonQ" placeholder="Buscar por nome, fantasia ou CPF/CNPJ (opcional)"><div id="pfFPersonRes" class="waa-cres"></div>
+    </div>
+    <div><label>Observação</label><input id="pfFNotes" maxlength="500"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" id="pfFCancel">Cancelar</button><button class="waa-btn g" type="submit">Salvar contato</button></div>
+  </form>
 </div></div>
 <div class="waa-modal" id="mNew"><div class="waa-card">
   <h3>Nova conversa</h3>
@@ -489,6 +514,85 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     $('waaFileSend').disabled = false; clearFile();
   });
 
+  // Dados completos do contato (clique no nome/foto do topo da conversa).
+  let profile = null, pfPerson = 0;
+  const dl = (rows) => '<dl class="waa-pf-grid">' + rows.filter((r) => r[1]).map((r) => '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') + '</dl>';
+  function renderProfile() {
+    const p = profile, c = p.contact, pe = p.person;
+    $('pfAv').textContent = ini(chat ? chat.name : '');
+    $('pfName').textContent = c ? c.name : (pe ? pe.name : (p.push_name || p.phone || 'Contato'));
+    $('pfSub').textContent = [c && c.role, p.phone, p.push_name && (c || pe) ? 'no WhatsApp: ' + p.push_name : ''].filter(Boolean).join(' · ');
+    let h = '';
+    if (c) {
+      h += '<div class="waa-pf-sec"><h4>Contato <button class="waa-btn" type="button" id="pfEdit">Editar</button></h4>' + dl([['Nome', c.name], ['Função', c.role], ['WhatsApp', c.whatsapp], ['Telefone', c.phone], ['E-mail', c.email], ['Observação', c.notes], ['Principal', c.is_primary ? 'Sim' : '']]) + '</div>';
+    } else if (p.contacts_ready) {
+      h += '<div class="waa-pf-sec"><h4>Contato <button class="waa-btn g" type="button" id="pfEdit">Cadastrar contato</button></h4><div class="waa-sub">Este número ainda não está nos Contatos. Cadastre para identificar quem é e de qual cliente, nas próximas conversas também.</div></div>';
+    }
+    if (pe) {
+      h += '<div class="waa-pf-sec"><h4>Cliente <a class="waa-btn" href="' + esc(pe.url) + '" target="_blank" rel="noopener">Abrir cadastro</a></h4>' + dl([['Nome / Razão', pe.name], ['Fantasia', pe.fantasy_name], [pe.person_type === 'FISICA' ? 'CPF' : 'CPF/CNPJ', pe.document], ['E-mail', pe.email], ['Telefone', pe.phone], ['WhatsApp', pe.whatsapp], ['Endereço', pe.address], ['Observações', pe.notes]]) + '</div>';
+    } else {
+      h += '<div class="waa-pf-sec"><h4>Cliente</h4><div class="waa-sub">Conversa ainda não ligada a um cliente do cadastro de pessoas.' + (p.contacts_ready ? ' Use <b>' + (c ? 'Editar' : 'Cadastrar contato') + '</b> e escolha o cliente.' : '') + '</div></div>';
+    }
+    if (p.contacts.length) {
+      h += '<div class="waa-pf-sec"><h4>Outros contatos do cliente</h4><div class="waa-pf-list">' + p.contacts.map((o) => '<div><span><b>' + esc(o.name) + '</b>' + (o.role ? ' · ' + esc(o.role) : '') + '</span><span class="waa-sub">' + esc([o.phone, o.email].filter(Boolean).join(' · ')) + '</span></div>').join('') + '</div></div>';
+    }
+    $('pfBody').innerHTML = h;
+    $('pfBody').style.display = 'grid'; $('pfBody').style.gap = '10px';
+    $('pfForm').style.display = 'none';
+    const ed = $('pfEdit'); if (ed) ed.addEventListener('click', openPfForm);
+  }
+  async function openProfile() {
+    if (!chatId) return;
+    $('pfBody').innerHTML = '<div class="waa-sub">Carregando…</div>'; $('pfForm').style.display = 'none';
+    $('pfAv').textContent = ini(chat ? chat.name : ''); $('pfName').textContent = chat ? chat.name : ''; $('pfSub').textContent = '';
+    open('mProfile');
+    try { const d = await api('profile', { id: chatId }); profile = d.profile; renderProfile(); }
+    catch (e) { $('pfBody').innerHTML = '<div class="waa-sub">' + esc(e.message) + '</div>'; }
+  }
+  const pfSetPerson = (id, name) => {
+    pfPerson = id || 0;
+    $('pfFPersonName').textContent = name || '';
+    $('pfFPersonSel').style.display = pfPerson ? 'flex' : 'none';
+    $('pfFPersonQ').style.display = pfPerson ? 'none' : '';
+    $('pfFPersonRes').innerHTML = ''; if (!pfPerson) $('pfFPersonQ').value = '';
+  };
+  function openPfForm() {
+    const c = profile.contact, pe = profile.person;
+    $('pfFormTitle').textContent = c ? 'Editar contato' : 'Cadastrar contato';
+    $('pfFName').value = c ? c.name : (profile.push_name || '');
+    $('pfFRole').value = c ? c.role : '';
+    $('pfFEmail').value = c ? c.email : '';
+    $('pfFNotes').value = c ? c.notes : '';
+    pfSetPerson(pe ? pe.id : 0, pe ? pe.name + (pe.document ? ' · ' + pe.document : '') : '');
+    $('pfBody').style.display = 'none';
+    $('pfForm').style.display = 'grid';
+    $('pfFName').focus();
+  }
+  $('waaAv').addEventListener('click', openProfile);
+  document.querySelector('.waa-head .waa-meta').addEventListener('click', openProfile);
+  $('pfFCancel').addEventListener('click', () => { if (profile) renderProfile(); });
+  $('pfFPersonClear').addEventListener('click', () => { pfSetPerson(0, ''); $('pfFPersonQ').focus(); });
+  let pfTimer = 0;
+  $('pfFPersonQ').addEventListener('input', () => {
+    clearTimeout(pfTimer);
+    const q = $('pfFPersonQ').value.trim();
+    if (q.length < 2) { $('pfFPersonRes').innerHTML = ''; return; }
+    pfTimer = setTimeout(async () => {
+      try {
+        const d = await api('people', { q });
+        $('pfFPersonRes').innerHTML = (d.items || []).map((r, i) => `<button type="button" data-i="${i}"><b>${esc(r.name)}</b><small>${esc([r.fantasy, r.document].filter(Boolean).join(' · '))}</small></button>`).join('') || '<div class="waa-cres-empty">Nenhum cliente encontrado.</div>';
+        $('pfFPersonRes').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const r = d.items[+b.dataset.i]; pfSetPerson(r.id, r.name + (r.document ? ' · ' + r.document : '')); }));
+      } catch (e) { $('pfFPersonRes').innerHTML = '<div class="waa-cres-empty">' + esc(e.message) + '</div>'; }
+    }, 300);
+  });
+  $('pfForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = await act('contact_save', { name: $('pfFName').value, role: $('pfFRole').value, email: $('pfFEmail').value, notes: $('pfFNotes').value, person_id: pfPerson });
+    if (!d) return;
+    scheduleList();
+    try { const r = await api('profile', { id: chatId }); profile = r.profile; renderProfile(); } catch (_) {}
+  });
+
   // Ações
   const open = (id) => $(id).classList.add('on');
   document.querySelectorAll('.waa-modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.classList.remove('on'); }));
@@ -522,7 +626,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     nTimer = setTimeout(async () => {
       try {
         const d = await api('contacts', { q });
-        $('nResults').innerHTML = (d.items || []).map((r, i) => `<button type="button" data-i="${i}"><b>${esc(r.name)}</b>${r.role ? ' <span>' + esc(r.role) + '</span>' : ''}<small>${esc([r.company, r.phone].filter(Boolean).join(' · '))}</small></button>`).join('') || '<div class="waa-cres-empty">Nada encontrado.</div>';
+        $('nResults').innerHTML = (d.items || []).map((r, i) => `<button type="button" data-i="${i}"><b>${esc(r.name)}</b>${r.role ? ' <span>' + esc(r.role) + '</span>' : ''}<small>${esc([r.company, r.document, r.phone].filter(Boolean).join(' · '))}</small></button>`).join('') || '<div class="waa-cres-empty">Nada encontrado.</div>';
         $('nResults').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const r = d.items[+b.dataset.i]; $('nPhone').value = r.phone; $('nSearch').value = r.name + (r.company ? ' · ' + r.company : ''); $('nResults').innerHTML = ''; $('nText').focus(); }));
       } catch (e) { $('nResults').innerHTML = '<div class="waa-cres-empty">' + esc(e.message) + '</div>'; }
     }, 250);
