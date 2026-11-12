@@ -11,6 +11,13 @@ RewriteRule ^contadorprospero/(index|login|cadastro|logout|download)\.php$ conta
 RewriteRule ^montesuaproposta/?$ montesuaproposta.php [L,QSA]
 RewriteRule ^revenda/?$ revenda/index.php [L,QSA]
 
+# Não lista o conteúdo de pastas sem página inicial (ex.: /saas/, /uploads/):
+# responde "acesso negado" em vez de mostrar os nomes dos arquivos.
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteCond %{REQUEST_FILENAME}/index.php !-f
+RewriteCond %{REQUEST_FILENAME}/index.html !-f
+RewriteRule ^ - [F]
+
 # Mantém arquivos e diretórios reais funcionando normalmente.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
