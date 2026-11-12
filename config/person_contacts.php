@@ -22,6 +22,81 @@ if (!function_exists('person_contacts_ready')) {
   }
 }
 
+if (!function_exists('person_contacts_has_tags')) {
+  /** Coluna de etiquetas instalada (migração 20261112_contatos_etiquetas_v1.sql). */
+  function person_contacts_has_tags(PDO $pdo): bool {
+    static $memo = [];
+    $key = spl_object_id($pdo);
+    if (array_key_exists($key, $memo)) return $memo[$key];
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'person_contacts' AND column_name = 'tags'");
+      return $memo[$key] = (int)$st->fetchColumn() === 1;
+    } catch (Throwable $e) {
+      return $memo[$key] = false;
+    }
+  }
+}
+
+if (!function_exists('person_contact_tags_list')) {
+  /** Etiquetas em lista (aceita texto separado por vírgula/ponto e vírgula ou array). Máx. 8. */
+  function person_contact_tags_list($tags): array {
+    $parts = is_array($tags) ? $tags : preg_split('/[,;]+/', (string)$tags);
+    $out = [];
+    foreach ($parts ?: [] as $t) {
+      $t = trim(preg_replace('/\s+/u', ' ', (string)$t) ?? '');
+      if ($t === '') continue;
+      $t = mb_substr($t, 0, 30);
+      $k = mb_strtolower($t);
+      if (!isset($out[$k])) $out[$k] = $t;
+      if (count($out) >= 8) break;
+    }
+    return array_values($out);
+  }
+}
+
+if (!function_exists('person_contact_tags_text')) {
+  function person_contact_tags_text($tags): string {
+    return mb_substr(implode(', ', person_contact_tags_list($tags)), 0, 255);
+  }
+}
+
+if (!function_exists('person_contact_all_tags')) {
+  /** Etiquetas já usadas na empresa (sugestões ao digitar). */
+  function person_contact_all_tags(PDO $pdo, int $companyId): array {
+    if (!person_contacts_ready($pdo) || !person_contacts_has_tags($pdo)) return [];
+    $st = $pdo->prepare("SELECT tags FROM person_contacts WHERE company_id = ? AND tags IS NOT NULL AND tags <> '' LIMIT 2000");
+    $st->execute([$companyId]);
+    $all = [];
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) ?: [] as $t) {
+      foreach (person_contact_tags_list((string)$t) as $x) $all[mb_strtolower($x)] = $x;
+    }
+    natcasesort($all);
+    return array_slice(array_values($all), 0, 200);
+  }
+}
+
+if (!function_exists('person_contact_tag_color')) {
+  /** Cor fixa por etiqueta [fundo, texto] (mesma conta do assets/tag-input.js). */
+  function person_contact_tag_color(string $tag): array {
+    $pal = [['#dcfce7', '#166534'], ['#dbeafe', '#1e40af'], ['#fef3c7', '#92400e'], ['#fce7f3', '#9d174d'], ['#ede9fe', '#5b21b6'], ['#ffedd5', '#9a3412'], ['#ccfbf1', '#115e59'], ['#fee2e2', '#991b1b']];
+    $h = 0;
+    foreach (preg_split('//u', mb_strtolower(trim($tag)), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ch) $h = ($h * 31 + mb_ord($ch, 'UTF-8')) % 4294967296;
+    return $pal[$h % count($pal)];
+  }
+}
+
+if (!function_exists('person_contact_tags_html')) {
+  /** Etiquetas como "chips" coloridos (HTML já escapado). */
+  function person_contact_tags_html($tags): string {
+    $html = '';
+    foreach (person_contact_tags_list($tags) as $t) {
+      [$bg, $fg] = person_contact_tag_color($t);
+      $html .= '<span class="nexa-tag" style="background:' . $bg . ';color:' . $fg . '">' . htmlspecialchars($t, ENT_QUOTES, 'UTF-8') . '</span> ';
+    }
+    return trim($html);
+  }
+}
+
 if (!function_exists('person_contact_roles')) {
   /** Sugestões de função (o campo aceita qualquer texto). */
   function person_contact_roles(): array {
@@ -63,6 +138,7 @@ if (!function_exists('person_contacts_search')) {
       $digits = person_contact_digits($q);
       $sql .= ' AND (c.name LIKE ? OR c.role LIKE ? OR c.email LIKE ? OR p.name LIKE ? OR p.fantasy_name LIKE ? OR p.document LIKE ?';
       array_push($params, $like, $like, $like, $like, $like, $like);
+      if (person_contacts_has_tags($pdo)) { $sql .= ' OR c.tags LIKE ?'; $params[] = $like; }
       if (strlen($digits) >= 4) {
         $sql .= ' OR c.whatsapp_digits LIKE ? OR c.phone_digits LIKE ?';
         array_push($params, '%' . $digits . '%', '%' . $digits . '%');
@@ -118,12 +194,18 @@ if (!function_exists('person_contact_save')) {
       !empty($in['is_primary']) ? 1 : 0,
       array_key_exists('active', $in) ? (!empty($in['active']) ? 1 : 0) : 1,
     ];
+    // Etiquetas: só grava quando o campo veio no formulário (outras telas não apagam).
+    $tagsSql = '';
+    if (person_contacts_has_tags($pdo) && array_key_exists('tags', $in)) {
+      $tagsSql = ', tags=?';
+      $row[] = person_contact_tags_text($in['tags']) ?: null;
+    }
     if ($id > 0) {
       if (!person_contact_get($pdo, $companyId, $id)) throw new RuntimeException('Contato não encontrado.');
-      $pdo->prepare('UPDATE person_contacts SET person_id=?, name=?, role=?, whatsapp=?, phone=?, email=?, notes=?, whatsapp_digits=?, phone_digits=?, is_primary=?, active=?, updated_at=NOW() WHERE company_id=? AND id=?')
+      $pdo->prepare('UPDATE person_contacts SET person_id=?, name=?, role=?, whatsapp=?, phone=?, email=?, notes=?, whatsapp_digits=?, phone_digits=?, is_primary=?, active=?' . $tagsSql . ', updated_at=NOW() WHERE company_id=? AND id=?')
         ->execute(array_merge($row, [$companyId, $id]));
     } else {
-      $pdo->prepare('INSERT INTO person_contacts (person_id, name, role, whatsapp, phone, email, notes, whatsapp_digits, phone_digits, is_primary, active, company_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())')
+      $pdo->prepare('INSERT INTO person_contacts (person_id, name, role, whatsapp, phone, email, notes, whatsapp_digits, phone_digits, is_primary, active' . ($tagsSql !== '' ? ', tags' : '') . ', company_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?' . ($tagsSql !== '' ? ',?' : '') . ',?,NOW())')
         ->execute(array_merge($row, [$companyId]));
       $id = (int)$pdo->lastInsertId();
     }

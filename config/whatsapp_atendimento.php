@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/whatsapp_chatbot.php';
+require_once __DIR__ . '/person_contacts.php';
 
 if (!function_exists('whatsapp_att_scope')) {
   /**
@@ -137,6 +138,7 @@ if (!function_exists('whatsapp_att_row')) {
       'person_id' => (int)($r['person_id'] ?? 0),
       'contact_id' => (int)($r['contact_id'] ?? 0),
       'contact_role' => trim((string)($r['contact_role'] ?? '')),
+      'tags' => person_contact_tags_list((string)($r['contact_tags'] ?? '')),
       'company_label' => $contactName !== '' ? $personLabel : '',
     ];
   }
@@ -146,10 +148,12 @@ if (!function_exists('whatsapp_att_contact_sql')) {
   /** Junção com o cadastro de Contatos (quando instalado). */
   function whatsapp_att_contact_sql(PDO $pdo): array {
     if (!function_exists('whatsapp_bot_sessions_has_contact') || !whatsapp_bot_sessions_has_contact($pdo)) return ['cols' => '', 'join' => '', 'search' => ''];
+    $tags = person_contacts_has_tags($pdo);
     return [
-      'cols' => ', s.contact_id, ct.name AS contact_name, ct.role AS contact_role',
+      'cols' => ', s.contact_id, ct.name AS contact_name, ct.role AS contact_role' . ($tags ? ', ct.tags AS contact_tags' : ''),
       'join' => "\n      LEFT JOIN person_contacts ct ON ct.company_id=s.company_id AND ct.id=s.contact_id",
-      'search' => 'ct.name LIKE ?',
+      // Busca também pelas etiquetas do contato.
+      'search' => $tags ? "CONCAT_WS(' ', ct.name, ct.tags) LIKE ?" : 'ct.name LIKE ?',
     ];
   }
 }
@@ -198,6 +202,8 @@ if (!function_exists('whatsapp_att_profile')) {
       'contact' => null,
       'person' => null,
       'contacts' => [],
+      'tags_ready' => $ready && person_contacts_has_tags($pdo),
+      'all_tags' => $ready ? person_contact_all_tags($pdo, $companyId) : [],
     ];
     $contactId = $ready ? (int)($chat['contact_id'] ?? 0) : 0;
     if ($contactId > 0 && ($c = person_contact_get($pdo, $companyId, $contactId))) {
@@ -205,6 +211,7 @@ if (!function_exists('whatsapp_att_profile')) {
         'id' => (int)$c['id'], 'name' => (string)$c['name'], 'role' => (string)($c['role'] ?? ''),
         'whatsapp' => (string)($c['whatsapp'] ?? ''), 'phone' => (string)($c['phone'] ?? ''), 'email' => (string)($c['email'] ?? ''),
         'notes' => (string)($c['notes'] ?? ''), 'is_primary' => (int)$c['is_primary'], 'person_id' => (int)($c['person_id'] ?? 0),
+        'tags' => (string)($c['tags'] ?? ''),
       ];
     }
     $personId = (int)($chat['person_id'] ?? 0);
@@ -252,6 +259,7 @@ if (!function_exists('whatsapp_att_contact_save')) {
       'role' => (string)($in['role'] ?? ''),
       'email' => (string)($in['email'] ?? ''),
       'notes' => (string)($in['notes'] ?? ''),
+      'tags' => array_key_exists('tags', $in) ? (string)$in['tags'] : ($cur ? (string)($cur['tags'] ?? '') : ''),
       'whatsapp' => $cur && trim((string)($cur['whatsapp'] ?? '')) !== '' ? (string)$cur['whatsapp'] : whatsapp_att_phone_label((string)($chat['phone'] ?? '')),
       'phone' => $cur ? (string)($cur['phone'] ?? '') : '',
       'is_primary' => $cur ? (int)$cur['is_primary'] : 0,

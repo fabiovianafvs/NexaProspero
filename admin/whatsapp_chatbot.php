@@ -8,6 +8,7 @@ require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/../config/whatsapp_chatbot.php';
 require_once __DIR__ . '/../config/person_contacts.php';
+require_once __DIR__ . '/../config/whatsapp_atendimento.php';
 
 $cid = (int)COMPANY_ID;
 // Abas da tela: cada uma mostra a sua lista, com os botões à direita.
@@ -97,7 +98,7 @@ if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
         whatsapp_department_delete($pdo, $cid, (int)($_POST['id'] ?? 0));
         $go('Setor excluído.');
       case 'contact_save':
-        person_contact_save($pdo, $cid, array_intersect_key($_POST, array_flip(['id', 'person_id', 'name', 'role', 'whatsapp', 'phone', 'email', 'notes', 'is_primary', 'active'])) + ['active' => 0]);
+        person_contact_save($pdo, $cid, array_intersect_key($_POST, array_flip(['id', 'person_id', 'name', 'role', 'whatsapp', 'phone', 'email', 'notes', 'tags', 'is_primary', 'active'])) + ['active' => 0]);
         $go('Contato salvo.');
       case 'quick_save':
         whatsapp_quick_reply_save($pdo, $cid, $_POST + ['active' => 0]);
@@ -144,6 +145,8 @@ foreach ($users as $u) $userNames[(int)$u['id']] = (string)$u['name'];
 $quickReplies = ($ready && $aba === 'rapidas') ? whatsapp_quick_replies($pdo, $cid) : [];
 $contactQ = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
 $contacts = ($contactsReady && $aba === 'contatos') ? person_contacts_search($pdo, $cid, $contactQ, 300) : [];
+$contactTags = $contactsReady && person_contacts_has_tags($pdo);
+$allTags = ($contactTags && $aba === 'contatos') ? person_contact_all_tags($pdo, $cid) : [];
 
 // Simulação do menu inicial.
 $preview = '';
@@ -292,21 +295,21 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <?php if (!$contactsReady): ?>
     <div class="msg err" style="margin-top:10px">Aplique "Contatos das pessoas" no Atualizador do Banco para usar os contatos.</div>
   <?php else: ?>
-  <form method="get" class="wab-search"><input type="hidden" name="aba" value="contatos"><input type="text" name="q" value="<?= wab_h($contactQ) ?>" placeholder="Buscar por nome, cliente, CPF/CNPJ, telefone ou e-mail"><button class="btn" type="submit">Buscar</button><?php if ($contactQ !== ''): ?><a class="btn" href="whatsapp_chatbot.php?aba=contatos">Limpar</a><?php endif; ?></form>
+  <form method="get" class="wab-search"><input type="hidden" name="aba" value="contatos"><input type="text" name="q" value="<?= wab_h($contactQ) ?>" placeholder="Buscar por nome, cliente, CPF/CNPJ, telefone, e-mail ou etiqueta"><button class="btn" type="submit">Buscar</button><?php if ($contactQ !== ''): ?><a class="btn" href="whatsapp_chatbot.php?aba=contatos">Limpar</a><?php endif; ?></form>
   <div style="overflow-x:auto"><table class="wab-table" style="margin-top:10px">
     <thead><tr><th>Contato</th><th>Cliente</th><th>WhatsApp</th><th>Telefone</th><th>E-mail</th><th></th></tr></thead>
     <tbody>
     <?php if (!$contacts): ?><tr><td colspan="6" class="wab-muted"><?= $contactQ !== '' ? 'Nenhum contato encontrado.' : 'Nenhum contato cadastrado.' ?></td></tr><?php endif; ?>
     <?php foreach ($contacts as $c): $callPhone = trim((string)($c['whatsapp'] ?? '')) ?: trim((string)($c['phone'] ?? '')); ?>
       <tr<?= (int)$c['active'] ? '' : ' style="opacity:.55"' ?>>
-        <td><b><?= wab_h($c['name']) ?></b><?= (int)$c['is_primary'] ? ' <span class="wab-chip">Principal</span>' : '' ?><?= (int)$c['active'] ? '' : ' <span class="wab-chip off">inativo</span>' ?><?php if (!empty($c['role'])): ?><br><span class="wab-muted"><?= wab_h($c['role']) ?></span><?php endif; ?></td>
-        <td><?= !empty($c['person_name']) ? wab_h($c['person_name']) . (!empty($c['person_document']) ? '<br><span class="wab-muted">' . wab_h($c['person_document']) . '</span>' : '') : '<span class="wab-muted">Sem cliente</span>' ?></td>
+        <td><b><?= wab_h($c['name']) ?></b><?= (int)$c['is_primary'] ? ' <span class="wab-chip">Principal</span>' : '' ?><?= (int)$c['active'] ? '' : ' <span class="wab-chip off">inativo</span>' ?><?php if (!empty($c['role'])): ?><br><span class="wab-muted"><?= wab_h($c['role']) ?></span><?php endif; ?><?php if (!empty($c['tags'])): ?><div style="margin-top:3px"><?php foreach (person_contact_tags_list((string)$c['tags']) as $tg): [$tbg, $tfg] = person_contact_tag_color($tg); ?><a class="nexa-tag" title="Ver contatos com esta etiqueta" style="background:<?= $tbg ?>;color:<?= $tfg ?>;text-decoration:none" href="whatsapp_chatbot.php?aba=contatos&amp;q=<?= rawurlencode($tg) ?>"><?= wab_h($tg) ?></a><?php endforeach; ?></div><?php endif; ?></td>
+        <td><?= !empty($c['person_name']) ? wab_h($c['person_name']) . (!empty($c['person_document']) ? '<br><span class="wab-muted">' . wab_h(function_exists('whatsapp_att_doc_label') ? whatsapp_att_doc_label((string)$c['person_document']) : $c['person_document']) . '</span>' : '') : '<span class="wab-muted">Sem cliente</span>' ?></td>
         <td><?= wab_h($c['whatsapp'] ?? '') ?></td>
         <td><?= wab_h($c['phone'] ?? '') ?></td>
         <td><?= wab_h($c['email'] ?? '') ?></td>
         <td><div class="wab-row-actions">
           <?php if ($callPhone !== '' && (int)$c['active']): ?><a class="btn wab-mini" style="background:#00a884;color:#fff;border-color:#00a884" href="whatsapp_atendimento.php?novo=<?= rawurlencode($callPhone) ?>&amp;nome=<?= rawurlencode((string)$c['name']) ?>">Chamar</a><?php endif; ?>
-          <button class="btn wab-mini" type="button" onclick='wabContact(<?= wab_h(json_encode(['id' => (int)$c['id'], 'person_id' => (int)($c['person_id'] ?? 0), 'person_name' => (string)($c['person_name'] ?? ''), 'name' => $c['name'], 'role' => $c['role'], 'whatsapp' => $c['whatsapp'], 'phone' => $c['phone'], 'email' => $c['email'], 'notes' => $c['notes'], 'is_primary' => (int)$c['is_primary'], 'active' => (int)$c['active']], JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
+          <button class="btn wab-mini" type="button" onclick='wabContact(<?= wab_h(json_encode(['id' => (int)$c['id'], 'person_id' => (int)($c['person_id'] ?? 0), 'person_name' => (string)($c['person_name'] ?? ''), 'name' => $c['name'], 'role' => $c['role'], 'whatsapp' => $c['whatsapp'], 'phone' => $c['phone'], 'email' => $c['email'], 'notes' => $c['notes'], 'tags' => (string)($c['tags'] ?? ''), 'is_primary' => (int)$c['is_primary'], 'active' => (int)$c['active']], JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
           <form method="post" onsubmit="return confirm('Excluir este contato?');"><input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="contact_delete"><input type="hidden" name="id" value="<?= (int)$c['id'] ?>"><button class="btn btn-danger wab-mini" type="submit">Excluir</button></form>
         </div></td>
       </tr>
@@ -438,6 +441,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     <div class="wab-field"><label>E-mail</label><input type="text" name="email" id="cEmail" maxlength="150" inputmode="email"></div>
     <div class="wab-field"><label>Observação</label><input type="text" name="notes" id="cNotes" maxlength="500"></div>
   </div>
+  <?php if ($contactTags): ?><div class="wab-field" style="margin-top:4px"><label>Etiquetas (ex.: VIP, Inadimplente, Revenda — Enter para incluir)</label><input type="text" name="tags" id="cTags" data-tag-input data-suggest="<?= wab_h(json_encode($allTags, JSON_UNESCAPED_UNICODE)) ?>" placeholder="Digite a etiqueta e tecle Enter"></div><?php endif; ?>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
     <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="is_primary" value="1" id="cPrimary"> Contato principal do cliente</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="active" value="1" id="cActive"> Ativo</label>
@@ -468,6 +472,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
 </form></div>
 
+<script src="/assets/tag-input.js?v=20261112-1"></script>
 <script>
 const WAB_HINTS = {
   submenu: ['Texto acima das opções do submenu (opcional)', 'Depois de salvar, use "+ Dentro" para cadastrar as opções deste submenu.'],
@@ -530,7 +535,7 @@ function wabPerson(id, name) {
 function wabContact(c) {
   if (!document.getElementById('mContact')) return;
   const set = (id, v) => { document.getElementById(id).value = v == null ? '' : v; };
-  set('cId', c.id || ''); set('cName', c.name); set('cRole', c.role); set('cWa', c.whatsapp); set('cPhone', c.phone); set('cEmail', c.email); set('cNotes', c.notes);
+  set('cId', c.id || ''); set('cName', c.name); set('cRole', c.role); set('cWa', c.whatsapp); set('cPhone', c.phone); set('cEmail', c.email); set('cNotes', c.notes); const tg = document.getElementById('cTags'); if (tg) { tg.value = c.tags || ''; if (window.NexaTags) NexaTags.sync(tg); }
   document.getElementById('cPrimary').checked = !!c.is_primary;
   document.getElementById('cActive').checked = c.id ? !!c.active : true;
   document.getElementById('cTitle').textContent = c.id ? 'Editar contato' : 'Novo contato';

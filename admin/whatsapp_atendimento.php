@@ -119,7 +119,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <div class="waa-head">
         <button class="waa-btn waa-back" type="button" id="waaBack">←</button>
         <div class="waa-av waa-profile-open" id="waaAv" title="Ver dados do contato"></div>
-        <div class="waa-meta waa-profile-open" title="Ver dados do contato"><div class="waa-name" id="waaName"></div><div class="waa-sub" id="waaSub"></div></div>
+        <div class="waa-meta waa-profile-open" title="Ver dados do contato"><div class="waa-name"><span id="waaName"></span> <span id="waaTags"></span></div><div class="waa-sub" id="waaSub"></div></div>
         <div class="waa-actions">
           <button class="waa-btn g" type="button" id="waaAccept">Aceitar</button>
           <button class="waa-btn" type="button" id="waaTransfer">Transferir</button>
@@ -184,6 +184,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <input id="pfFPersonQ" placeholder="Buscar por nome, fantasia ou CPF/CNPJ (opcional)"><div id="pfFPersonRes" class="waa-cres"></div>
     </div>
     <div><label>Observação</label><input id="pfFNotes" maxlength="500"></div>
+    <div id="pfFTagsBox"><label>Etiquetas (ex.: VIP, Inadimplente — Enter para incluir)</label><input id="pfFTags" data-tag-input placeholder="Digite a etiqueta e tecle Enter"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" id="pfFCancel">Cancelar</button><button class="waa-btn g" type="submit">Salvar contato</button></div>
   </form>
 </div></div>
@@ -196,6 +197,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 </div></div>
 
 <script src="/assets/whatsapp-audio.js?v=20261112-1"></script>
+<script src="/assets/tag-input.js?v=20261112-1"></script>
 <script>
 // A tela ocupa toda a altura disponível da janela (qualquer tamanho de tela/zoom).
 (function () {
@@ -305,7 +307,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
             <div class="waa-row"><span class="waa-name">${esc(c.name)}</span><span class="waa-time">${esc(tm(c.last_at))}</span></div>
             <div class="waa-row"><span class="waa-prev">${c.last_direction === 'OUT' ? '↪ ' : ''}${esc(c.preview)}</span>${c.unread ? '<span class="waa-unread">' + c.unread + '</span>' : ''}</div>
             ${c.company_label || c.contact_role ? '<div class="waa-prev" style="font-size:12px">' + esc([c.contact_role, c.company_label].filter(Boolean).join(' · ')) + '</div>' : ''}
-            <div class="waa-tags">${c.department ? '<span class="waa-tag">' + esc(c.department) + '</span>' : ''}${c.user ? '<span class="waa-tag u">' + esc(c.user) + '</span>' : (c.status === 'ATENDIMENTO' ? '<span class="waa-tag u">Celular</span>' : '')}</div>
+            <div class="waa-tags">${(c.tags || []).length && window.NexaTags ? NexaTags.html(c.tags.join(',')) : ''}${c.department ? '<span class="waa-tag">' + esc(c.department) + '</span>' : ''}${c.user ? '<span class="waa-tag u">' + esc(c.user) + '</span>' : (c.status === 'ATENDIMENTO' ? '<span class="waa-tag u">Celular</span>' : '')}</div>
           </div>
         </div>`).join('');
     } catch (e) { $('waaList').innerHTML = '<div class="waa-empty">' + esc(e.message) + '</div>'; }
@@ -340,6 +342,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (c.department) parts.push(c.department);
     if (c.user) parts.push('com ' + c.user); else if (c.status === 'ATENDIMENTO') parts.push('respondido pelo celular');
     $('waaSub').textContent = parts.filter(Boolean).join(' · ');
+    $('waaTags').innerHTML = (c.tags || []).length && window.NexaTags ? NexaTags.html(c.tags.join(',')) : '';
     const mine = c.status === 'ATENDIMENTO' && c.user_id === ME;
     const other = c.status === 'ATENDIMENTO' && c.user_id > 0 && c.user_id !== ME;
     $('waaAccept').style.display = mine ? 'none' : '';
@@ -558,7 +561,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     $('pfSub').textContent = [c && c.role, p.phone, p.push_name && (c || pe) ? 'no WhatsApp: ' + p.push_name : ''].filter(Boolean).join(' · ');
     let h = '';
     if (c) {
-      h += '<div class="waa-pf-sec"><h4>Contato <button class="waa-btn" type="button" id="pfEdit">Editar</button></h4>' + dl([['Nome', c.name], ['Função', c.role], ['WhatsApp', c.whatsapp], ['Telefone', c.phone], ['E-mail', c.email], ['Observação', c.notes], ['Principal', c.is_primary ? 'Sim' : '']]) + '</div>';
+      h += '<div class="waa-pf-sec"><h4>Contato <button class="waa-btn" type="button" id="pfEdit">Editar</button></h4>' + dl([['Nome', c.name], ['Função', c.role], ['WhatsApp', c.whatsapp], ['Telefone', c.phone], ['E-mail', c.email], ['Observação', c.notes], ['Principal', c.is_primary ? 'Sim' : '']]) + (c.tags && window.NexaTags ? '<dl class="waa-pf-grid"><dt>Etiquetas</dt><dd>' + NexaTags.html(c.tags) + '</dd></dl>' : '') + '</div>';
     } else if (p.contacts_ready) {
       h += '<div class="waa-pf-sec"><h4>Contato <button class="waa-btn g" type="button" id="pfEdit">Cadastrar contato</button></h4><div class="waa-sub">Este número ainda não está nos Contatos. Cadastre para identificar quem é e de qual cliente, nas próximas conversas também.</div></div>';
     }
@@ -597,6 +600,8 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     $('pfFRole').value = c ? c.role : '';
     $('pfFEmail').value = c ? c.email : '';
     $('pfFNotes').value = c ? c.notes : '';
+    $('pfFTagsBox').style.display = profile.tags_ready ? '' : 'none';
+    if (window.NexaTags) { const tg = $('pfFTags'); const api = NexaTags.attach(tg); if (api) api.setSuggest(profile.all_tags || []); tg.value = c ? (c.tags || '') : ''; NexaTags.sync(tg); }
     pfSetPerson(pe ? pe.id : 0, pe ? pe.name + (pe.document ? ' · ' + pe.document : '') : '');
     $('pfBody').style.display = 'none';
     $('pfForm').style.display = 'grid';
@@ -621,7 +626,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   });
   $('pfForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const d = await act('contact_save', { name: $('pfFName').value, role: $('pfFRole').value, email: $('pfFEmail').value, notes: $('pfFNotes').value, person_id: pfPerson });
+    const d = await act('contact_save', { name: $('pfFName').value, role: $('pfFRole').value, email: $('pfFEmail').value, notes: $('pfFNotes').value, person_id: pfPerson, ...(profile && profile.tags_ready ? { tags: $('pfFTags').value } : {}) });
     if (!d) return;
     scheduleList();
     try { const r = await api('profile', { id: chatId }); profile = r.profile; renderProfile(); } catch (_) {}

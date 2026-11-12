@@ -80,7 +80,7 @@ if (in_array($paAction, ['pc_save','pc_delete'], true)) {
     if ($paAction === 'pc_save') {
       $contactId = (int)($_POST['contact_id'] ?? 0);
       if ($contactId > 0) { $cur = person_contact_get($pdo,$cid,$contactId); if (!$cur || (int)$cur['person_id'] !== $personId) throw new RuntimeException('Contato não encontrado.'); }
-      person_contact_save($pdo,$cid,['id'=>$contactId,'person_id'=>$personId] + array_intersect_key($_POST, array_flip(['name','role','whatsapp','phone','email','notes','is_primary','active'])) + ['active'=>0]);
+      person_contact_save($pdo,$cid,['id'=>$contactId,'person_id'=>$personId] + array_intersect_key($_POST, array_flip(['name','role','whatsapp','phone','email','notes','tags','is_primary','active'])) + ['active'=>0]);
       $msg = 'Contato salvo.';
     } else {
       $contactId = (int)($_POST['contact_id'] ?? 0);
@@ -872,6 +872,7 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
     </section>
     <?php endif; ?>
     <?php if ((int)($edit['id'] ?? 0) > 0 && $pcReady): $pcRoles = person_contact_roles(); ?>
+    <script src="/assets/tag-input.js?v=20261112-1"></script>
     <section id="pcPanel" role="tabpanel" aria-labelledby="paTabContatos" hidden style="padding:12px 4px 20px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div><h3 style="margin:0">Contatos</h3><p class="finance-muted" style="margin:4px 0 0">Quem fala pela empresa: responsável, financeiro, contador, compras... O WhatsApp do contato identifica de qual cliente é a conversa no Atendimento.</p></div>
@@ -889,6 +890,7 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
           <div><label>E-mail</label><input name="email" id="pcEmail" maxlength="150" type="email"></div>
           <div><label>Observação</label><input name="notes" id="pcNotes" maxlength="500"></div>
         </div>
+        <?php if (person_contacts_has_tags($pdo)): ?><div style="margin-top:8px"><label>Etiquetas (ex.: VIP, Inadimplente, Revenda — Enter para incluir)</label><input name="tags" id="pcTags" data-tag-input data-suggest="<?=finance_h(json_encode(person_contact_all_tags($pdo, $cid), JSON_UNESCAPED_UNICODE))?>" placeholder="Digite a etiqueta e tecle Enter"></div><?php endif; ?>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
           <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="is_primary" value="1" id="pcPrimary"> Contato principal</label>
           <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="active" value="1" id="pcActive" checked> Ativo</label>
@@ -899,10 +901,10 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       <div style="overflow-x:auto;margin-top:12px"><table class="pa-list"><thead><tr><th>Nome</th><th>Função</th><th>WhatsApp</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>
       <?php foreach ($pcContacts as $ct): ?>
         <tr<?= (int)$ct['active'] ? '' : ' style="opacity:.55"' ?>>
-          <td><strong><?=finance_h($ct['name'])?></strong><?= (int)$ct['is_primary'] ? ' <span class="badge ok">Principal</span>' : '' ?><?= (int)$ct['active'] ? '' : ' <span class="finance-muted">(inativo)</span>' ?><?php if (!empty($ct['notes'])): ?><br><span class="finance-muted"><?=finance_h($ct['notes'])?></span><?php endif; ?></td>
+          <td><strong><?=finance_h($ct['name'])?></strong><?= (int)$ct['is_primary'] ? ' <span class="badge ok">Principal</span>' : '' ?><?= (int)$ct['active'] ? '' : ' <span class="finance-muted">(inativo)</span>' ?><?php if (!empty($ct['notes'])): ?><br><span class="finance-muted"><?=finance_h($ct['notes'])?></span><?php endif; ?><?php if (!empty($ct['tags'])): ?><div style="margin-top:3px"><?=person_contact_tags_html((string)$ct['tags'])?></div><?php endif; ?></td>
           <td><?=finance_h($ct['role'] ?? '')?></td><td><?=finance_h($ct['whatsapp'] ?? '')?></td><td><?=finance_h($ct['phone'] ?? '')?></td><td><?=finance_h($ct['email'] ?? '')?></td>
           <td><div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-sm js-pc-edit" data-contact='<?=finance_h(json_encode(['id'=>(int)$ct['id'],'name'=>$ct['name'],'role'=>$ct['role'],'whatsapp'=>$ct['whatsapp'],'phone'=>$ct['phone'],'email'=>$ct['email'],'notes'=>$ct['notes'],'is_primary'=>(int)$ct['is_primary'],'active'=>(int)$ct['active']], JSON_UNESCAPED_UNICODE))?>'>Editar</button>
+            <button type="button" class="btn btn-sm js-pc-edit" data-contact='<?=finance_h(json_encode(['id'=>(int)$ct['id'],'name'=>$ct['name'],'role'=>$ct['role'],'whatsapp'=>$ct['whatsapp'],'phone'=>$ct['phone'],'email'=>$ct['email'],'notes'=>$ct['notes'],'tags'=>(string)($ct['tags']??''),'is_primary'=>(int)$ct['is_primary'],'active'=>(int)$ct['active']], JSON_UNESCAPED_UNICODE))?>'>Editar</button>
             <form method="post" onsubmit="return confirm('Excluir este contato?')"><input type="hidden" name="action" value="pc_delete"><input type="hidden" name="person_id" value="<?= (int)$editId ?>"><input type="hidden" name="contact_id" value="<?= (int)$ct['id'] ?>"><input type="hidden" name="csrf" value="<?=finance_h(fp_grid_csrf_token())?>"><button class="btn btn-sm btn-danger" type="submit">Excluir</button></form>
           </div></td>
         </tr>
@@ -913,7 +915,7 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
       (function(){
         const f=document.getElementById('pcForm');if(!f)return;
         const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v==null?'':v;};
-        const open=(c)=>{c=c||{};set('pcId',c.id||0);set('pcName',c.name);set('pcRole',c.role);set('pcWa',c.whatsapp);set('pcPhone',c.phone);set('pcEmail',c.email);set('pcNotes',c.notes);document.getElementById('pcPrimary').checked=!!c.is_primary;document.getElementById('pcActive').checked=c.id?!!c.active:true;f.style.display='';document.getElementById('pcName').focus();};
+        const open=(c)=>{c=c||{};set('pcId',c.id||0);set('pcName',c.name);set('pcRole',c.role);set('pcWa',c.whatsapp);set('pcPhone',c.phone);set('pcEmail',c.email);set('pcNotes',c.notes);const tg=document.getElementById('pcTags');if(tg){tg.value=c.tags||'';if(window.NexaTags)NexaTags.sync(tg);}document.getElementById('pcPrimary').checked=!!c.is_primary;document.getElementById('pcActive').checked=c.id?!!c.active:true;f.style.display='';document.getElementById('pcName').focus();};
         document.getElementById('pcNewBtn').addEventListener('click',()=>open({}));
         document.getElementById('pcCancel').addEventListener('click',()=>{f.style.display='none';});
         document.querySelectorAll('.js-pc-edit').forEach(b=>b.addEventListener('click',()=>{try{open(JSON.parse(b.dataset.contact||'{}'))}catch(e){open({})}}));

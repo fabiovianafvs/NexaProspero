@@ -600,6 +600,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '13b466aafeb4fbfe141a607df721badb449f08e79700327e7c6a5f4d75a7d9c9',
         'order' => 202611120100,
       ],
+      [
+        'id' => '20261112_contatos_etiquetas_v1',
+        'module' => 'contatos_pessoas',
+        'version' => 202611120200,
+        'label' => 'Contatos - etiquetas',
+        'description' => 'Adiciona as etiquetas (ex.: VIP, Inadimplente) aos contatos das pessoas. Requer "Contatos das pessoas".',
+        'file' => __DIR__ . '/../db/20261112_contatos_etiquetas_v1.sql',
+        'sha256' => 'aed19d2e69676df69fd11b48443a2518a62b859bdaefcffa558df03d8dab9d78',
+        'order' => 202611120200,
+      ],
     ];
   }
 }
