@@ -16,6 +16,7 @@ $abas = [
   'fluxos' => 'Fluxos (campanhas, anúncios e roteiros)',
   'setores' => 'Setores de atendimento',
   'contatos' => 'Contatos',
+  'rapidas' => 'Mensagens rápidas',
   'robo' => 'Robô e mensagens padrão',
   'crm' => 'CRM',
 ];
@@ -55,7 +56,8 @@ $onEngine = whatsapp_engine_is_url($engine, (string)($waCfg['service_url'] ?? ''
 if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
   // Ao gravar, volta para a lista da aba em que a pessoa estava.
   $abaOf = ['save' => 'robo', 'node_save' => 'menu', 'node_delete' => 'menu', 'node_up' => 'menu', 'node_down' => 'menu', 'seed' => 'menu',
-    'dep_save' => 'setores', 'dep_delete' => 'setores', 'flow_delete' => 'fluxos', 'contact_save' => 'contatos', 'contact_delete' => 'contatos'];
+    'dep_save' => 'setores', 'dep_delete' => 'setores', 'flow_delete' => 'fluxos', 'contact_save' => 'contatos', 'contact_delete' => 'contatos',
+    'quick_save' => 'rapidas', 'quick_delete' => 'rapidas', 'quick_up' => 'rapidas', 'quick_down' => 'rapidas'];
   $action = (string)($_POST['action'] ?? '');
   $aba = $abaOf[$action] ?? $aba;
   if ($action === 'save' && ($_POST['section'] ?? '') === 'crm') $aba = 'crm';
@@ -97,6 +99,16 @@ if ($ready && $_SERVER['REQUEST_METHOD'] === 'POST') {
       case 'contact_save':
         person_contact_save($pdo, $cid, array_intersect_key($_POST, array_flip(['id', 'person_id', 'name', 'role', 'whatsapp', 'phone', 'email', 'notes', 'is_primary', 'active'])) + ['active' => 0]);
         $go('Contato salvo.');
+      case 'quick_save':
+        whatsapp_quick_reply_save($pdo, $cid, $_POST + ['active' => 0]);
+        $go('Mensagem rápida salva.');
+      case 'quick_delete':
+        whatsapp_quick_reply_delete($pdo, $cid, (int)($_POST['id'] ?? 0));
+        $go('Mensagem rápida excluída.');
+      case 'quick_up':
+      case 'quick_down':
+        whatsapp_quick_reply_move($pdo, $cid, (int)($_POST['id'] ?? 0), $action === 'quick_up' ? -1 : 1);
+        $go('Ordem alterada.');
       case 'contact_delete':
         if (!person_contact_get($pdo, $cid, (int)($_POST['id'] ?? 0))) throw new RuntimeException('Contato não encontrado.');
         person_contact_delete($pdo, $cid, (int)($_POST['id'] ?? 0));
@@ -129,6 +141,7 @@ foreach ($departments as $d) $depNames[(int)$d['id']] = (string)$d['name'];
 $submenus = array_values(array_filter($tree, static fn($n) => $n['action'] === 'submenu'));
 $userNames = [];
 foreach ($users as $u) $userNames[(int)$u['id']] = (string)$u['name'];
+$quickReplies = ($ready && $aba === 'rapidas') ? whatsapp_quick_replies($pdo, $cid) : [];
 $contactQ = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
 $contacts = ($contactsReady && $aba === 'contatos') ? person_contacts_search($pdo, $cid, $contactQ, 300) : [];
 
@@ -304,6 +317,34 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
 </section>
 <?php endif; ?>
 
+<?php if ($aba === 'rapidas'): ?>
+<section class="wab-card" id="rapidas">
+  <div class="wab-head">
+    <div><h2>Mensagens rápidas</h2><div class="wab-muted">Respostas prontas para a tela de atendimento: o atendente digita <b>/</b> no início da mensagem (ex.: <b>/pix</b>) ou clica no <b>⚡</b> e escolhe. A mensagem entra na caixa de texto para conferir antes de enviar. Use <b>{nome}</b> (primeiro nome do cliente), <b>{atendente}</b> e <b>{empresa}</b>.</div></div>
+    <div class="wab-btns"><button class="btn btn-primary" type="button" onclick="wabQuick({})">+ Nova mensagem</button></div>
+  </div>
+  <div style="overflow-x:auto"><table class="wab-table" style="margin-top:10px">
+    <thead><tr><th>Atalho</th><th>Título</th><th>Mensagem</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    <?php if (!$quickReplies): ?><tr><td colspan="5" class="wab-muted">Nenhuma mensagem rápida. Exemplos: <b>/pix</b> com a chave Pix, <b>/horario</b> com o horário de funcionamento, <b>/endereco</b> com o endereço da loja.</td></tr><?php endif; ?>
+    <?php foreach ($quickReplies as $qr): ?>
+      <tr<?= $qr['active'] ? '' : ' style="opacity:.55"' ?>>
+        <td class="wab-num">/<?= wab_h($qr['shortcut']) ?></td>
+        <td><b><?= wab_h($qr['title']) ?></b></td>
+        <td class="wab-muted" style="max-width:460px"><?= wab_h(mb_strimwidth(preg_replace('/\s+/', ' ', $qr['text']) ?? '', 0, 140, '…')) ?></td>
+        <td><?= $qr['active'] ? '<span class="wab-chip">Ativa</span>' : '<span class="wab-chip off">Inativa</span>' ?></td>
+        <td><div class="wab-row-actions">
+          <?php foreach (['quick_up' => '↑', 'quick_down' => '↓'] as $a => $lbl): ?><form method="post"><input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="<?= $a ?>"><input type="hidden" name="id" value="<?= (int)$qr['id'] ?>"><button class="btn wab-mini" type="submit" title="<?= $a === 'quick_up' ? 'Subir' : 'Descer' ?>"><?= $lbl ?></button></form><?php endforeach; ?>
+          <button class="btn wab-mini" type="button" onclick='wabQuick(<?= wab_h(json_encode($qr, JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
+          <form method="post" onsubmit="return confirm('Excluir esta mensagem rápida?');"><input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="quick_delete"><input type="hidden" name="id" value="<?= (int)$qr['id'] ?>"><button class="btn btn-danger wab-mini" type="submit">Excluir</button></form>
+        </div></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</section>
+<?php endif; ?>
+
 <?php if ($aba === 'robo'):
   $sumRobo = [
     'Boas-vindas' => $cfg['welcome'],
@@ -366,6 +407,18 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <div class="wab-field"><label>Responsável</label><select name="crm_responsible_user_id"><option value="0">Automático (administrador)</option><?php foreach ($users as $u): ?><option value="<?= (int)$u['id'] ?>" <?= (int)$cfg['crm_responsible_user_id'] === (int)$u['id'] ? 'selected' : '' ?>><?= wab_h($u['name']) ?></option><?php endforeach; ?></select></div>
   <div class="wab-field"><label>Status inicial</label><select name="crm_status_id"><option value="0">Primeiro da lista</option><?php foreach ($statuses as $x): ?><option value="<?= (int)$x['id'] ?>" <?= (int)$cfg['crm_status_id'] === (int)$x['id'] ? 'selected' : '' ?>><?= wab_h($x['name']) ?></option><?php endforeach; ?></select></div>
   <div class="wab-field"><label>Tipo de atendimento</label><select name="crm_service_type_id"><option value="0">Primeiro da lista</option><?php foreach ($types as $x): ?><option value="<?= (int)$x['id'] ?>" <?= (int)$cfg['crm_service_type_id'] === (int)$x['id'] ? 'selected' : '' ?>><?= wab_h($x['name']) ?></option><?php endforeach; ?></select></div>
+  <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+</form></div>
+
+<div class="wab-modal" id="mQuick"><form method="post" class="wab-card">
+  <input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="quick_save"><input type="hidden" name="id" id="qId">
+  <h2 id="qTitleH">Mensagem rápida</h2>
+  <div class="wab-grid">
+    <div class="wab-field"><label>Atalho (o que digita depois da /)</label><input type="text" name="shortcut" id="qShortcut" maxlength="30" required placeholder="Ex.: pix"></div>
+    <div class="wab-field"><label>Título</label><input type="text" name="title" id="qTitle" maxlength="80" placeholder="Ex.: Chave Pix"></div>
+  </div>
+  <div class="wab-field"><label>Mensagem ({nome}, {atendente}, {empresa}; *negrito*, _itálico_)</label><textarea name="text" id="qText" maxlength="3000" rows="6" required></textarea></div>
+  <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="active" value="1" id="qActive"> Ativa</label>
   <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
 </form></div>
 
@@ -454,6 +507,16 @@ function wabDep(d) {
   const sel = (d.users || []).map(String);
   document.querySelectorAll('.dUser').forEach((c) => { c.checked = sel.includes(c.value); });
   document.getElementById('mDep').classList.add('on');
+}
+function wabQuick(q) {
+  document.getElementById('qId').value = q.id || '';
+  document.getElementById('qShortcut').value = q.shortcut || '';
+  document.getElementById('qTitle').value = q.title || '';
+  document.getElementById('qText').value = q.text || '';
+  document.getElementById('qActive').checked = q.id ? !!q.active : true;
+  document.getElementById('qTitleH').textContent = q.id ? 'Editar mensagem rápida' : 'Nova mensagem rápida';
+  wabOpen('mQuick');
+  document.getElementById(q.id ? 'qText' : 'qShortcut').focus();
 }
 function wabOpen(id) { const m = document.getElementById(id); if (m) m.classList.add('on'); }
 function wabPerson(id, name) {

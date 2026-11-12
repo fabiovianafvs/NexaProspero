@@ -259,7 +259,7 @@ if (!function_exists('whatsapp_att_send_text')) {
 }
 
 if (!function_exists('whatsapp_att_send_file')) {
-  function whatsapp_att_send_file(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor, array $file, string $caption): bool {
+  function whatsapp_att_send_file(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor, array $file, string $caption, bool $voice = false): bool {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)$file['tmp_name'])) {
       throw new RuntimeException(($file['error'] ?? 0) === UPLOAD_ERR_INI_SIZE ? 'Arquivo maior que o permitido pelo servidor.' : 'Selecione um arquivo.');
     }
@@ -269,8 +269,14 @@ if (!function_exists('whatsapp_att_send_file')) {
     $mime = '';
     if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = (string)finfo_buffer($fi, $bytes); finfo_close($fi); }
     if ($mime === '' || $mime === 'application/octet-stream') $mime = (string)($file['type'] ?? 'application/octet-stream');
+    if ($voice) {
+      // Áudio gravado na tela: Ogg/Opus vira mensagem de voz; o do Safari (MP4/AAC) vai como áudio.
+      if (in_array($mime, ['audio/ogg', 'application/ogg', 'audio/x-opus+ogg', 'audio/opus'], true) && substr($bytes, 0, 4) === 'OggS') $mime = 'audio/ogg';
+      elseif (in_array($mime, ['video/mp4', 'audio/mp4', 'audio/x-m4a', 'audio/m4a'], true)) $mime = 'audio/mp4';
+      else throw new RuntimeException('Formato de áudio não suportado por este navegador. Use o Google Chrome, o Edge ou o Firefox.');
+    }
     $chat = whatsapp_att_assert_owner($pdo, $companyId, $chat, $userId, $supervisor);
-    $ok = whatsapp_chat_send_file($pdo, $companyId, whatsapp_chat_ctx($pdo, $companyId, $chat), $bytes, $mime, (string)$file['name'], trim($caption), 'atendente', $userId, true);
+    $ok = whatsapp_chat_send_file($pdo, $companyId, whatsapp_chat_ctx($pdo, $companyId, $chat), $bytes, $mime, (string)$file['name'], $voice ? '' : trim($caption), 'atendente', $userId, true, $voice);
     whatsapp_chat_notify($companyId, (int)$chat['id'], ['status' => 'ATENDIMENTO']);
     return $ok;
   }

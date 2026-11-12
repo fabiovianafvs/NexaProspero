@@ -140,6 +140,104 @@ if (!function_exists('whatsapp_bot_save_config')) {
   }
 }
 
+/* ------------------------------------------------------------------------- */
+/* Mensagens rápidas do Atendimento (o atendente digita "/" ou clica no ⚡)   */
+/* Ficam em app_config, chave whatsapp_quick_replies (sem tabela própria).    */
+/* ------------------------------------------------------------------------- */
+
+if (!function_exists('whatsapp_quick_replies')) {
+  /** Lista na ordem cadastrada: id, shortcut, title, text, active. */
+  function whatsapp_quick_replies(PDO $pdo, int $companyId, bool $activeOnly = false): array {
+    $data = config_store_get($pdo, $companyId, 'whatsapp_quick_replies') ?? [];
+    $out = [];
+    foreach ((array)($data['items'] ?? []) as $it) {
+      if (!is_array($it) || (int)($it['id'] ?? 0) <= 0) continue;
+      $row = [
+        'id' => (int)$it['id'],
+        'shortcut' => (string)($it['shortcut'] ?? ''),
+        'title' => (string)($it['title'] ?? ''),
+        'text' => (string)($it['text'] ?? ''),
+        'active' => !empty($it['active']),
+      ];
+      if ($activeOnly && !$row['active']) continue;
+      $out[] = $row;
+    }
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_quick_reply_shortcut')) {
+  /** Atalho só com letras, números, - e _ (sem acento e sem a barra). */
+  function whatsapp_quick_reply_shortcut(string $v): string {
+    $v = trim(ltrim(trim($v), '/'));
+    if (function_exists('iconv')) { $t = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $v); if (is_string($t)) $v = $t; }
+    $v = strtolower(preg_replace('/[^A-Za-z0-9_-]+/', '', str_replace(' ', '-', $v)) ?? '');
+    return substr($v, 0, 30);
+  }
+}
+
+if (!function_exists('whatsapp_quick_replies_store')) {
+  function whatsapp_quick_replies_store(PDO $pdo, int $companyId, array $items, ?int $nextId = null): void {
+    $data = config_store_get($pdo, $companyId, 'whatsapp_quick_replies') ?? [];
+    $next = $nextId ?? (int)($data['next_id'] ?? 1);
+    config_store_set($pdo, $companyId, 'whatsapp_quick_replies', ['items' => array_values($items), 'next_id' => max(1, $next)]);
+  }
+}
+
+if (!function_exists('whatsapp_quick_reply_save')) {
+  function whatsapp_quick_reply_save(PDO $pdo, int $companyId, array $in): int {
+    $id = (int)($in['id'] ?? 0);
+    $shortcut = whatsapp_quick_reply_shortcut((string)($in['shortcut'] ?? ''));
+    $title = mb_substr(trim((string)($in['title'] ?? '')), 0, 80);
+    $text = mb_substr(trim(str_replace("\r\n", "\n", (string)($in['text'] ?? ''))), 0, 3000);
+    if ($shortcut === '') throw new RuntimeException('Informe o atalho (ex.: pix, horario, endereco).');
+    if ($text === '') throw new RuntimeException('Escreva a mensagem.');
+    if ($title === '') $title = $shortcut;
+    $items = whatsapp_quick_replies($pdo, $companyId);
+    foreach ($items as $it) {
+      if ($it['shortcut'] === $shortcut && $it['id'] !== $id) throw new RuntimeException('Já existe uma mensagem com o atalho /' . $shortcut . '.');
+    }
+    if (count($items) >= 300 && $id <= 0) throw new RuntimeException('Limite de 300 mensagens rápidas.');
+    $data = config_store_get($pdo, $companyId, 'whatsapp_quick_replies') ?? [];
+    $next = max((int)($data['next_id'] ?? 1), 1);
+    foreach ($items as $it) $next = max($next, $it['id'] + 1);
+    $row = ['shortcut' => $shortcut, 'title' => $title, 'text' => $text, 'active' => !empty($in['active'])];
+    $found = false;
+    if ($id > 0) {
+      foreach ($items as $i => $it) {
+        if ($it['id'] === $id) { $items[$i] = ['id' => $id] + $row; $found = true; break; }
+      }
+      if (!$found) throw new RuntimeException('Mensagem não encontrada.');
+    } else {
+      $id = $next++;
+      $items[] = ['id' => $id] + $row;
+    }
+    whatsapp_quick_replies_store($pdo, $companyId, $items, $next);
+    return $id;
+  }
+}
+
+if (!function_exists('whatsapp_quick_reply_delete')) {
+  function whatsapp_quick_reply_delete(PDO $pdo, int $companyId, int $id): void {
+    $items = array_filter(whatsapp_quick_replies($pdo, $companyId), static fn($it) => $it['id'] !== $id);
+    whatsapp_quick_replies_store($pdo, $companyId, $items);
+  }
+}
+
+if (!function_exists('whatsapp_quick_reply_move')) {
+  function whatsapp_quick_reply_move(PDO $pdo, int $companyId, int $id, int $dir): void {
+    $items = whatsapp_quick_replies($pdo, $companyId);
+    foreach ($items as $i => $it) {
+      if ($it['id'] !== $id) continue;
+      $j = $i + ($dir < 0 ? -1 : 1);
+      if ($j < 0 || $j >= count($items)) return;
+      [$items[$i], $items[$j]] = [$items[$j], $items[$i]];
+      whatsapp_quick_replies_store($pdo, $companyId, $items);
+      return;
+    }
+  }
+}
+
 if (!function_exists('whatsapp_bot_company_by_session')) {
   /** Empresa dona da sessão do motor (company_id da sessão = session_company_id). */
   function whatsapp_bot_company_by_session(PDO $pdo, string $sid): int {
@@ -500,6 +598,7 @@ if (!function_exists('whatsapp_media_ext')) {
       'application/msword' => 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
       'application/vnd.ms-excel' => 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
     ];
+    $mime = trim(explode(';', strtolower($mime))[0]);
     if (isset($map[$mime])) return $map[$mime];
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     return preg_match('/^[a-z0-9]{1,5}$/', $ext) ? $ext : 'bin';
@@ -701,14 +800,20 @@ if (!function_exists('whatsapp_chat_send_text')) {
 
 if (!function_exists('whatsapp_chat_send_file')) {
   /** Envia arquivo (foto, vídeo, áudio ou documento) e registra na conversa. */
-  function whatsapp_chat_send_file(PDO $pdo, int $companyId, array $ctx, string $bytes, string $mime, string $filename, string $caption = '', string $sender = 'robo', ?int $userId = null, bool $store = true): bool {
+  function whatsapp_chat_send_file(PDO $pdo, int $companyId, array $ctx, string $bytes, string $mime, string $filename, string $caption = '', string $sender = 'robo', ?int $userId = null, bool $store = true, bool $ptt = false): bool {
     $mime = strtolower(trim($mime)) ?: 'application/octet-stream';
+    // Tipo base sem parâmetros (ex.: "audio/ogg; codecs=opus" -> "audio/ogg").
+    $base = trim(explode(';', $mime)[0]);
     $kind = 'document';
-    if (in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) $kind = 'image';
-    elseif ($mime === 'video/mp4') $kind = 'video';
-    elseif (in_array($mime, ['audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/aac'], true)) $kind = 'audio';
+    if (in_array($base, ['image/jpeg', 'image/png', 'image/webp'], true)) $kind = 'image';
+    elseif ($base === 'video/mp4') $kind = 'video';
+    elseif (in_array($base, ['audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/aac'], true)) $kind = 'audio';
+    // Áudio gravado (mensagem de voz): o WhatsApp exige Ogg/Opus.
+    $ptt = $ptt && $kind === 'audio' && $base === 'audio/ogg';
+    if ($ptt) $mime = 'audio/ogg; codecs=opus';
     $filename = mb_substr(basename($filename) ?: 'arquivo', 0, 150);
     $payload = ['company_id' => $ctx['sid'], 'kind' => $kind, 'caption' => $caption, 'filename' => $filename, 'mimetype' => $mime, 'file_base64' => base64_encode($bytes)];
+    if ($ptt) $payload['ptt'] = true;
     if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone'];
     // Responde sempre pelo número de telefone quando ele é conhecido: o envio direto
     // para o endereço interno (@lid) fazia o WhatsApp derrubar a sessão (device_removed).
@@ -721,9 +826,9 @@ if (!function_exists('whatsapp_chat_send_file')) {
       $ok = false;
       $error = $e->getMessage();
     }
-    $opt = ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok, 'type' => $kind, 'media_mime' => $mime, 'media_name' => $filename, 'media_size' => strlen($bytes)];
+    $opt = ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok, 'type' => $kind, 'media_mime' => $base, 'media_name' => $filename, 'media_size' => strlen($bytes)];
     if ($store) {
-      try { $opt['media_path'] = whatsapp_media_store($companyId, $bytes, $mime, $filename); } catch (Throwable $e) {}
+      try { $opt['media_path'] = whatsapp_media_store($companyId, $bytes, $base, $filename); } catch (Throwable $e) {}
     }
     whatsapp_chat_log($pdo, $companyId, $ctx['chat'], 'OUT', $sender, $caption . ($ok ? '' : "\n[não enviado: " . $error . ']'), $opt);
     return $ok;

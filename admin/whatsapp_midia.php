@@ -20,7 +20,7 @@ try {
   if (!$m || empty($m['media_path']) || !whatsapp_att_can_see($pdo, $cid, $uid, $supervisor, (int)$m['session_id'])) throw new RuntimeException('Arquivo não encontrado.');
   $path = whatsapp_media_path($cid, (string)$m['media_path']);
   if (!$path) throw new RuntimeException('Arquivo não encontrado.');
-  $mime = strtolower((string)$m['media_mime']);
+  $mime = trim(explode(';', strtolower((string)$m['media_mime']))[0]);
   // Só tipos seguros abrem direto no navegador; o resto é baixado.
   $inline = in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/aac', 'video/mp4', 'application/pdf'], true);
   $name = (string)($m['media_name'] ?: ('arquivo.' . pathinfo($path, PATHINFO_EXTENSION)));

@@ -55,6 +55,11 @@ try {
       $st->execute((function_exists('access_company_users_params') ? access_company_users_params($pdo, $cid) : [$cid]));
       $out(['ok' => true, 'departments' => array_map(static fn($d) => ['id' => (int)$d['id'], 'name' => (string)$d['name']], whatsapp_departments($pdo, $cid)), 'users' => $st->fetchAll(PDO::FETCH_ASSOC) ?: []]);
 
+    case 'quick':
+      // Mensagens rápidas ativas + dados para trocar {atendente} e {empresa}.
+      $out(['ok' => true, 'items' => array_map(static fn($r) => ['shortcut' => $r['shortcut'], 'title' => $r['title'], 'text' => $r['text']], whatsapp_quick_replies($pdo, $cid, true)),
+        'me' => whatsapp_bot_user_name($pdo, $cid, $uid), 'company' => whatsapp_bot_company_name($pdo, $cid)]);
+
     case 'contacts':
       // Nova conversa: busca no cadastro de Contatos e no WhatsApp/telefone das pessoas.
       require_once __DIR__ . '/../config/person_contacts.php';
@@ -93,8 +98,9 @@ try {
       $out(['ok' => true, 'sent' => $ok, 'warning' => $ok ? '' : 'A mensagem não saiu. Confira a conexão do WhatsApp.']);
 
     case 'file':
-      $ok = whatsapp_att_send_file($pdo, $cid, $loadChat(), $uid, $supervisor, $_FILES['file'] ?? [], (string)($_POST['caption'] ?? ''));
-      $out(['ok' => true, 'sent' => $ok, 'warning' => $ok ? '' : 'O arquivo não saiu. Confira a conexão do WhatsApp.']);
+      $voice = !empty($_POST['voice']);
+      $ok = whatsapp_att_send_file($pdo, $cid, $loadChat(), $uid, $supervisor, $_FILES['file'] ?? [], (string)($_POST['caption'] ?? ''), $voice);
+      $out(['ok' => true, 'sent' => $ok, 'warning' => $ok ? '' : ($voice ? 'O áudio não saiu.' : 'O arquivo não saiu.') . ' Confira a conexão do WhatsApp.']);
 
     case 'transfer':
       whatsapp_att_transfer($pdo, $cid, $loadChat(), $uid, $supervisor, (int)($_POST['department_id'] ?? 0), (int)($_POST['user_id'] ?? 0));

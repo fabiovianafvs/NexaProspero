@@ -58,7 +58,13 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-day{align-self:center;background:#fff;color:#54656f;font-size:12px;border-radius:8px;padding:3px 10px;margin:8px 0;box-shadow:0 1px .5px rgba(11,20,26,.13)}
 .waa-b img,.waa-b video{max-width:280px;max-height:320px;border-radius:6px;display:block;cursor:pointer}.waa-b audio{width:260px}
 .waa-doc{display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.05);border-radius:6px;padding:8px;text-decoration:none;color:inherit}
-.waa-compose{background:var(--bg);padding:8px 12px;display:flex;gap:8px;align-items:flex-end}
+.waa-compose{background:var(--bg);padding:8px 12px;display:flex;gap:8px;align-items:flex-end;position:relative}
+.waa-quick{position:absolute;left:8px;right:8px;bottom:100%;margin-bottom:6px;background:#fff;border:1px solid #d1d7db;border-radius:12px;box-shadow:0 12px 30px rgba(11,20,26,.18);display:none;flex-direction:column;max-height:min(360px,55vh);z-index:6;overflow:hidden}.waa-quick.on{display:flex}
+.waa-quick input{border:0;border-bottom:1px solid var(--line);padding:10px 12px;font:inherit;outline:0}.waa-quick.slash input{display:none}
+#waaQuickList{overflow-y:auto}.waa-qi{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f0f2f5;background:#fff;padding:8px 12px;cursor:pointer;font:inherit}.waa-qi.sel,.waa-qi:hover{background:#e7f8f2}
+.waa-qi b{color:#008069}.waa-qi small{display:block;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}.waa-qempty{padding:12px;color:var(--mut);font-size:13px}
+.waa-recbar{background:var(--bg);padding:8px 12px;display:none;gap:10px;align-items:center}.waa-recbar.on{display:flex}
+.waa-recdot{width:12px;height:12px;border-radius:50%;background:#ea0038;animation:waaBlink 1s infinite}#waaRecTime{font-weight:800;min-width:42px}@keyframes waaBlink{50%{opacity:.25}}
 .waa-compose textarea{flex:1;border:0;border-radius:10px;padding:10px 12px;font:inherit;resize:none;max-height:140px;min-height:42px}
 .waa-ico{border:0;background:transparent;font-size:22px;cursor:pointer;padding:6px;color:#54656f}
 .waa-send{border:0;background:var(--g);color:#fff;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer}
@@ -119,10 +125,18 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <div class="waa-filebar" id="waaFileBar"><span id="waaFileName"></span><input id="waaCaption" placeholder="Legenda (opcional)"><button class="waa-btn g" type="button" id="waaFileSend">Enviar</button><button class="waa-btn" type="button" id="waaFileCancel">✕</button></div>
       <form class="waa-compose" id="waaForm">
         <input type="file" id="waaFile" hidden>
+        <div class="waa-quick" id="waaQuick"><input id="waaQuickQ" placeholder="Buscar mensagem rápida" autocomplete="off"><div id="waaQuickList"></div></div>
+        <button class="waa-ico" type="button" id="waaQuickBtn" title="Mensagens rápidas (ou digite / no início da mensagem)">⚡</button>
         <button class="waa-ico" type="button" id="waaAttach" title="Anexar arquivo">📎</button>
-        <textarea id="waaText" rows="1" placeholder="Digite uma mensagem" title="Enter envia; Shift+Enter quebra a linha"></textarea>
-        <button class="waa-send" type="submit" title="Enviar">➤</button>
+        <textarea id="waaText" rows="1" placeholder="Digite uma mensagem ou / para mensagens rápidas" title="Enter envia; Shift+Enter quebra a linha; / abre as mensagens rápidas"></textarea>
+        <button class="waa-send" type="button" id="waaMic" title="Gravar áudio" style="display:none">🎤</button>
+        <button class="waa-send" type="submit" id="waaSend" title="Enviar">➤</button>
       </form>
+      <div class="waa-recbar" id="waaRecBar">
+        <button class="waa-ico" type="button" id="waaRecCancel" title="Descartar áudio">🗑️</button>
+        <span class="waa-recdot"></span><span id="waaRecTime">0:00</span><span class="waa-sub" style="flex:1">Gravando áudio…</span>
+        <button class="waa-send" type="button" id="waaRecSend" title="Enviar áudio">➤</button>
+      </div>
     </div>
   </section>
 </div>
@@ -153,6 +167,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="nGo">Enviar</button></div>
 </div></div>
 
+<script src="/assets/whatsapp-audio.js?v=20261112-1"></script>
 <script>
 // A tela ocupa toda a altura disponível da janela (qualquer tamanho de tela/zoom).
 (function () {
@@ -279,6 +294,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   }
 
   async function openChat(id) {
+    if (id !== chatId) { cancelRec(); closeQuick(); }
     chatId = id; lastId = 0; lastDay = '';
     $('waa').classList.add('chat-open');
     $('waaWelcome').style.display = 'none';
@@ -325,16 +341,126 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 
   // Envio
   const text = $('waaText');
-  text.addEventListener('input', () => { text.style.height = 'auto'; text.style.height = Math.min(140, text.scrollHeight) + 'px'; });
-  text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('waaForm').requestSubmit(); } });
+  const rec = (window.NexaAudio && NexaAudio.Recorder.supported()) ? new NexaAudio.Recorder() : null;
+  // Como no WhatsApp: com a caixa vazia aparece o microfone; com texto, o botão de enviar.
+  const toggleSend = () => { const empty = text.value.trim() === ''; $('waaMic').style.display = rec && empty ? '' : 'none'; $('waaSend').style.display = rec && empty ? 'none' : ''; };
+  const resize = () => { text.style.height = 'auto'; text.style.height = Math.min(140, text.scrollHeight) + 'px'; };
+  text.addEventListener('input', () => {
+    resize(); toggleSend();
+    const m = text.value.match(/^\/(\S*)$/);
+    if (m) openQuick('slash', m[1]); else if (qMode === 'slash') closeQuick();
+  });
+  text.addEventListener('keydown', (e) => {
+    if (quickKey(e)) return;
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('waaForm').requestSubmit(); }
+  });
   $('waaForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const v = text.value.trim();
     if (!v || !chatId) return;
-    text.value = ''; text.style.height = 'auto';
+    closeQuick();
+    text.value = ''; resize(); toggleSend();
     const d = await act('send', { text: v });
-    if (!d) text.value = v;
+    if (!d) { text.value = v; toggleSend(); }
   });
+
+  // Mensagens rápidas: "/" no início da mensagem ou o botão ⚡.
+  let quick = null, qMode = '', qSel = 0, qList = [];
+  async function loadQuick() {
+    if (quick) return quick;
+    try { quick = await api('quick'); } catch (e) { quick = null; fail(e); }
+    return quick;
+  }
+  const fillVars = (t) => {
+    const nm = String((chat && chat.name) || '').trim();
+    const first = /^[+\d\s()-]+$/.test(nm) ? '' : nm.split(/\s+/)[0];
+    return String(t)
+      .replace(/\{nome\}/gi, first)
+      .replace(/\{atendente\}/gi, (quick && quick.me) || '')
+      .replace(/\{empresa\}/gi, (quick && quick.company) || '')
+      .replace(/[ \t]+([,.!?])/g, '$1');
+  };
+  function renderQuick(filter) {
+    const f = String(filter || '').toLowerCase().trim();
+    const items = (quick && quick.items) || [];
+    qList = items.filter((it) => !f || it.shortcut.includes(f) || it.title.toLowerCase().includes(f) || it.text.toLowerCase().includes(f));
+    if (f) qList.sort((a, b) => (b.shortcut.startsWith(f) ? 1 : 0) - (a.shortcut.startsWith(f) ? 1 : 0));
+    qSel = Math.min(qSel, Math.max(0, qList.length - 1));
+    const box = $('waaQuickList');
+    if (!qList.length) {
+      box.innerHTML = '<div class="waa-qempty">' + (items.length ? 'Nenhuma mensagem rápida com "' + esc(f) + '".' : 'Nenhuma mensagem rápida cadastrada. Cadastre em <a href="whatsapp_chatbot.php?aba=rapidas">Chatbot → Mensagens rápidas</a>.') + '</div>';
+      return;
+    }
+    box.innerHTML = qList.map((it, i) => '<button type="button" class="waa-qi' + (i === qSel ? ' sel' : '') + '" data-i="' + i + '"><b>/' + esc(it.shortcut) + '</b> ' + esc(it.title) + '<small>' + esc(fillVars(it.text).replace(/\s+/g, ' ')) + '</small></button>').join('');
+    const sel = box.querySelector('.sel'); if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+  async function openQuick(mode, filter) {
+    if (!chatId) return;
+    await loadQuick();
+    if (mode === 'slash' && !/^\/\S*$/.test(text.value)) return;
+    if (qMode !== mode) qSel = 0;
+    qMode = mode;
+    $('waaQuick').classList.add('on');
+    $('waaQuick').classList.toggle('slash', mode === 'slash');
+    if (mode === 'button') { $('waaQuickQ').value = filter || ''; $('waaQuickQ').focus(); }
+    renderQuick(filter);
+  }
+  function closeQuick() { qMode = ''; $('waaQuick').classList.remove('on'); }
+  function pickQuick(i) {
+    const it = qList[i]; if (!it) return;
+    closeQuick();
+    text.value = fillVars(it.text);
+    resize(); toggleSend(); text.focus();
+    text.setSelectionRange(text.value.length, text.value.length);
+  }
+  function quickKey(e) {
+    if (!qMode) return false;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (qList.length) { qSel = (qSel + (e.key === 'ArrowDown' ? 1 : -1) + qList.length) % qList.length; renderQuick(qMode === 'slash' ? text.value.slice(1) : $('waaQuickQ').value); }
+      return true;
+    }
+    if ((e.key === 'Enter' || e.key === 'Tab') && qList.length) { e.preventDefault(); pickQuick(qSel); return true; }
+    if (e.key === 'Escape') { e.preventDefault(); closeQuick(); text.focus(); return true; }
+    return false;
+  }
+  $('waaQuickBtn').addEventListener('click', () => { if (qMode === 'button') { closeQuick(); return; } openQuick('button', ''); });
+  $('waaQuickQ').addEventListener('input', (e) => { qSel = 0; renderQuick(e.target.value); });
+  $('waaQuickQ').addEventListener('keydown', (e) => { quickKey(e); });
+  $('waaQuickList').addEventListener('mousedown', (e) => { const b = e.target.closest('.waa-qi'); if (b) { e.preventDefault(); pickQuick(Number(b.dataset.i)); } });
+  document.addEventListener('mousedown', (e) => { if (qMode && !e.target.closest('#waaQuick') && e.target.id !== 'waaQuickBtn' && e.target !== text) closeQuick(); });
+
+  // Áudio (mensagem de voz).
+  let recTimer = 0, recChat = 0;
+  const recUi = (on) => {
+    $('waaForm').style.display = on ? 'none' : '';
+    $('waaRecBar').classList.toggle('on', on);
+    clearInterval(recTimer);
+    if (on) {
+      const tick = () => { const s = rec.seconds(); $('waaRecTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (s >= 900) sendRec(); };
+      tick(); recTimer = setInterval(tick, 500);
+    }
+  };
+  function cancelRec() { if (!rec || !recChat) return; rec.cancel(); recChat = 0; recUi(false); }
+  async function sendRec() {
+    if (!rec || !recChat) return;
+    const target = recChat; recChat = 0; recUi(false);
+    let f;
+    try { f = await rec.stop(); } catch (e) { fail(e); return; }
+    if (f.size > 16 * 1024 * 1024) { alert('O áudio ficou maior que 16 MB.'); return; }
+    if (target !== chatId) return;
+    $('waaMic').disabled = true;
+    await act('file', { voice: 1 }, f);
+    $('waaMic').disabled = false;
+  }
+  $('waaMic').addEventListener('click', async () => {
+    if (!rec || !chatId || recChat) return;
+    try { await rec.start(); } catch (e) { alert('Não foi possível usar o microfone. Permita o acesso ao microfone para este site no navegador (ícone ao lado do endereço) e tente de novo.'); return; }
+    recChat = chatId; closeQuick(); recUi(true);
+  });
+  $('waaRecCancel').addEventListener('click', cancelRec);
+  $('waaRecSend').addEventListener('click', sendRec);
+  toggleSend();
   let pending = null;
   $('waaAttach').addEventListener('click', () => $('waaFile').click());
   $('waaFile').addEventListener('change', (e) => {
