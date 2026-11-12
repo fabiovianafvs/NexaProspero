@@ -43,6 +43,7 @@ $line('--- Empresa #' . $cid . ' (' . whatsapp_bot_company_name($pdo, $cid) . ')
 $line('Módulo Chatbot liberado no SaaS: ' . (whatsapp_bot_module_enabled($pdo, $cid) ? 'sim' : 'NÃO'));
 $cfg = whatsapp_bot_config($pdo, $cid);
 $line('Robô ligado: ' . ($cfg['enabled'] ? 'sim' : 'NÃO'));
+$line('2ª via com o Grupo Empresarial: ' . (!empty($cfg['group_receivables']) ? 'sim (empresas: ' . implode(', ', array_map(static fn($i) => '#' . $i . ' ' . whatsapp_bot_company_name($pdo, (int)$i), whatsapp_bot_group_company_ids($pdo, $cid, $cfg))) . ')' : 'não'));
 $wa = whatsapp_load_config($pdo, $cid, false);
 $sid = whatsapp_service_company_id($wa, $cid);
 $line('WhatsApp no motor novo: ' . (whatsapp_engine_is_url($engine, (string)$wa['service_url']) ? 'sim' : 'NÃO (' . $wa['service_url'] . ')') . ' · sessão ' . $sid);

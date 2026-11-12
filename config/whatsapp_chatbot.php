@@ -1387,7 +1387,12 @@ if (!function_exists('whatsapp_bot_step')) {
     }
     // Durante as perguntas de um fluxo, "oi"/"obrigado" podem ser respostas: só "menu" interrompe.
     $menuWords = $state === 'FLOW' ? ['menu', 'inicio'] : ['menu', 'inicio', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite'];
-    if (in_array($norm, $menuWords, true)) {
+    // Saudação com pontuação ou frase curta ("Oi!", "Olá, boa tarde") também volta ao menu,
+    // exceto quando o robô espera um texto livre (fluxo ou descrição do CRM).
+    $plain = trim((string)preg_replace('/\s+/', ' ', (string)preg_replace('/[^a-z0-9 ]+/', ' ', $norm)));
+    $greeting = in_array($plain, $menuWords, true)
+      || (!in_array($state, ['FLOW', 'ASK_CRM'], true) && mb_strlen($plain) <= 40 && preg_match('/^(oi|ola|opa|bom dia|boa tarde|boa noite|menu|inicio)( |$)/', $plain));
+    if (in_array($norm, $menuWords, true) || $greeting) {
       $save(['state' => 'MENU', 'data' => []]);
       whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, false);
       return 'menu';
@@ -1454,6 +1459,11 @@ if (!function_exists('whatsapp_bot_step')) {
 
       case 'ASK_DOC':
         $doc = whatsapp_bot_digits($text);
+        if ($doc === '') { // sem números: o cliente mudou de assunto, volta ao menu
+          $save(['state' => 'MENU', 'data' => []]);
+          whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, false);
+          return 'menu';
+        }
         if (!whatsapp_bot_valid_cpf($doc) && !whatsapp_bot_valid_cnpj($doc)) {
           whatsapp_chat_send_text($pdo, $companyId, $ctx, "CPF/CNPJ inválido. Digite novamente só os números, ou *menu* para voltar.");
           return 'documento inválido';
@@ -1487,6 +1497,11 @@ if (!function_exists('whatsapp_bot_step')) {
           $chosen = [];
           foreach (preg_split('/\D+/', $text) ?: [] as $n) if ($n !== '' && isset($picks[(int)$n - 1])) $chosen[] = (int)$n - 1;
           $chosen = array_values(array_unique($chosen));
+        }
+        if (!$chosen && whatsapp_bot_digits($text) === '') { // texto sem números: volta ao menu
+          $save(['state' => 'MENU', 'data' => []]);
+          whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, false);
+          return 'menu';
         }
         if (!$chosen) {
           whatsapp_chat_send_text($pdo, $companyId, $ctx, "Não entendi. Responda com o *número* da conta (de 1 a " . count($picks) . "), vários números (ex.: 1,3) ou *todos*. Digite *menu* para voltar.");
