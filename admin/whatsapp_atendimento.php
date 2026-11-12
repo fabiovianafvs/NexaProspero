@@ -172,10 +172,19 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 // A tela ocupa toda a altura disponível da janela (qualquer tamanho de tela/zoom).
 (function () {
   const box = document.getElementById('waa'); if (!box) return;
+  // Considera o zoom automático do painel (admin.css usa zoom .8 em notebooks):
+  // mede a escala real (px na tela / px do CSS) e corrige a altura.
   const fit = () => {
-    const top = box.getBoundingClientRect().top + window.scrollY;
-    const h = Math.max(420, Math.floor(window.innerHeight - top - 12));
-    box.style.height = h + 'px';
+    const want = window.innerHeight - 12; // onde a caixa deve terminar, na tela
+    let css = parseFloat(box.style.height) || box.offsetHeight;
+    for (let i = 0; i < 3; i++) {
+      const r = box.getBoundingClientRect();
+      const scale = r.height > 0 && css > 0 ? r.height / css : 1;
+      const diff = want - (r.top + r.height);
+      if (Math.abs(diff) < 1.5) break;
+      css = Math.max(380, css + diff / scale);
+      box.style.height = Math.floor(css) + 'px';
+    }
   };
   fit();
   window.addEventListener('resize', fit);
