@@ -13,6 +13,7 @@ declare(strict_types=1);
 if (!isset($pdo, $id, $data, $returnTo)) { http_response_code(404); exit; }
 
 require_once __DIR__ . '/../config/order_whatsapp_bundle.php';
+require_once __DIR__ . '/../config/order_duplicata_pdf.php';
 
 $cid = (int)COMPANY_ID;
 $canBoleto = function_exists('access_has_permission') ? access_has_permission($pdo, $cid, 'financeiro_boletos') : true;
@@ -108,7 +109,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['action'
           $message = $pedidoMessage((int)($selectedModels['pedido'] ?? 0));
           if ($modernPrintEnabled) {
             $companyName = trim((string)($appWa['site_name'] ?? ($appWa['brand']['catalog_title'] ?? ''))) ?: 'Nexa Próspero';
-            $pdf = order_email_pdf_build((array)$data['pedido'], (array)$data['itens'], $companyName, $modernPrintModel, $pdo, $cid);
+            $pdf = order_document_pdf_build((array)$data['pedido'], (array)$data['itens'], $companyName, $modernPrintModel, $pdo, $cid);
             $send = whatsapp_send_document($pdo, $cid, $phone, $message, (string)$pdf['filename'], (string)$pdf['mimetype'], (string)$pdf['content'], 'order_customer_pdf_admin', $id, $cfg);
             $ok = !empty($send['ok']); $error = (string)($send['error'] ?? '');
           } else {

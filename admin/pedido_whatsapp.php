@@ -57,7 +57,8 @@ try {
   $stModern->execute([(int)COMPANY_ID]);
   $modernCfg = $stModern->fetch(PDO::FETCH_ASSOC) ?: [];
   $modernPrintEnabled = !empty($modernCfg['order_modern_print_enabled']);
-  $modernPrintModel = strtoupper(trim((string)($modernCfg['order_modern_print_default'] ?? 'A4'))) === '72MM' ? '72mm' : 'a4';
+  // PDF no layout padrão do pedido (Moderno A4, 70 mm ou Duplicata).
+  $modernPrintModel = ['72MM' => '72mm', 'DUPLICATA' => 'duplicata'][strtoupper(trim((string)($modernCfg['order_modern_print_default'] ?? 'A4')))] ?? 'a4';
 } catch (Throwable $e) {
   $modernPrintEnabled = false;
   $modernPrintModel = 'a4';
@@ -101,7 +102,8 @@ if ($modernPrintEnabled) {
   $modernMessage = order_message_build_full($data['pedido'], $data['itens'], $appWa, $modernWaCfg);
   $companyName = trim((string)($appWa['site_name'] ?? ($appWa['brand']['catalog_title'] ?? ''))) ?: 'Nexa Próspero';
   try {
-    $pdf = order_email_pdf_build((array)$data['pedido'], (array)$data['itens'], $companyName, $modernPrintModel, $pdo, (int)COMPANY_ID);
+    require_once __DIR__ . '/../config/order_duplicata_pdf.php';
+    $pdf = order_document_pdf_build((array)$data['pedido'], (array)$data['itens'], $companyName, $modernPrintModel, $pdo, (int)COMPANY_ID);
     $send = whatsapp_send_document($pdo, (int)COMPANY_ID, $directPhone, $modernMessage, (string)$pdf['filename'], (string)$pdf['mimetype'], (string)$pdf['content'], 'order_customer_pdf_admin', $id, $modernWaCfg);
     $sentOk = !empty($send['ok']);
     $sendError = (string)($send['error'] ?? '');

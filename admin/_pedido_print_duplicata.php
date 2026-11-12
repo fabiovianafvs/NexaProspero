@@ -155,7 +155,7 @@ $dupUrl72 = 'pedido_print.php?' . $baseQuery . '&modelo=72mm';
 $dupUrlA4 = 'pedido_print.php?' . $baseQuery . '&modelo=a4';
 $dupUrlDup = 'pedido_print.php?' . $baseQuery . '&modelo=duplicata';
 $dupUrlLegacy = 'pedido_print.php?' . $baseQuery . '&legacy=1';
-$dupWaUrl = 'documento_whatsapp.php?type=pedido&id=' . (int)$id . '&modelo=a4&return_to=' . rawurlencode($returnTo);
+$dupWaUrl = 'documento_whatsapp.php?type=pedido&id=' . (int)$id . '&modelo=duplicata&return_to=' . rawurlencode($returnTo);
 $dupEmailUrl = 'email_documento.php?type=pedido&id=' . (int)$id . '&return_to=' . rawurlencode($returnTo);
 if (function_exists('multi_company_context_url')) {
   foreach (['dupUrl72','dupUrlA4','dupUrlDup','dupUrlLegacy'] as $__v) $$__v = multi_company_context_url($$__v);

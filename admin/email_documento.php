@@ -345,7 +345,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && (string)($_POST['action']??'')==='send
     try{
       $attachments=[];
       if($type==='pedido'){
-        if(!empty($_POST['attach_pedido'])) $attachments[]=order_email_pdf_build((array)$payload['order'],(array)$payload['items'],$companyName,'a4',$pdo,$cid);
+        if(!empty($_POST['attach_pedido'])){ require_once __DIR__ . '/../config/order_duplicata_pdf.php'; $attachments[]=order_document_pdf_build((array)$payload['order'],(array)$payload['items'],$companyName,order_pdf_default_model($pdo,$cid),$pdo,$cid); }
         if(!empty($_POST['attach_fiscal']) && $orderDocuments['fiscal']){
           require_once __DIR__ . '/../config/fiscal_document_pdf.php';
           foreach($orderDocuments['fiscal'] as $frow){

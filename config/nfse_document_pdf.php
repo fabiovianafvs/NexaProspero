@@ -264,7 +264,16 @@ if (!function_exists('nfse_document_company_logo_path')) {
 }
 
 if (!function_exists('nfse_document_pdf_build')) {
+  /** PDF da NFS-e enviado por WhatsApp/e-mail: layout DANFSe v2.0 (config/nfse_danfse.php). */
   function nfse_document_pdf_build(array $document): array {
+    require_once __DIR__ . '/nfse_danfse.php';
+    return nfse_danfse_pdf_build($document);
+  }
+}
+
+if (!function_exists('nfse_document_pdf_build_v1')) {
+  /** Layout anterior (mantido só como reserva; não é mais usado). */
+  function nfse_document_pdf_build_v1(array $document): array {
     nfse_document_pdf_bootstrap();
     $d=nfse_document_view_data($document); $tx='nfse_document_pdf_text';
     $pdf=new \NFePHP\DA\Legacy\FPDF\Fpdf('P','mm','A4');

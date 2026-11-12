@@ -4,6 +4,7 @@ require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/_fiscal.php';
 require_once __DIR__ . '/_print_brand.php';
 require_once __DIR__ . '/../config/nfse_document_pdf.php';
+require_once __DIR__ . '/../config/nfse_danfse.php';
 require_once __DIR__ . '/../config/print_codes.php';
 require_once __DIR__ . '/../config/navigation_return.php';
 
@@ -35,6 +36,8 @@ try{$prest=fiscal_nfce_document_participant($pdo,$cid,$docId,'PRESTADOR');$tom=f
 if(function_exists('fiscal_company_report_identity'))$doc['_issuer_identity']=fiscal_company_report_identity($pdo,$cid);
 $doc['_prestador']=$prest;$doc['_tomador']=$tom;
 $data=nfse_document_view_data($doc);
+// Layout DANFSe v2.0 (o mesmo do PDF enviado por WhatsApp/e-mail).
+$danfse=nfse_danfse_layout($doc);
 function nfsip_h($v):string{return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 function nfsip_val($v,string $fallback='—'):string{$s=trim((string)$v);return $s!==''?$s:$fallback;}
 function nfsip_pct($v):string{return number_format((float)$v,2,',','.').' %';}
@@ -65,101 +68,10 @@ $companyBrand=nexa_print_brand_name($cid,(string)($data['issuer']['name']??''));
 ?>
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DANFSe NFS-e <?=nfsip_h($data['nfse_number'])?></title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#edf1f5;color:#111;font-family:Arial,Helvetica,sans-serif}.toolbar{max-width:210mm;margin:12px auto 7px;display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}.btn{border:1px solid #c4cbd4;background:#fff;color:#111;border-radius:8px;padding:8px 11px;text-decoration:none;font-weight:800;font-size:12px;cursor:pointer}.btn.primary{background:#233b9b;color:#fff;border-color:#233b9b}.btn.wa{background:#25D366;color:#fff;border-color:#20bd5a}.danfse{width:210mm;min-height:287mm;margin:0 auto 18px;background:#fff;border:1px solid #222;padding:2.4mm;box-shadow:0 10px 30px rgba(15,23,42,.10);font-size:7.8pt;line-height:1.12}.top{display:grid;grid-template-columns:45mm 1fr 48mm;border:1px solid #111}.top>div{min-height:21mm;padding:1.7mm;border-right:1px solid #111}.top>div:last-child{border-right:0}.nfse-mark{display:flex;align-items:center;gap:2mm}.nfse-symbol{font-size:23pt;line-height:1;font-weight:900;color:#247f57;letter-spacing:-1.5px}.nfse-symbol small{display:block;font-size:6pt;color:#64748b;letter-spacing:0;margin-top:1mm}.top-title{text-align:center;display:flex;justify-content:center;align-items:center;flex-direction:column}.top-title strong{font-size:10.5pt}.top-title span{font-size:9pt;font-weight:800;margin-top:1mm}.top-env-inline{font-size:5.9pt;line-height:1.18;margin-top:1.5mm;color:#333}.company-brand{display:flex;align-items:center;justify-content:flex-end;text-align:right;padding:1.2mm 1.7mm!important}.company-brand img{max-width:42mm;max-height:17mm;object-fit:contain;display:block;margin-left:auto}.company-brand strong{font-size:8pt;line-height:1.15;max-width:43mm;display:block;margin-left:auto}.access-row{display:grid;grid-template-columns:1fr 32mm;border:1px solid #111;border-top:0;min-height:31mm}.access-key{padding:1.5mm}.access-key .label,.field .label{font-size:6.3pt;font-weight:900;text-transform:uppercase;color:#222}.access-key .key{font-size:8pt;font-weight:900;letter-spacing:.1mm;word-break:break-all;margin-top:1mm}.access-note{font-size:6.3pt;margin-top:4mm;max-width:120mm}.qr{border-left:1px solid #111;display:flex;align-items:center;justify-content:center;padding:1mm}.qr img{width:27mm;height:27mm;object-fit:contain}.qr-empty{font-size:6pt;text-align:center;color:#64748b}.section-title{border:1px solid #111;border-top:0;background:#e9e9e9;padding:1mm 1.4mm;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.02em}.cells{display:grid;border-left:1px solid #111;border-bottom:1px solid #111}.cells.c2{grid-template-columns:1fr 1fr}.cells.c3{grid-template-columns:repeat(3,1fr)}.cells.c4{grid-template-columns:repeat(4,1fr)}.field{padding:1mm 1.4mm;min-height:10mm;border-right:1px solid #111;border-top:1px solid #111}.cells>.field:nth-child(-n+4){ }.field .value{font-size:7.7pt;font-weight:700;margin-top:.5mm;overflow-wrap:anywhere}.field .value.normal{font-weight:400}.span2{grid-column:span 2}.span3{grid-column:span 3}.span4{grid-column:1/-1}.center{text-align:center}.right{text-align:right}.note-line{border:1px solid #111;border-top:0;padding:1mm;text-align:center;font-size:6.4pt;font-weight:700}.service-desc{min-height:14mm;white-space:pre-wrap}.totals .value{font-size:8.2pt}.totals .emph .value{font-size:9.3pt;font-weight:900}.additional{border:1px solid #111;border-top:0;min-height:23mm;padding:1.3mm;white-space:pre-wrap}.bottom{display:grid;grid-template-columns:1fr 1fr 2fr;border:1px solid #111;border-top:0;margin-top:0}.bottom>div{min-height:9mm;padding:1mm;border-right:1px solid #111}.bottom>div:last-child{border-right:0}.muted{color:#4b5563}.homolog{border:2px solid #111;text-align:center;font-size:9pt;font-weight:900;padding:1.3mm;margin-bottom:1mm;background:#fff7ed}.cancel{border:2px solid #991b1b;color:#991b1b;text-align:center;font-size:10pt;font-weight:900;padding:1.3mm;margin-bottom:1mm}
-@media print{@page{size:A4 portrait;margin:5mm}body{background:#fff}.toolbar{display:none}.danfse{width:auto;min-height:0;margin:0;border:0;padding:0;box-shadow:none;font-size:7.6pt}.top{break-inside:avoid}.section-title,.cells,.note-line,.additional,.bottom{break-inside:avoid}}
-@media print{
-  @page{size:A4 portrait;margin:3mm}
-  html,body{margin:0!important;padding:0!important;height:auto!important}
-  .danfse{width:100%!important;max-width:none!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;font-size:7pt!important;line-height:1.04!important}
-  .top>div{min-height:16mm;padding:.8mm!important}.company-brand img{max-height:12mm}
-  .access-row{min-height:23mm;grid-template-columns:1fr 25mm}.access-note{margin-top:1.5mm}
-  .qr img{width:21mm;height:21mm}.section-title{padding:.45mm 1mm;font-size:6.6pt}
-  .field{padding:.6mm 1mm;min-height:7mm}.field .value{font-size:7pt;margin-top:.3mm}
-  .service-desc{min-height:8mm}.additional{min-height:8mm;padding:.7mm 1mm}
-  .bottom>div{min-height:5.5mm;padding:.5mm 1mm}
-  .note-line{padding:.5mm}.homolog,.cancel{padding:.7mm}
-}
+*{box-sizing:border-box}body{margin:0;background:#edf1f5;color:#111;font-family:Arial,Helvetica,sans-serif}.toolbar{max-width:210mm;margin:12px auto 7px;display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}.btn{border:1px solid #c4cbd4;background:#fff;color:#111;border-radius:8px;padding:8px 11px;text-decoration:none;font-weight:800;font-size:12px;cursor:pointer}.btn.primary{background:#233b9b;color:#fff;border-color:#233b9b}.btn.wa{background:#25D366;color:#fff;border-color:#20bd5a}
+<?=nfse_danfse_css()?>
+@media print{body{background:#fff}.toolbar{display:none}}
 </style></head><body>
 <div class="toolbar"><?php if(!$nfseF11):?><a class="btn wa" href="fiscal_documento_whatsapp.php?doc_id=<?=$docId?>&return_to=<?=rawurlencode($back)?>">WhatsApp</a><a class="btn" href="email_documento.php?type=fiscal&doc_id=<?=$docId?>&return_to=<?=rawurlencode($back)?>">E-mail</a><?php endif;?><button class="btn primary" onclick="window.print()">Imprimir</button><a class="btn" href="<?=nfsip_h($xmlUrl)?>">XML</a><a class="btn" href="<?=nfsip_h($back)?>">Sair</a></div>
-<main class="danfse">
-<?php if(strtoupper((string)$data['environment'])!=='PRODUCAO' && (($meta['environment_type']??'')!=='Produção')):?><div class="homolog">AMBIENTE DE HOMOLOGAÇÃO — SEM VALOR FISCAL</div><?php endif;?>
-<?php if($data['status']==='CANCELADA'):?><div class="cancel">NFS-e CANCELADA</div><?php endif;?>
-<header class="top">
-  <div class="nfse-mark"><div class="nfse-symbol">NFS-e<small>Nota Fiscal de Serviço eletrônica</small></div></div>
-  <div class="top-title"><strong>DANFSe</strong><span>Documento Auxiliar da NFS-e</span><div class="top-env-inline">Município: <?=nfsip_h(nfsip_val($data['city_issue']))?> · Gerador: <?=nfsip_h(nfsip_val($meta['generator']??''))?> · <?=nfsip_h(nfsip_val($meta['environment_type']??''))?></div></div>
-  <div class="company-brand"><?php if($companyLogo!==''):?><img src="<?=nfsip_h($companyLogo)?>" alt="Logo da empresa"><?php else:?><strong><?=nfsip_h(nfsip_val($companyBrand,'Empresa'))?></strong><?php endif;?></div>
-</header>
-<div class="access-row"><div class="access-key"><div class="label">Chave de acesso da NFS-e</div><div class="key"><?=nfsip_h(nfsip_val($data['access_key']))?></div><div class="access-note">A chave identifica este documento. Quando disponível, use o QR ao lado para leitura rápida da chave e validação no ambiente oficial do município/provedor.</div></div><div class="qr"><?php if($qrUri!==''):?><img src="<?=nfsip_h($qrUri)?>" alt="QR da chave de acesso"><?php else:?><div class="qr-empty">QR indisponível</div><?php endif;?></div></div>
-<div class="cells c3">
-  <div class="field"><div class="label">Número da NFS-e</div><div class="value"><?=nfsip_h(nfsip_val($data['nfse_number']))?></div></div>
-  <div class="field"><div class="label">Competência da NFS-e</div><div class="value"><?=nfsip_h(nfse_document_human_date($data['competence'],false)?:'—')?></div></div>
-  <div class="field"><div class="label">Data e hora da emissão da NFS-e</div><div class="value"><?=nfsip_h(nfse_document_human_date($data['issue_datetime'])?:'—')?></div></div>
-  <div class="field"><div class="label">Número da DPS</div><div class="value"><?=nfsip_h(nfsip_val($data['dps_number']))?></div></div>
-  <div class="field"><div class="label">Série da DPS</div><div class="value"><?=nfsip_h(nfsip_val($data['dps_series']))?></div></div>
-  <div class="field"><div class="label">Data e hora da emissão da DPS</div><div class="value"><?=nfsip_h(nfse_document_human_date($meta['dps_issue_datetime']??'')?:'—')?></div></div>
-  <div class="field"><div class="label">Emitente da NFS-e</div><div class="value">Prestador</div></div>
-  <div class="field"><div class="label">Situação da NFS-e</div><div class="value"><?=nfsip_h(nfsip_val($data['status']))?></div></div>
-  <div class="field"><div class="label">Finalidade</div><div class="value"><?=nfsip_h(nfsip_val($meta['finality']??''))?></div></div>
-</div>
-<div class="section-title">Prestador / Fornecedor</div>
-<div class="cells c4">
-  <div class="field"><div class="label">CNPJ / CPF / NIF</div><div class="value"><?=nfsip_h(nfsip_party_doc($data['issuer']))?></div></div>
-  <div class="field"><div class="label">Inscrição Municipal</div><div class="value"><?=nfsip_h(nfsip_val($data['issuer']['municipal_registration']))?></div></div>
-  <div class="field"><div class="label">Telefone</div><div class="value"><?=nfsip_h(nfsip_val($data['issuer']['phone']))?></div></div>
-  <div class="field"><div class="label">Município / UF · Cód. IBGE / CEP</div><div class="value"><?=nfsip_h(nfsip_city_zip($data['issuer']))?></div></div>
-  <div class="field span2"><div class="label">Nome / Nome Empresarial</div><div class="value"><?=nfsip_h(nfsip_val($data['issuer']['name']))?></div></div>
-  <div class="field span2"><div class="label">E-mail</div><div class="value normal"><?=nfsip_h(nfsip_val($data['issuer']['email']))?></div></div>
-  <div class="field span4"><div class="label">Endereço</div><div class="value"><?=nfsip_h(nfsip_val($issuerAddr))?></div></div>
-  <div class="field span2"><div class="label">Simples Nacional na data de competência</div><div class="value"><?=nfsip_h(nfsip_val($meta['simple_national']??''))?></div></div>
-  <div class="field span2"><div class="label">Regime de apuração tributária pelo SN</div><div class="value"><?=nfsip_h(nfsip_reg_ap((string)($meta['simple_tax_regime']??'')))?></div></div>
-</div>
-<div class="section-title">Tomador / Adquirente</div>
-<div class="cells c4">
-  <div class="field"><div class="label">CNPJ / CPF / NIF</div><div class="value"><?=nfsip_h(nfsip_party_doc($data['customer']))?></div></div>
-  <div class="field"><div class="label">Inscrição Municipal</div><div class="value"><?=nfsip_h(nfsip_val($data['customer']['municipal_registration']))?></div></div>
-  <div class="field"><div class="label">Telefone</div><div class="value"><?=nfsip_h(nfsip_val($data['customer']['phone']))?></div></div>
-  <div class="field"><div class="label">Município / UF · Cód. IBGE / CEP</div><div class="value"><?=nfsip_h(nfsip_city_zip($data['customer']))?></div></div>
-  <div class="field span2"><div class="label">Nome / Nome Empresarial</div><div class="value"><?=nfsip_h(nfsip_val($data['customer']['name']))?></div></div>
-  <div class="field span2"><div class="label">E-mail</div><div class="value normal"><?=nfsip_h(nfsip_val($data['customer']['email']))?></div></div>
-  <div class="field span4"><div class="label">Endereço</div><div class="value"><?=nfsip_h(nfsip_val($customerAddr))?></div></div>
-</div>
-<div class="section-title">Serviço Prestado</div>
-<div class="cells c4">
-  <div class="field"><div class="label">Código Tributação Nacional</div><div class="value"><?=nfsip_h(nfsip_val($data['service']['national_code']))?></div></div>
-  <div class="field"><div class="label">Código Tributação Municipal</div><div class="value"><?=nfsip_h(nfsip_val($data['service']['municipal_code']))?></div></div>
-  <div class="field"><div class="label">Código NBS</div><div class="value"><?=nfsip_h(nfsip_val($data['service']['nbs']))?></div></div>
-  <div class="field"><div class="label">Local da Prestação</div><div class="value"><?=nfsip_h(nfsip_val($data['city_service']))?></div></div>
-  <div class="field span4 service-desc"><div class="label">Descrição do Serviço</div><div class="value normal"><?=nl2br(nfsip_h(nfsip_val($data['service']['description'])))?></div></div>
-</div>
-<div class="section-title">Tributação Municipal (ISSQN)</div>
-<div class="cells c4">
-  <div class="field"><div class="label">Tipo de Tributação do ISSQN</div><div class="value"><?=nfsip_h(nfsip_tax_type((string)($iss['type']??'')))?></div></div>
-  <div class="field"><div class="label">Município de Incidência</div><div class="value"><?=nfsip_h(nfsip_val($data['city_service']))?></div></div>
-  <div class="field"><div class="label">Regime Especial de Tributação</div><div class="value"><?=nfsip_h(nfsip_reg_esp((string)($meta['special_tax_regime']??'')))?></div></div>
-  <div class="field"><div class="label">Retenção do ISSQN</div><div class="value"><?=nfsip_h(nfsip_iss_ret((string)($iss['retention']??'')))?></div></div>
-  <div class="field"><div class="label">Base de Cálculo ISSQN</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['values']['base']))?></div></div>
-  <div class="field"><div class="label">Alíquota Aplicada</div><div class="value"><?=nfsip_h(nfsip_pct($iss['rate']??$data['values']['iss_rate']))?></div></div>
-  <div class="field span2"><div class="label">ISSQN Apurado</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['values']['iss']))?></div></div>
-</div>
-<div class="section-title">Tributação IBS / CBS</div>
-<div class="cells c4">
-  <div class="field"><div class="label">CST / cClassTrib</div><div class="value"><?=nfsip_h(nfsip_val(($ibs['cst']??'').(($ibs['class']??'')!==''?' / '.$ibs['class']:'')))?></div></div>
-  <div class="field span2"><div class="label">Indicador da Operação / Código IBGE / Município Incidência</div><div class="value"><?=nfsip_h(nfsip_val(trim(($ibs['operation_indicator']??'').' / '.($ibs['incidence_code']??'').' / '.($ibs['incidence_name']??''),' /')))?></div></div>
-  <div class="field"><div class="label">Base de Cálculo IBS/CBS</div><div class="value"><?=nfsip_h(nfse_document_human_money($ibs['base']??0))?></div></div>
-  <div class="field"><div class="label">Alíquota IBS UF / Mun.</div><div class="value"><?=nfsip_h(nfsip_pct($ibs['ibs_uf_rate']??0).' / '.nfsip_pct($ibs['ibs_mun_rate']??0))?></div></div>
-  <div class="field"><div class="label">Valor IBS UF / Mun.</div><div class="value"><?=nfsip_h(nfse_document_human_money($ibs['ibs_uf']??0).' / '.nfse_document_human_money($ibs['ibs_mun']??0))?></div></div>
-  <div class="field"><div class="label">Alíquota CBS</div><div class="value"><?=nfsip_h(nfsip_pct($ibs['cbs_rate']??0))?></div></div>
-  <div class="field"><div class="label">Valor CBS</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['values']['cbs']))?></div></div>
-</div>
-<div class="section-title">Valor Total da NFS-e</div>
-<div class="cells c4 totals">
-  <div class="field"><div class="label">Valor da Operação / Serviço</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['values']['service']))?></div></div>
-  <div class="field"><div class="label">Desconto Incondicionado</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['discounts']['unconditional']??0))?></div></div>
-  <div class="field"><div class="label">Desconto Condicionado</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['discounts']['conditional']??0))?></div></div>
-  <div class="field"><div class="label">Total IBS/CBS</div><div class="value"><?=nfsip_h(nfse_document_human_money($totalIbsCbs))?></div></div>
-  <div class="field span4 emph"><div class="label">Valor Líquido da NFS-e</div><div class="value"><?=nfsip_h(nfse_document_human_money($data['values']['liquid']))?></div></div>
-</div>
-<div class="section-title">Informações Complementares</div>
-<div class="additional"><?=nl2br(nfsip_h(nfsip_val($data['additional_info']??'','Sem informações complementares.')))?></div>
-<div class="bottom"><div><div class="label">Data Cientificação</div></div><div><div class="label">Identificação e Assinatura</div></div><div><div class="label">Nº NFS-e / Chave NFS-e</div><strong><?=nfsip_h(nfsip_val($data['nfse_number']))?> / <?=nfsip_h(nfsip_val($data['access_key']))?></strong></div></div>
-</main></body></html>
+<?=nfse_danfse_html($danfse)?>
+</body></html>

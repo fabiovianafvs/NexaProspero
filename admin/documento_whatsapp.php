@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/os_document_share_options.php';
 require_once __DIR__ . '/../config/orcamento_module.php';
 require_once __DIR__ . '/../config/order_message.php';
 require_once __DIR__ . '/../config/order_email_pdf.php';
+require_once __DIR__ . '/../config/order_duplicata_pdf.php';
 require_once __DIR__ . '/../config/load_config.php';
 
 $cid=(int)COMPANY_ID;
@@ -30,7 +31,8 @@ $messageFallback='';$messageVars=[];$pedidoBaseWaCfg=null;
 try{
   if($type==='pedido'){
     $loaded=order_message_load($pdo,$cid,$id);if(!$loaded)throw new RuntimeException('Pedido não encontrado.');$o=(array)$loaded['pedido'];$items=(array)$loaded['itens'];
-    if(!in_array($model,['72mm','a4'],true))$model='a4';
+    // Sem modelo escolhido: usa o layout padrão do pedido (Configurações fiscais), inclusive a Duplicata.
+    if(!in_array($model,['72mm','a4','duplicata'],true))$model=order_pdf_default_model($pdo,$cid);
     $number=function_exists('company_sequence_display')?company_sequence_display($o,'pedidos'):(int)($o['id']??$id);$customer=trim((string)($o['nome_cliente']??''))?:'cliente';
     $phone=trim((string)($o['whatsapp']??''));
     $appCfg=load_app_config($cid);try{$biz=load_business_config($cid);$catalogTitle=trim((string)($biz['brand']['catalog_title']??''));if($catalogTitle!==''){$appCfg['site_name']=$catalogTitle;if(!isset($appCfg['brand'])||!is_array($appCfg['brand']))$appCfg['brand']=[];$appCfg['brand']['catalog_title']=$catalogTitle;}}catch(Throwable $e){}
@@ -82,7 +84,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     $mode=(string)($_POST['mode']??'api');
     if($mode==='api'){
       try{
-        $pdf=$type==='pedido'?order_email_pdf_build((array)$payload['order'],(array)$payload['items'],(string)$payload['company_name'],$model,$pdo,$cid):($type==='orcamento'?nexa_quote_document_pdf_build($payload,$model):nexa_os_document_pdf_build($payload,$model,$osShareOptions['conteudo'],$osShareOptions['papel'],$osShareOptions['perfil_impressao']));
+        $pdf=$type==='pedido'?order_document_pdf_build((array)$payload['order'],(array)$payload['items'],(string)$payload['company_name'],$model,$pdo,$cid):($type==='orcamento'?nexa_quote_document_pdf_build($payload,$model):nexa_os_document_pdf_build($payload,$model,$osShareOptions['conteudo'],$osShareOptions['papel'],$osShareOptions['perfil_impressao']));
         $cfg=whatsapp_load_config($pdo,$cid);$cfg['enabled']=true;$cfg['timeout_seconds']=max(60,(int)($cfg['timeout_seconds']??30));
         $send=whatsapp_send_document($pdo,$cid,$phone,$message,(string)$pdf['filename'],(string)$pdf['mimetype'],(string)$pdf['content'],$type.'_document_admin',$id,$cfg);
         if(!empty($send['ok'])){$sep=str_contains($returnTo,'?')?'&':'?';header('Location: '.$returnTo.$sep.'ok='.rawurlencode($docLabel.' enviado em PDF pelo WhatsApp.'));exit;}
