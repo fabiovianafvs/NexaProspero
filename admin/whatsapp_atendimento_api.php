@@ -91,18 +91,18 @@ try {
         foreach (person_contacts_search($pdo, $cid, $q, 15, true) as $r) {
           $ph = trim((string)($r['whatsapp'] ?? '')) ?: trim((string)($r['phone'] ?? ''));
           if ($ph === '') continue;
-          $items[] = ['name' => (string)$r['name'], 'role' => (string)($r['role'] ?? ''), 'company' => (string)($r['person_name'] ?? ''), 'document' => whatsapp_att_doc_label((string)($r['person_document'] ?? '')), 'phone' => $ph];
+          $items[] = ['name' => (string)$r['name'], 'role' => (string)($r['role'] ?? ''), 'company' => trim((string)($r['person_fantasy'] ?? '')) ?: (string)($r['person_name'] ?? ''), 'document' => whatsapp_att_doc_label((string)($r['person_document'] ?? '')), 'phone' => $ph];
         }
         $like = '%' . $q . '%';
         $digits = person_contact_digits($q);
-        $sql = "SELECT name, document, whatsapp, phone FROM finance_people WHERE company_id=? AND (COALESCE(whatsapp,'')<>'' OR COALESCE(phone,'')<>'') AND (name LIKE ? OR document LIKE ?";
-        $params = [$cid, $like, $like];
+        $sql = "SELECT name, fantasy_name, document, whatsapp, phone FROM finance_people WHERE company_id=? AND (COALESCE(whatsapp,'')<>'' OR COALESCE(phone,'')<>'') AND (name LIKE ? OR fantasy_name LIKE ? OR document LIKE ?";
+        $params = [$cid, $like, $like, $like];
         if (strlen($digits) >= 4) { $sql .= " OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(whatsapp,''),'(',''),')',''),'-',''),' ','') LIKE ?"; $params[] = '%' . $digits . '%'; }
         $st = $pdo->prepare($sql . ') ORDER BY name LIMIT 15');
         $st->execute($params);
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
           $ph = trim((string)($r['whatsapp'] ?? '')) ?: trim((string)($r['phone'] ?? ''));
-          $items[] = ['name' => (string)$r['name'], 'role' => 'Cadastro', 'company' => '', 'document' => whatsapp_att_doc_label((string)($r['document'] ?? '')), 'phone' => $ph];
+          $items[] = ['name' => trim((string)($r['fantasy_name'] ?? '')) ?: (string)$r['name'], 'role' => 'Cadastro', 'company' => trim((string)($r['fantasy_name'] ?? '')) !== '' ? (string)$r['name'] : '', 'document' => whatsapp_att_doc_label((string)($r['document'] ?? '')), 'phone' => $ph];
         }
       }
       $out(['ok' => true, 'items' => array_slice($items, 0, 25)]);

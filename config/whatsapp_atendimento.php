@@ -73,7 +73,8 @@ if (!function_exists('whatsapp_att_list')) {
     $q = trim($q);
     if ($q !== '') {
       $digits = whatsapp_bot_digits($q);
-      $where .= ' AND (s.push_name LIKE ? OR p.name LIKE ?' . ($ct['search'] !== '' ? ' OR ' . $ct['search'] : '') . ($digits !== '' ? ' OR s.phone LIKE ?' : '') . ')';
+      $where .= ' AND (s.push_name LIKE ? OR p.name LIKE ? OR p.fantasy_name LIKE ?' . ($ct['search'] !== '' ? ' OR ' . $ct['search'] : '') . ($digits !== '' ? ' OR s.phone LIKE ?' : '') . ')';
+      $params[] = '%' . $q . '%';
       $params[] = '%' . $q . '%';
       $params[] = '%' . $q . '%';
       if ($ct['search'] !== '') $params[] = '%' . $q . '%';
@@ -81,7 +82,7 @@ if (!function_exists('whatsapp_att_list')) {
     }
     $order = $tab === 'fila' ? 's.queued_at ASC, s.id ASC' : 's.last_message_at DESC, s.id DESC';
     $st = $pdo->prepare("SELECT s.id, s.contact, s.phone, s.push_name, s.status, s.department_id, s.user_id, s.unread, s.last_preview, s.last_direction,
-        s.last_message_at, s.queued_at, s.accepted_at, s.person_id, p.name AS person_name, d.name AS department_name, u.name AS user_name{$ct['cols']}
+        s.last_message_at, s.queued_at, s.accepted_at, s.person_id, p.name AS person_name, p.fantasy_name AS person_fantasy, d.name AS department_name, u.name AS user_name{$ct['cols']}
       FROM whatsapp_bot_sessions s
       LEFT JOIN finance_people p ON p.company_id=s.company_id AND p.id=s.person_id
       LEFT JOIN whatsapp_departments d ON d.company_id=s.company_id AND d.id=s.department_id
@@ -98,7 +99,11 @@ if (!function_exists('whatsapp_att_phone_label')) {
   function whatsapp_att_phone_label(string $d): string {
     $d = whatsapp_bot_digits($d);
     if (strlen($d) === 13 && str_starts_with($d, '55')) return '(' . substr($d, 2, 2) . ') ' . substr($d, 4, 5) . '-' . substr($d, 9);
-    if (strlen($d) === 12 && str_starts_with($d, '55')) return '(' . substr($d, 2, 2) . ') ' . substr($d, 4, 4) . '-' . substr($d, 8);
+    if (strlen($d) === 12 && str_starts_with($d, '55')) {
+      // Celular que o WhatsApp informa sem o 9 (número antigo de 8 dígitos): mostra com o 9.
+      if (in_array($d[4], ['6', '7', '8', '9'], true)) return '(' . substr($d, 2, 2) . ') 9' . substr($d, 4, 4) . '-' . substr($d, 8);
+      return '(' . substr($d, 2, 2) . ') ' . substr($d, 4, 4) . '-' . substr($d, 8);
+    }
     return $d;
   }
 }
@@ -107,7 +112,9 @@ if (!function_exists('whatsapp_att_row')) {
   function whatsapp_att_row(array $r): array {
     // Contato cadastrado (quem chama) vem primeiro; a empresa/pessoa dele aparece junto.
     $contactName = trim((string)($r['contact_name'] ?? ''));
-    $name = $contactName !== '' ? $contactName : (trim((string)($r['person_name'] ?? '')) ?: trim((string)($r['push_name'] ?? '')));
+    // Cliente aparece pelo nome fantasia (razão social quando não houver).
+    $personLabel = trim((string)($r['person_fantasy'] ?? '')) ?: trim((string)($r['person_name'] ?? ''));
+    $name = $contactName !== '' ? $contactName : ($personLabel ?: trim((string)($r['push_name'] ?? '')));
     $phone = whatsapp_att_phone_label((string)($r['phone'] ?? ''));
     return [
       'id' => (int)$r['id'],
@@ -126,7 +133,7 @@ if (!function_exists('whatsapp_att_row')) {
       'person_id' => (int)($r['person_id'] ?? 0),
       'contact_id' => (int)($r['contact_id'] ?? 0),
       'contact_role' => trim((string)($r['contact_role'] ?? '')),
-      'company_label' => $contactName !== '' ? trim((string)($r['person_name'] ?? '')) : '',
+      'company_label' => $contactName !== '' ? $personLabel : '',
     ];
   }
 }
@@ -146,7 +153,7 @@ if (!function_exists('whatsapp_att_contact_sql')) {
 if (!function_exists('whatsapp_att_chat_info')) {
   function whatsapp_att_chat_info(PDO $pdo, int $companyId, int $chatId): array {
     $ct = whatsapp_att_contact_sql($pdo);
-    $st = $pdo->prepare("SELECT s.*, p.name AS person_name, d.name AS department_name, u.name AS user_name{$ct['cols']}
+    $st = $pdo->prepare("SELECT s.*, p.name AS person_name, p.fantasy_name AS person_fantasy, d.name AS department_name, u.name AS user_name{$ct['cols']}
       FROM whatsapp_bot_sessions s
       LEFT JOIN finance_people p ON p.company_id=s.company_id AND p.id=s.person_id
       LEFT JOIN whatsapp_departments d ON d.company_id=s.company_id AND d.id=s.department_id

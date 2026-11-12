@@ -51,7 +51,7 @@ if (!function_exists('person_contacts_search')) {
   /** Busca por nome do contato, nome/fantasia/documento da pessoa, telefone ou e-mail. */
   function person_contacts_search(PDO $pdo, int $companyId, string $q = '', int $limit = 100, bool $activeOnly = false): array {
     if (!person_contacts_ready($pdo)) return [];
-    $sql = 'SELECT c.*, p.name AS person_name, p.document AS person_document
+    $sql = 'SELECT c.*, p.name AS person_name, p.fantasy_name AS person_fantasy, p.document AS person_document
       FROM person_contacts c
       LEFT JOIN finance_people p ON p.company_id = c.company_id AND p.id = c.person_id
       WHERE c.company_id = ?';
@@ -61,8 +61,8 @@ if (!function_exists('person_contacts_search')) {
     if ($q !== '') {
       $like = '%' . mb_substr($q, 0, 80) . '%';
       $digits = person_contact_digits($q);
-      $sql .= ' AND (c.name LIKE ? OR c.role LIKE ? OR c.email LIKE ? OR p.name LIKE ? OR p.document LIKE ?';
-      array_push($params, $like, $like, $like, $like, $like);
+      $sql .= ' AND (c.name LIKE ? OR c.role LIKE ? OR c.email LIKE ? OR p.name LIKE ? OR p.fantasy_name LIKE ? OR p.document LIKE ?';
+      array_push($params, $like, $like, $like, $like, $like, $like);
       if (strlen($digits) >= 4) {
         $sql .= ' OR c.whatsapp_digits LIKE ? OR c.phone_digits LIKE ?';
         array_push($params, '%' . $digits . '%', '%' . $digits . '%');
