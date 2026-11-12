@@ -26,9 +26,11 @@ function waa_h($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UT
 admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 ?>
 <style>
-.waa{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;display:grid;grid-template-columns:clamp(300px,28vw,420px) 1fr;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:var(--txt);margin-top:10px}
+.waa{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;display:grid;grid-template-columns:var(--side,clamp(300px,28vw,420px)) 1fr;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:var(--txt);margin-top:10px}
 .waa *{box-sizing:border-box}
-.waa-side{display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;min-height:0}
+.waa-side{display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;min-height:0;position:relative}
+.waa-split{position:absolute;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;z-index:4;touch-action:none}.waa-split::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:2px;background:transparent;transition:background .15s}
+.waa-split:hover::after,.waa.resizing .waa-split::after{background:#00a884}.waa.resizing{user-select:none;cursor:col-resize}.waa.resizing *{cursor:col-resize!important}
 .waa-sidehead{padding:10px 12px;background:var(--bg);display:flex;gap:8px;align-items:center}
 .waa-sidehead input{flex:1;border:0;border-radius:10px;padding:9px 12px;background:#fff;font:inherit}
 .waa-btn{border:1px solid #d1d7db;background:#fff;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;color:#0b1f5b;font-size:13px;white-space:nowrap}
@@ -85,13 +87,14 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-rt{font-size:11px;color:var(--mut)}
 .waa-answers{background:#eef6ff;border-bottom:1px solid var(--line);padding:8px 14px;font-size:13px;color:#1e3a5f;display:flex;gap:6px 16px;flex-wrap:wrap}.waa-answers b{color:#0b1f5b}
 .waa-back{display:none}
-@media(max-width:860px){.waa{grid-template-columns:1fr;height:calc(100vh - 120px)}.waa.chat-open .waa-side{display:none}.waa:not(.chat-open) .waa-main{display:none}.waa-back{display:inline-block}.waa-b{max-width:85%}.waa-msgs{padding:12px}}
+@media(max-width:860px){.waa-split{display:none}.waa{grid-template-columns:1fr!important;height:calc(100vh - 120px)}.waa.chat-open .waa-side{display:none}.waa:not(.chat-open) .waa-main{display:none}.waa-back{display:inline-block}.waa-b{max-width:85%}.waa-msgs{padding:12px}}
 </style>
 <?php if (!$ready): ?>
 <div class="msg err" style="margin-top:12px">O atendimento ainda não foi instalado. Peça ao administrador da plataforma para aplicar "WhatsApp - Atendimento (fluxo, setores e conversas)" no Atualizador do Banco.</div>
 <?php else: ?>
 <div class="waa" id="waa">
   <aside class="waa-side">
+    <div class="waa-split" id="waaSplit" title="Arraste para ajustar a largura da lista (duplo clique volta ao padrão)"></div>
     <div class="waa-sidehead">
       <input id="waaSearch" placeholder="Pesquisar nome ou telefone" autocomplete="off">
       <button class="waa-btn g" type="button" id="waaNew" title="Iniciar conversa">+ Nova</button>
@@ -213,6 +216,36 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   };
   fit();
   window.addEventListener('resize', fit);
+  // Divisória arrastável entre a lista de conversas e a conversa (lembrada neste navegador).
+  const split = document.getElementById('waaSplit');
+  const KEY = 'nexa_waa_side_width';
+  const apply = (px) => {
+    const max = Math.max(260, box.clientWidth * 0.6);
+    const w = Math.round(Math.min(max, Math.max(240, px)));
+    box.style.setProperty('--side', w + 'px');
+    return w;
+  };
+  try { const saved = parseInt(localStorage.getItem(KEY) || '', 10); if (saved > 0) apply(saved); } catch (_) {}
+  if (split) {
+    let dragging = false, left = 0, scale = 1;
+    split.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const r = box.getBoundingClientRect();
+      left = r.left; scale = box.offsetWidth > 0 ? r.width / box.offsetWidth : 1; // zoom automático do painel
+      dragging = true; box.classList.add('resizing');
+      try { split.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    split.addEventListener('pointermove', (e) => { if (dragging) apply((e.clientX - left) / scale); });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false; box.classList.remove('resizing');
+      const w = parseInt(getComputedStyle(box).getPropertyValue('--side'), 10);
+      try { if (w > 0) localStorage.setItem(KEY, String(w)); } catch (_) {}
+    };
+    split.addEventListener('pointerup', end);
+    split.addEventListener('pointercancel', end);
+    split.addEventListener('dblclick', () => { box.style.removeProperty('--side'); try { localStorage.removeItem(KEY); } catch (_) {} });
+  }
   window.addEventListener('load', fit);
   setTimeout(fit, 300);
 })();
