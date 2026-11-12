@@ -172,6 +172,13 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
 .wab-phone{background:#efeae2;border-radius:16px;padding:14px;max-width:360px}.wab-phone pre{background:#fff;border-radius:10px;padding:10px;white-space:pre-wrap;font:14px/1.45 system-ui,sans-serif;margin:0;box-shadow:0 1px .5px rgba(0,0,0,.15)}
 .wab-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}.wab-modal.on{display:flex}.wab-modal .wab-card{width:100%;max-width:560px;max-height:92vh;overflow:auto}
 .wab-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;border-top:1px solid #e2e8f0;padding-top:12px}.wab-tabs a{padding:8px 14px;border-radius:999px;border:1px solid #dbe4f0;background:#f8fbff;color:#0b1f5b;font-weight:700;font-size:13px;text-decoration:none}.wab-tabs a.on{background:#2454d6;border-color:#2454d6;color:#fff}
+.wab-hours{border:1px solid #e2e8f0;border-radius:14px;overflow:hidden}
+.wab-hrow{display:grid;grid-template-columns:130px 64px minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding:7px 12px;border-top:1px solid #eef2f7}.wab-hrow:first-child{border-top:0}
+.wab-hhead{background:#f8fafc;font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.03em}
+.wab-hper{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}.wab-hper i{font-style:normal;color:#64748b;font-size:13px}
+.wab-hours input[type=time]{width:132px!important;min-width:0!important;min-height:38px!important;padding:6px 8px!important;border-radius:10px!important;font-size:14px!important;flex:0 0 auto}
+.wab-hon{display:flex;align-items:center;gap:6px}.wab-hon input{width:18px;height:18px}.wab-hmobile{display:none}
+@media(max-width:760px){.wab-hrow{grid-template-columns:1fr auto}.wab-hhead{display:none}.wab-hper{grid-column:1/-1}.wab-hmobile{display:inline;font-size:13px}}
 .wab-btns{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}.wab-modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 .wab-search{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.wab-search input{flex:1;min-width:220px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:10px;font:inherit}
 .wab-res{display:grid;gap:2px;max-height:200px;overflow:auto;margin-top:4px}.wab-res button{text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 8px;cursor:pointer;font:inherit;font-size:13px}.wab-res button:hover{background:#eff6ff}.wab-res span{color:#64748b}
@@ -445,21 +452,22 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
 </form></div>
 
-<div class="wab-modal" id="mHorario"><form method="post" class="wab-card" style="max-width:860px;max-height:92vh;overflow:auto">
+<div class="wab-modal" id="mHorario"><form method="post" class="wab-card" style="max-width:min(1040px,96vw);max-height:94vh;overflow:auto">
   <input type="hidden" name="csrf" value="<?= wab_h($csrf) ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="section" value="horario">
   <h2>Horário de atendimento</h2>
   <label class="wab-switch"><input type="checkbox" name="hours_enabled" value="1" <?= $cfg['hours_enabled'] ? 'checked' : '' ?>> Controlar o horário de atendimento</label>
   <div class="wab-muted" style="margin:6px 0 10px">Até dois períodos por dia (ex.: 08:00 às 12:00 e 13:30 às 18:00). Deixe o segundo em branco se não houver intervalo.</div>
-  <table class="wab-table"><thead><tr><th>Dia</th><th>Aberto</th><th>Período 1</th><th>Período 2 (opcional)</th></tr></thead><tbody>
+  <div class="wab-hours">
+    <div class="wab-hrow wab-hhead"><span>Dia</span><span>Aberto</span><span>1º período</span><span>2º período (opcional)</span></div>
   <?php foreach ([1, 2, 3, 4, 5, 6, 0] as $d): $h = $cfg['hours'][$d]; ?>
-    <tr>
-      <td><b><?= wab_h(whatsapp_bot_day_names()[$d]) ?></b></td>
-      <td><input type="checkbox" name="hours[<?= $d ?>][on]" value="1" <?= $h['on'] ? 'checked' : '' ?>></td>
-      <td style="white-space:nowrap"><input type="time" name="hours[<?= $d ?>][a]" value="<?= wab_h($h['a']) ?>"> às <input type="time" name="hours[<?= $d ?>][b]" value="<?= wab_h($h['b']) ?>"></td>
-      <td style="white-space:nowrap"><input type="time" name="hours[<?= $d ?>][c]" value="<?= wab_h($h['c']) ?>"> às <input type="time" name="hours[<?= $d ?>][d]" value="<?= wab_h($h['d']) ?>"></td>
-    </tr>
+    <div class="wab-hrow">
+      <b><?= wab_h(whatsapp_bot_day_names()[$d]) ?></b>
+      <label class="wab-hon"><input type="checkbox" name="hours[<?= $d ?>][on]" value="1" <?= $h['on'] ? 'checked' : '' ?>><span class="wab-hmobile">Aberto</span></label>
+      <span class="wab-hper"><input type="time" name="hours[<?= $d ?>][a]" value="<?= wab_h($h['a']) ?>" aria-label="Abre"> <i>às</i> <input type="time" name="hours[<?= $d ?>][b]" value="<?= wab_h($h['b']) ?>" aria-label="Fecha"></span>
+      <span class="wab-hper"><input type="time" name="hours[<?= $d ?>][c]" value="<?= wab_h($h['c']) ?>" aria-label="Volta"> <i>às</i> <input type="time" name="hours[<?= $d ?>][d]" value="<?= wab_h($h['d']) ?>" aria-label="Fecha"></span>
+    </div>
   <?php endforeach; ?>
-  </tbody></table>
+  </div>
   <div class="wab-grid" style="margin-top:12px">
     <div class="wab-field"><label>Mensagem fora do horário ({nome}, {empresa}, {horarios} = lista dos horários)</label><textarea name="offhours_text" maxlength="1000" rows="6"><?= wab_h($cfg['offhours_text']) ?></textarea></div>
     <div class="wab-field"><label>Ao transferir para um setor fora do horário ({setor})</label><textarea name="offhours_queue_text" maxlength="1000" rows="6"><?= wab_h($cfg['offhours_queue_text']) ?></textarea></div>
