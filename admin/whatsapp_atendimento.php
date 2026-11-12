@@ -25,7 +25,7 @@ function waa_h($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UT
 admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 ?>
 <style>
-.waa{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;display:grid;grid-template-columns:360px 1fr;height:calc(100vh - 150px);min-height:520px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:var(--txt);margin-top:10px}
+.waa{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;display:grid;grid-template-columns:clamp(300px,28vw,420px) 1fr;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:var(--txt);margin-top:10px}
 .waa *{box-sizing:border-box}
 .waa-side{display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;min-height:0}
 .waa-sidehead{padding:10px 12px;background:var(--bg);display:flex;gap:8px;align-items:center}
@@ -153,6 +153,21 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="nGo">Enviar</button></div>
 </div></div>
 
+<script>
+// A tela ocupa toda a altura disponível da janela (qualquer tamanho de tela/zoom).
+(function () {
+  const box = document.getElementById('waa'); if (!box) return;
+  const fit = () => {
+    const top = box.getBoundingClientRect().top + window.scrollY;
+    const h = Math.max(420, Math.floor(window.innerHeight - top - 12));
+    box.style.height = h + 'px';
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  setTimeout(fit, 300);
+})();
+</script>
 <script>
 (() => {
   const API = 'whatsapp_atendimento_api.php';
