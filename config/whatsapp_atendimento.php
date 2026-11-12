@@ -315,12 +315,15 @@ if (!function_exists('whatsapp_att_system')) {
 
 if (!function_exists('whatsapp_att_assert_owner')) {
   /** Garante que a conversa está com este usuário; assume automaticamente quando livre. */
+  /** Só quem aceitou a conversa envia mensagens (no robô ou na fila é preciso Aceitar antes). */
   function whatsapp_att_assert_owner(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor): array {
-    if ($chat['status'] === 'ATENDIMENTO' && (int)$chat['user_id'] === $userId) return $chat;
-    if ($chat['status'] === 'ATENDIMENTO' && (int)$chat['user_id'] > 0 && !$supervisor) {
-      throw new RuntimeException('Esta conversa está com outro atendente.');
-    }
-    return whatsapp_att_accept($pdo, $companyId, $chat, $userId, $supervisor, false);
+    $status = (string)$chat['status'];
+    if ($status === 'ATENDIMENTO' && (int)$chat['user_id'] === $userId) return $chat;
+    if ($status === 'BOT') throw new RuntimeException('O robô está atendendo esta conversa. Clique em Aceitar para responder.');
+    if ($status === 'PENDENTE') throw new RuntimeException('Esta conversa está na fila e ainda não foi aceita. Clique em Aceitar para responder.');
+    if ($status === 'FINALIZADO') throw new RuntimeException('Esta conversa foi finalizada. Clique em Aceitar para reabrir e responder.');
+    if ((int)$chat['user_id'] > 0) throw new RuntimeException('Esta conversa está com outro atendente.' . ($supervisor ? ' Clique em Assumir para responder.' : ''));
+    throw new RuntimeException('Esta conversa está sendo respondida pelo celular. Clique em Aceitar para responder por aqui.');
   }
 }
 

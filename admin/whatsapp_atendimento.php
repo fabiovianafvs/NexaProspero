@@ -71,6 +71,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-quick input{border:0;border-bottom:1px solid var(--line);padding:10px 12px;font:inherit;outline:0}.waa-quick.slash input{display:none}
 #waaQuickList{overflow-y:auto}.waa-qi{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f0f2f5;background:#fff;padding:8px 12px;cursor:pointer;font:inherit}.waa-qi.sel,.waa-qi:hover{background:#e7f8f2}
 .waa-qi b{color:#008069}.waa-qi small{display:block;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}.waa-qempty{padding:12px;color:var(--mut);font-size:13px}
+.waa-locked{background:var(--bg);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px;color:#41525d;font-weight:600}
 .waa-recbar{background:var(--bg);padding:8px 12px;display:none;gap:10px;align-items:center}.waa-recbar.on{display:flex}
 .waa-recdot{width:12px;height:12px;border-radius:50%;background:#ea0038;animation:waaBlink 1s infinite}#waaRecTime{font-weight:800;min-width:42px}@keyframes waaBlink{50%{opacity:.25}}
 .waa-compose textarea{flex:1;border:0;border-radius:10px;padding:10px 12px;font:inherit;resize:none;max-height:140px;min-height:42px}
@@ -141,6 +142,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
         <button class="waa-send" type="button" id="waaMic" title="Gravar áudio" style="display:none">🎤</button>
         <button class="waa-send" type="submit" id="waaSend" title="Enviar">➤</button>
       </form>
+      <div class="waa-locked" id="waaLocked" style="display:none"><span>🔒</span><span id="waaLockedText" style="flex:1"></span><span class="waa-sub">Aceite a conversa para enviar mensagens.</span><button class="waa-btn g" type="button" id="waaLockedBtn">Aceitar</button></div>
       <div class="waa-recbar" id="waaRecBar">
         <button class="waa-ico" type="button" id="waaRecCancel" title="Descartar áudio">🗑️</button>
         <span class="waa-recdot"></span><span id="waaRecTime">0:00</span><span class="waa-sub" style="flex:1">Gravando áudio…</span>
@@ -355,10 +357,18 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (c.crm_attendance_id) { $('waaCrmLink').href = 'crm_atendimento.php?id=' + c.crm_attendance_id; $('waaCrmLink').textContent = 'CRM nº ' + c.crm_attendance_id; }
     const b = $('waaBanner');
     if (other) { b.style.display = ''; b.textContent = 'Esta conversa está com ' + c.user + '.' + (SUP ? ' Como supervisor você pode assumir.' : ''); }
-    else if (c.status === 'PENDENTE') { b.style.display = ''; b.textContent = 'Cliente aguardando na fila' + (c.department ? ' de ' + c.department : '') + '. Clique em Aceitar ou simplesmente responda.'; }
-    else if (c.status === 'BOT') { b.style.display = ''; b.textContent = 'O robô está atendendo. Se você responder, a conversa passa para você.'; }
+    else if (c.status === 'PENDENTE') { b.style.display = ''; b.textContent = 'Cliente aguardando na fila' + (c.department ? ' de ' + c.department : '') + '. Clique em Aceitar para responder.'; }
+    else if (c.status === 'BOT') { b.style.display = ''; b.textContent = 'O robô está atendendo. Para responder, clique em Aceitar (o robô para nesta conversa).'; }
+    else if (c.status === 'FINALIZADO') { b.style.display = ''; b.textContent = 'Conversa finalizada. Para responder, clique em Aceitar.'; }
+    else if (!mine) { b.style.display = ''; b.textContent = 'Conversa respondida pelo celular. Para responder por aqui, clique em Aceitar.'; }
     else b.style.display = 'none';
-    $('waaText').disabled = other && !SUP;
+    // Só responde quem aceitou: sem isso a caixa de mensagem fica bloqueada.
+    if (!mine) { closeQuick(); cancelRec(); clearFile(); }
+    $('waaForm').style.display = mine ? '' : 'none';
+    $('waaLocked').style.display = mine ? 'none' : '';
+    $('waaLockedText').textContent = other ? 'Conversa com ' + c.user + '.' : (c.status === 'BOT' ? 'O robô está atendendo.' : (c.status === 'PENDENTE' ? 'Aguardando na fila.' : (c.status === 'FINALIZADO' ? 'Conversa finalizada.' : 'Respondida pelo celular.')));
+    $('waaLockedBtn').textContent = other ? 'Assumir' : 'Aceitar';
+    $('waaLockedBtn').style.display = other && !SUP ? 'none' : '';
     const ans = Array.isArray(c.answers) ? c.answers : [];
     $('waaAnswers').style.display = ans.length ? '' : 'none';
     $('waaAnswers').innerHTML = ans.length ? '<span>📝 Respostas do fluxo:</span>' + ans.map((a) => '<span><b>' + esc(a.label) + ':</b> ' + esc(a.value) + '</span>').join('') : '';
@@ -636,6 +646,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   const open = (id) => $(id).classList.add('on');
   document.querySelectorAll('.waa-modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.classList.remove('on'); }));
   $('waaAccept').addEventListener('click', () => act('accept'));
+  $('waaLockedBtn').addEventListener('click', () => act('accept'));
   $('waaTransfer').addEventListener('click', async () => {
     try {
       options = options || await api('options');
