@@ -348,6 +348,11 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
 </section>
 <?php endif; ?>
 
+<?php
+  // Empresas do Grupo Empresarial (2ª via unificada pelo CPF/CNPJ).
+  $groupNames = [];
+  foreach (whatsapp_bot_group_company_ids($pdo, $cid, ['group_receivables' => true]) as $gid) $groupNames[] = whatsapp_bot_company_name($pdo, (int)$gid);
+?>
 <?php if ($aba === 'robo'):
   $sumRobo = [
     'Boas-vindas' => $cfg['welcome'],
@@ -356,6 +361,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     'Ao finalizar o atendimento' => $cfg['close_text'],
     'Nome do atendente nas mensagens' => $cfg['sign_messages'] ? 'Sim' : 'Não',
     'Respondeu pelo celular: o robô volta depois de' => (int)$cfg['pause_hours'] . ' hora(s) sem resposta',
+    '2ª via com as empresas do Grupo Empresarial' => $cfg['group_receivables'] ? 'Sim — ' . implode(', ', $groupNames) : 'Não (só esta empresa)',
   ];
 ?>
 <section class="wab-card" id="config">
@@ -400,6 +406,14 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <div class="wab-grid" style="margin-top:12px">
     <div class="wab-field"><label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600"><input type="checkbox" name="sign_messages" value="1" <?= $cfg['sign_messages'] ? 'checked' : '' ?>> Mostrar o nome do atendente nas mensagens</label></div>
     <div class="wab-field"><label>Respondeu pelo celular: o robô volta depois de quantas horas sem resposta?</label><input type="number" name="pause_hours" min="1" max="72" value="<?= (int)$cfg['pause_hours'] ?>"></div>
+  </div>
+  <div class="wab-field" style="margin-top:12px;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:10px 12px">
+    <?php if (count($groupNames) > 1): ?>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700"><input type="checkbox" name="group_receivables" value="1" <?= $cfg['group_receivables'] ? 'checked' : '' ?>> 2ª via de boleto com as empresas do Grupo Empresarial</label>
+      <div class="wab-muted" style="margin-top:4px">O cliente informa o CPF/CNPJ e recebe uma lista numerada das contas em aberto de <b><?= wab_h(implode(', ', $groupNames)) ?></b> (só das empresas onde ele tiver contas) e escolhe quais boletos quer receber.</div>
+    <?php else: ?>
+      <div class="wab-muted">2ª via com várias empresas: disponível quando esta empresa faz parte de um <b>Grupo Empresarial</b> com outras empresas (Central SaaS).</div>
+    <?php endif; ?>
   </div>
   <div class="wab-modal-foot"><button class="btn" type="button" onclick="this.closest('.wab-modal').classList.remove('on')">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
 </form></div>

@@ -72,6 +72,8 @@ if (!function_exists('whatsapp_bot_defaults')) {
       'crm_responsible_user_id' => 0,
       'crm_status_id' => 0,
       'crm_service_type_id' => 0,
+      // 2ª via: consultar também as outras empresas do mesmo Grupo Empresarial (pelo CPF/CNPJ).
+      'group_receivables' => false,
     ];
   }
 }
@@ -85,6 +87,7 @@ if (!function_exists('whatsapp_bot_config')) {
     } catch (Throwable $e) {}
     $cfg['enabled'] = !empty($cfg['enabled']);
     $cfg['sign_messages'] = !empty($cfg['sign_messages']);
+    $cfg['group_receivables'] = !empty($cfg['group_receivables']);
     $cfg['pause_hours'] = max(1, min(72, (int)$cfg['pause_hours']));
     foreach (['welcome', 'queue_text', 'accept_text', 'close_text'] as $k) $cfg[$k] = (string)$cfg[$k];
     return $cfg;
@@ -124,6 +127,7 @@ if (!function_exists('whatsapp_bot_save_config')) {
       // Mensagem ao aceitar pode ficar vazia (não envia nada).
       $cfg['accept_text'] = mb_substr(trim((string)($input['accept_text'] ?? $cfg['accept_text'])), 0, 1000);
       $cfg['sign_messages'] = !empty($input['sign_messages']);
+      $cfg['group_receivables'] = !empty($input['group_receivables']);
       $cfg['pause_hours'] = max(1, min(72, (int)($input['pause_hours'] ?? 2)));
     } else {
       $cfg['enabled'] = !empty($cfg['enabled']) && $module;
@@ -913,6 +917,102 @@ if (!function_exists('whatsapp_bot_send_boletos')) {
   }
 }
 
+if (!function_exists('whatsapp_bot_group_company_ids')) {
+  /**
+   * Empresas consultadas na 2ª via: a do WhatsApp e, com a opção ligada no Chatbot,
+   * as outras empresas ativas do mesmo Grupo Empresarial (cadastrado na Central SaaS).
+   */
+  function whatsapp_bot_group_company_ids(PDO $pdo, int $companyId, array $cfg): array {
+    $ids = [$companyId];
+    if (empty($cfg['group_receivables'])) return $ids;
+    try {
+      $st = $pdo->prepare("SELECT gc2.company_id
+        FROM business_group_companies gc
+        JOIN business_groups g ON g.id = gc.business_group_id AND g.is_active = 1
+        JOIN business_group_companies gc2 ON gc2.business_group_id = gc.business_group_id AND gc2.is_active = 1
+        JOIN companies c ON c.id = gc2.company_id
+        WHERE gc.company_id = ? AND gc.is_active = 1 AND gc2.company_id <> ?
+          AND LOWER(COALESCE(c.status, 'active')) NOT IN ('blocked', 'suspended', 'expired', 'cancelled', 'canceled', 'inactive')
+        ORDER BY gc2.is_primary DESC, c.name, c.id");
+      $st->execute([$companyId, $companyId]);
+      foreach ($st->fetchAll(PDO::FETCH_COLUMN) ?: [] as $id) if ((int)$id > 0) $ids[] = (int)$id;
+    } catch (Throwable $e) {}
+    return array_values(array_unique($ids));
+  }
+}
+
+if (!function_exists('whatsapp_bot_open_receivables')) {
+  /** Contas a receber em aberto do CPF/CNPJ, empresa por empresa (só onde a pessoa existe). */
+  function whatsapp_bot_open_receivables(PDO $pdo, array $companyIds, string $doc, int $limit = 20): array {
+    $out = [];
+    foreach ($companyIds as $cid) {
+      $st = $pdo->prepare("SELECT r.id, r.due_date, r.open_amount FROM finance_receivables r
+        JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id
+        WHERE r.company_id=? AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(p.document,''),'.',''),'-',''),'/',''),' ','')=?
+          AND UPPER(COALESCE(r.status,'')) IN ('ABERTO','PARCIAL') AND COALESCE(r.open_amount,0) > 0.009
+        ORDER BY r.due_date, r.id LIMIT " . max(1, min(50, $limit)));
+      $st->execute([(int)$cid, $doc]);
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+        if (count($out) >= $limit) break 2;
+        $out[] = ['c' => (int)$cid, 'r' => (int)$r['id'], 'due' => (string)$r['due_date'], 'amount' => (float)$r['open_amount']];
+      }
+    }
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_bot_send_one_boleto')) {
+  /** Envia o boleto (PDF + linha digitável + Pix do boleto) de uma conta; o envio sai pelo WhatsApp da empresa $companyId. */
+  function whatsapp_bot_send_one_boleto(PDO $pdo, int $companyId, array $ctx, int $srcCompanyId, int $receivableId, string $companyLabel = ''): bool {
+    require_once __DIR__ . '/billing_module.php';
+    require_once __DIR__ . '/boleto_document.php';
+    $charge = billing_receivable_charge($pdo, $srcCompanyId, $receivableId);
+    $status = strtoupper((string)($charge['status'] ?? ''));
+    if (!$charge || in_array($status, ['CANCELADO','PAGO','BAIXADO','ERRO','PENDENTE_REGISTRO'], true)) return false;
+    try {
+      $data = boleto_document_load($pdo, $srcCompanyId, (int)$charge['id'], $receivableId);
+      if (!boleto_document_ready($data)) return false;
+      $pdf = boleto_document_pdf($data);
+      $caption = ($companyLabel !== '' ? $companyLabel . "\n" : '') . "Boleto - vencimento " . boleto_document_date($data['due_date'] ?? '') . " - " . boleto_document_money($data['amount'] ?? 0);
+      $line = trim((string)($data['linha_digitavel'] ?? ''));
+      if ($line !== '') $caption .= "\nLinha digitável: " . $line;
+      if (!whatsapp_chat_send_file($pdo, $companyId, $ctx, $pdf, 'application/pdf', 'boleto-' . $receivableId . '.pdf', $caption, 'robo', null, false)) return false;
+      $pix = trim((string)($data['pix_emv'] ?? ''));
+      if ($pix !== '') whatsapp_chat_send_text($pdo, $companyId, $ctx, "Pix copia e cola deste boleto:\n" . $pix);
+      return true;
+    } catch (Throwable $e) {
+      return false;
+    }
+  }
+}
+
+if (!function_exists('whatsapp_bot_list_receivables')) {
+  /** Lista numerada das contas em aberto (agrupada por empresa). Retorna as opções para guardar na conversa. */
+  function whatsapp_bot_list_receivables(PDO $pdo, int $companyId, array $ctx, array $cfg, string $doc): array {
+    $items = whatsapp_bot_open_receivables($pdo, whatsapp_bot_group_company_ids($pdo, $companyId, $cfg), $doc, 20);
+    if (!$items) {
+      whatsapp_chat_send_text($pdo, $companyId, $ctx, "Não encontrei contas em aberto para este CPF/CNPJ. ✅\n\nDigite *menu* para ver as outras opções.");
+      return [];
+    }
+    $names = [];
+    $lines = ["Encontrei estas contas em aberto:"];
+    $last = 0;
+    $today = date('Y-m-d');
+    foreach ($items as $i => $it) {
+      if ($it['c'] !== $last) {
+        $names[$it['c']] = $names[$it['c']] ?? whatsapp_bot_company_name($pdo, $it['c']);
+        $lines[] = "\n*" . $names[$it['c']] . "*";
+        $last = $it['c'];
+      }
+      $due = $it['due'] !== '' ? date('d/m/Y', strtotime($it['due'])) : '-';
+      $lines[] = ($i + 1) . ') Venc. ' . $due . ' - ' . whatsapp_bot_money($it['amount']) . ($it['due'] !== '' && substr($it['due'], 0, 10) < $today ? ' (vencida)' : '');
+    }
+    $lines[] = "\nResponda com o *número* da conta para receber o boleto (pode mandar vários, ex.: 1,3) ou *todos*.\nDigite *menu* para voltar.";
+    whatsapp_chat_send_text($pdo, $companyId, $ctx, implode("\n", $lines));
+    return array_map(static fn($it) => ['c' => $it['c'], 'r' => $it['r']], $items);
+  }
+}
+
 if (!function_exists('whatsapp_bot_order_status')) {
   function whatsapp_bot_order_status(PDO $pdo, int $companyId, array $ctx, string $number): bool {
     $n = (int)$number;
@@ -1369,8 +1469,41 @@ if (!function_exists('whatsapp_bot_step')) {
           return 'limite de consultas';
         }
         whatsapp_chat_send_text($pdo, $companyId, $ctx, "Um momento, estou buscando os boletos... ⏳");
+        if (!empty($cfg['group_receivables'])) {
+          // Grupo Empresarial: lista numerada com as contas das empresas do grupo; o cliente escolhe.
+          $picks = whatsapp_bot_list_receivables($pdo, $companyId, $ctx, $cfg, $doc);
+          if ($picks) $save(['state' => 'PICK_BOLETO', 'data' => array_merge($data, ['picks' => $picks])]);
+          return 'lista de contas';
+        }
         whatsapp_bot_send_boletos($pdo, $companyId, $ctx, $doc);
         return 'boletos';
+
+      case 'PICK_BOLETO':
+        $picks = array_values(array_filter((array)($data['picks'] ?? []), static fn($p) => is_array($p) && (int)($p['c'] ?? 0) > 0 && (int)($p['r'] ?? 0) > 0));
+        if (!$picks) { $save(['state' => 'MENU', 'data' => []]); whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, null, false); return 'menu'; }
+        if (in_array($norm, ['todos', 'todas', 'tudo'], true)) {
+          $chosen = array_keys($picks);
+        } else {
+          $chosen = [];
+          foreach (preg_split('/\D+/', $text) ?: [] as $n) if ($n !== '' && isset($picks[(int)$n - 1])) $chosen[] = (int)$n - 1;
+          $chosen = array_values(array_unique($chosen));
+        }
+        if (!$chosen) {
+          whatsapp_chat_send_text($pdo, $companyId, $ctx, "Não entendi. Responda com o *número* da conta (de 1 a " . count($picks) . "), vários números (ex.: 1,3) ou *todos*. Digite *menu* para voltar.");
+          return 'opção inválida';
+        }
+        $sent = 0; $without = []; $names = [];
+        foreach (array_slice($chosen, 0, 5) as $idx) {
+          $p = $picks[$idx];
+          $names[$p['c']] = $names[$p['c']] ?? whatsapp_bot_company_name($pdo, (int)$p['c']);
+          if (whatsapp_bot_send_one_boleto($pdo, $companyId, $ctx, (int)$p['c'], (int)$p['r'], (int)$p['c'] !== $companyId ? $names[$p['c']] : '')) $sent++;
+          else $without[] = $idx + 1;
+        }
+        $msg = $sent > 0 ? "Pronto! Enviei " . $sent . " boleto(s)." : '';
+        if (count($chosen) > 5) $msg .= ($msg !== '' ? "\n" : '') . "Envio no máximo 5 por vez: peça os demais em seguida.";
+        if ($without) $msg .= ($msg !== '' ? "\n\n" : '') . "A(s) conta(s) " . implode(', ', $without) . " não têm boleto disponível para envio automático. Se precisar, fale com um atendente pelo menu.";
+        whatsapp_chat_send_text($pdo, $companyId, $ctx, trim($msg) . "\n\nSe quiser outra conta, responda com o número ou digite *menu*.");
+        return 'boletos escolhidos';
 
       case 'ASK_ORDER':
         $num = whatsapp_bot_digits($text);
