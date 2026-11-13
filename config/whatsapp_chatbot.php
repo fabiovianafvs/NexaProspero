@@ -76,6 +76,8 @@ if (!function_exists('whatsapp_bot_defaults')) {
       'group_receivables' => false,
       // Envios (boletos, pedidos, O.S., notas...) das outras empresas do grupo saem pelo WhatsApp desta empresa.
       'group_whatsapp_shared' => false,
+      // Mostrar nas conversas do Atendimento os envios do sistema (boletos, pedidos, O.S., notas...).
+      'show_sends' => false,
       // Horário de atendimento (dia da semana 0=domingo ... 6=sábado; até 2 períodos por dia).
       'hours_enabled' => false,
       'hours' => whatsapp_bot_hours_default(),
@@ -196,6 +198,7 @@ if (!function_exists('whatsapp_bot_config')) {
     $cfg['sign_messages'] = !empty($cfg['sign_messages']);
     $cfg['group_receivables'] = !empty($cfg['group_receivables']);
     $cfg['group_whatsapp_shared'] = !empty($cfg['group_whatsapp_shared']);
+    $cfg['show_sends'] = !empty($cfg['show_sends']);
     $cfg['hours_enabled'] = !empty($cfg['hours_enabled']);
     $cfg['offhours_menu'] = !empty($cfg['offhours_menu']);
     $cfg['hours'] = whatsapp_bot_hours_norm($cfg['hours']);
@@ -257,6 +260,7 @@ if (!function_exists('whatsapp_bot_save_config')) {
       $cfg['sign_messages'] = !empty($input['sign_messages']);
       $cfg['group_receivables'] = !empty($input['group_receivables']);
       $cfg['group_whatsapp_shared'] = !empty($input['group_whatsapp_shared']);
+      $cfg['show_sends'] = !empty($input['show_sends']);
       $cfg['pause_hours'] = max(1, min(72, (int)($input['pause_hours'] ?? 2)));
     } else {
       $cfg['enabled'] = !empty($cfg['enabled']) && $module;
@@ -872,10 +876,148 @@ if (!function_exists('whatsapp_chat_log')) {
     $id = (int)$pdo->lastInsertId();
     if ($sender !== 'sistema') {
       $preview = trim($body) !== '' ? $body : whatsapp_chat_type_label((string)($opt['type'] ?? 'text'));
+      if (($opt['type'] ?? '') === 'contact') {
+        $names = array_filter(array_map(static fn($c) => $c['name'], whatsapp_vcard_parse($body)));
+        $preview = '👤 ' . ($names ? implode(', ', $names) : 'Contato');
+      }
       $pdo->prepare('UPDATE whatsapp_bot_sessions SET last_preview=?, last_direction=?, last_message_at=? WHERE company_id=? AND id=?')
         ->execute([mb_substr(preg_replace('/\s+/', ' ', $preview) ?? '', 0, 200), $direction, $now, $companyId, (int)$chat['id']]);
     }
     return $id;
+  }
+}
+
+if (!function_exists('whatsapp_vcard_parse')) {
+  /** Contatos (vCard) recebidos/enviados: [['name' => ..., 'phone' => só números], ...]. */
+  function whatsapp_vcard_parse(string $text): array {
+    $out = [];
+    if (!preg_match_all('/BEGIN:VCARD(.*?)END:VCARD/si', $text, $blocks)) {
+      $first = trim((string)strtok($text, "\n"));
+      return $first !== '' ? [['name' => mb_substr($first, 0, 120), 'phone' => '']] : [];
+    }
+    $display = trim((string)strtok($text, "\n"));
+    foreach ($blocks[1] as $i => $b) {
+      $name = '';
+      if (preg_match('/^FN[^:\r\n]*:(.+)$/mi', $b, $m)) $name = trim($m[1]);
+      elseif (preg_match('/^N[^:\r\n]*:(.+)$/mi', $b, $m)) $name = trim(str_replace(';', ' ', $m[1]));
+      if ($name === '' && $i === 0 && stripos($display, 'BEGIN:VCARD') === false) $name = $display;
+      $phone = '';
+      if (preg_match('/waid=(\d{8,15})/i', $b, $m)) $phone = $m[1];
+      elseif (preg_match('/^(?:item\d+\.)?TEL[^:\r\n]*:(.+)$/mi', $b, $m)) $phone = preg_replace('/\D+/', '', $m[1]) ?? '';
+      $out[] = ['name' => mb_substr($name !== '' ? $name : 'Contato', 0, 120), 'phone' => substr($phone, 0, 15)];
+      if (count($out) >= 10) break;
+    }
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_chat_has_wa_status')) {
+  function whatsapp_chat_has_wa_status(PDO $pdo): bool {
+    static $memo = null;
+    if ($memo !== null) return $memo;
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='whatsapp_bot_messages' AND column_name='wa_status'");
+      return $memo = (int)$st->fetchColumn() === 1;
+    } catch (Throwable $e) {
+      return $memo = false;
+    }
+  }
+}
+
+if (!function_exists('whatsapp_bot_status_update')) {
+  /** Webhook "status" do motor: marca a mensagem enviada como entregue (2) ou lida (3). */
+  function whatsapp_bot_status_update(PDO $pdo, array $payload): string {
+    if (!whatsapp_bot_ready($pdo) || !whatsapp_chat_has_wa_status($pdo)) return 'sem coluna';
+    $companyId = whatsapp_bot_company_by_session($pdo, whatsapp_bot_digits($payload['company_id'] ?? ''));
+    $messageId = substr((string)($payload['message_id'] ?? ''), 0, 80);
+    if ($companyId <= 0 || $messageId === '') return 'ignorado';
+    $raw = (int)($payload['status'] ?? 0);
+    $status = $raw >= 4 ? 3 : ($raw === 3 ? 2 : ($raw === 2 ? 1 : 0));
+    if ($status <= 0) return 'ignorado';
+    $st = $pdo->prepare("UPDATE whatsapp_bot_messages SET wa_status=? WHERE company_id=? AND message_id=? AND direction='OUT' AND (wa_status IS NULL OR wa_status < ?)");
+    $st->execute([$status, $companyId, $messageId, $status]);
+    if ($st->rowCount() < 1) return 'sem mudança';
+    $q = $pdo->prepare('SELECT session_id FROM whatsapp_bot_messages WHERE company_id=? AND message_id=? LIMIT 1');
+    $q->execute([$companyId, $messageId]);
+    $sid = (int)$q->fetchColumn();
+    if ($sid > 0) whatsapp_chat_notify($companyId, $sid, ['ticks' => 1]);
+    return 'ok';
+  }
+}
+
+if (!function_exists('whatsapp_chat_mirror_send')) {
+  /**
+   * "Mostrar envios": boleto, pedido, O.S., nota... enviados pelo sistema entram na conversa do
+   * Atendimento da empresa dona do WhatsApp (a principal, quando o grupo usa um WhatsApp só).
+   * Nunca interrompe o envio: qualquer falha aqui é ignorada.
+   */
+  function whatsapp_chat_mirror_send(PDO $pdo, int $originCompanyId, array $waCfg, string $to, string $body, bool $ok, string $messageId = '', ?array $file = null): void {
+    try {
+      $owner = (int)($waCfg['shared_company_id'] ?? 0) ?: $originCompanyId;
+      $bot = config_store_get($pdo, $owner, 'whatsapp_bot');
+      if (!is_array($bot) || empty($bot['show_sends']) || !whatsapp_bot_ready($pdo)) return;
+      $d = whatsapp_bot_digits($to);
+      if (strlen($d) === 10 || strlen($d) === 11) $d = '55' . $d;
+      if (strlen($d) < 12) return;
+      // Celular com e sem o 9º dígito (o WhatsApp de contas antigas informa sem o 9).
+      $cands = [$d];
+      if (strlen($d) === 13 && $d[4] === '9') $cands[] = substr($d, 0, 4) . substr($d, 5);
+      if (strlen($d) === 12 && in_array($d[4], ['6', '7', '8', '9'], true)) $cands[] = substr($d, 0, 4) . '9' . substr($d, 4);
+      $in = implode(',', array_fill(0, count($cands), '?'));
+      $st = $pdo->prepare("SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND phone IN ($in) ORDER BY last_message_at DESC, id DESC LIMIT 1");
+      $st->execute(array_merge([$owner], $cands));
+      $chatId = (int)$st->fetchColumn();
+      if ($chatId > 0) {
+        $chat = whatsapp_chat_get($pdo, $owner, $chatId);
+      } else {
+        $chat = whatsapp_chat_find_or_create($pdo, $owner, $d . '@s.whatsapp.net', $d);
+        // Conversa nova só com o envio: fica em Finalizados (sem robô e sem fila).
+        if ($chat && ($chat['state'] ?? '') === 'NOVA') {
+          whatsapp_chat_update($pdo, $owner, (int)$chat['id'], ['status' => 'FINALIZADO', 'state' => 'FIM', 'closed_at' => date('Y-m-d H:i:s')]);
+          $link = function_exists('whatsapp_bot_contact_link') ? whatsapp_bot_contact_link($pdo, $owner, $chat, $d) : [];
+          if ($link) whatsapp_chat_update($pdo, $owner, (int)$chat['id'], $link);
+          $chat = whatsapp_chat_get($pdo, $owner, (int)$chat['id']);
+        }
+      }
+      if (!$chat) return;
+      $opt = ['message_id' => $messageId, 'send_ok' => $ok, 'type' => 'text'];
+      if ($file) {
+        $mime = strtolower(trim(explode(';', (string)$file['mime'])[0]));
+        $opt['type'] = in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true) ? 'image' : 'document';
+        $opt['media_mime'] = $mime;
+        $opt['media_name'] = (string)$file['name'];
+        $opt['media_size'] = strlen((string)$file['bytes']);
+        try { $opt['media_path'] = whatsapp_media_store($owner, (string)$file['bytes'], $mime, (string)$file['name']); } catch (Throwable $e) {}
+      }
+      $sender = $originCompanyId !== $owner ? 'envio_' . $originCompanyId : 'envio';
+      whatsapp_chat_log($pdo, $owner, $chat, 'OUT', $sender, $body, $opt);
+      whatsapp_chat_notify($owner, (int)$chat['id'], ['new_message' => true]);
+    } catch (Throwable $e) {
+      error_log('[whatsapp_mirror] ' . $e->getMessage());
+    }
+  }
+}
+
+if (!function_exists('whatsapp_chat_send_contact')) {
+  /** Envia um contato (cartão vCard) para a conversa e registra. */
+  function whatsapp_chat_send_contact(PDO $pdo, int $companyId, array $ctx, string $name, string $phone, string $org = '', ?int $userId = null): bool {
+    $name = trim(preg_replace('/[\r\n;]+/', ' ', $name) ?? '');
+    $d = whatsapp_bot_digits($phone);
+    if (strlen($d) === 10 || strlen($d) === 11) $d = '55' . $d;
+    if ($name === '') throw new RuntimeException('Informe o nome do contato.');
+    if (strlen($d) < 12 || strlen($d) > 13) throw new RuntimeException('Informe o telefone do contato com DDD.');
+    $payload = ['company_id' => $ctx['sid'], 'name' => $name, 'phone' => $d, 'company' => $org];
+    if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone']; else $payload['jid'] = $ctx['contact'];
+    $ok = true; $messageId = ''; $err = '';
+    try {
+      $res = whatsapp_api_request(array_merge($ctx['wa'], ['timeout_seconds' => 40]), 'POST', '/send-contact', $payload);
+      $messageId = (string)($res['message_id'] ?? '');
+    } catch (Throwable $e) {
+      $ok = false; $err = $e->getMessage();
+    }
+    $vcard = $name . "\nBEGIN:VCARD\nVERSION:3.0\nFN:" . $name . ($org !== '' ? "\nORG:" . $org . ';' : '') . "\nTEL;type=CELL;waid=" . $d . ':+' . $d . "\nEND:VCARD" . ($ok ? '' : "\n[não enviado: " . $err . ']');
+    whatsapp_chat_log($pdo, $companyId, $ctx['chat'], 'OUT', 'atendente', $vcard, ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok, 'type' => 'contact']);
+    return $ok;
   }
 }
 

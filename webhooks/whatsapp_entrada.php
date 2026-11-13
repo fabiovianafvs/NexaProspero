@@ -37,7 +37,7 @@ if ($secret === '' || $ts === '' || !ctype_digit($ts) || abs(time() - (int)$ts) 
 }
 
 $payload = json_decode($raw, true);
-if (!is_array($payload) || !in_array(($payload['event'] ?? ''), ['message', 'human_reply'], true)) {
+if (!is_array($payload) || !in_array(($payload['event'] ?? ''), ['message', 'human_reply', 'status'], true)) {
   echo '{"ok":true,"ignored":true}';
   exit;
 }
@@ -54,7 +54,8 @@ if (function_exists('fastcgi_finish_request')) {
 @set_time_limit(180);
 
 try {
-  if (($payload['event'] ?? '') === 'human_reply') whatsapp_bot_human_reply($pdo, $payload);
+  if (($payload['event'] ?? '') === 'status') whatsapp_bot_status_update($pdo, $payload);
+  elseif (($payload['event'] ?? '') === 'human_reply') whatsapp_bot_human_reply($pdo, $payload);
   else whatsapp_bot_handle($pdo, $payload);
 } catch (Throwable $e) {
   error_log('[whatsapp_entrada] ' . $e->getMessage());

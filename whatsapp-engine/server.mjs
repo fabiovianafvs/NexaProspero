@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.5';
+const SERVICE_VERSION = 'engine-1.6';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -478,6 +478,20 @@ async function startSession(sid) {
     }
   });
 
+  // Situação das mensagens enviadas (entregue/lida) -> webhook "status" (checks na tela de Atendimento).
+  // 2 = enviada ao servidor, 3 = entregue no celular, 4 = lida, 5 = áudio ouvido.
+  sock.ev.on('messages.update', (updates) => {
+    if (!settings.inbound[sid] || !WEBHOOK_URL) return;
+    for (const u of updates || []) {
+      const key = u?.key || {};
+      const st = Number(u?.update?.status ?? -1);
+      if (!key.fromMe || !key.id || st < 2) continue;
+      const remote = String(key.remoteJid || '');
+      if (remote.endsWith('@g.us') || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) continue;
+      deliverWebhook({ event: 'status', company_id: sid, message_id: String(key.id), status: st, reply_jid: remote });
+    }
+  });
+
   return state;
 }
 
@@ -679,7 +693,13 @@ async function handleInbound(state, msg) {
   else if (m.videoMessage) { type = 'video'; text = text || m.videoMessage.caption || ''; }
   else if (m.stickerMessage) type = 'sticker';
   else if (m.locationMessage) { type = 'location'; text = `https://maps.google.com/?q=${m.locationMessage.degreesLatitude},${m.locationMessage.degreesLongitude}`; }
-  else if (m.contactMessage) { type = 'contact'; text = String(m.contactMessage.displayName || '') + (m.contactMessage.vcard ? '\n' + String(m.contactMessage.vcard).slice(0, 1000) : ''); }
+  else if (m.contactMessage) { type = 'contact'; text = String(m.contactMessage.displayName || '') + (m.contactMessage.vcard ? '\n' + String(m.contactMessage.vcard).slice(0, 1500) : ''); }
+  else if (m.contactsArrayMessage) {
+    // Vários contatos de uma vez: os vCards vão um embaixo do outro (o sistema separa).
+    type = 'contact';
+    text = (m.contactsArrayMessage.contacts || []).slice(0, 10)
+      .map((c) => String(c?.vcard || '').slice(0, 1500) || `BEGIN:VCARD\nFN:${String(c?.displayName || '')}\nEND:VCARD`).join('\n');
+  }
   if (!text && type === 'text') return; // reação, enquete etc.
 
   // Contatos novos podem vir como LID; o número real vem em remoteJidAlt/senderPn.
@@ -901,6 +921,20 @@ const routes = {
     if (caption && kind !== 'audio') content.caption = caption;
     const sent = await sendContent(sid, to, body.jid, content);
     sendJson(res, 200, { ok: true, company_id: sid, to, filename, size: buffer.length, jid: sent.jid, message_id: sent.id });
+  },
+
+  // Envia um contato (cartão de visita vCard) para o cliente.
+  'POST /send-contact': async (req, res, body) => {
+    const sid = safeId(body.company_id);
+    if (!isCompany(req, sid)) return denied(res);
+    const to = normalizePhone(body.to);
+    const name = String(body.name || '').replace(/[\r\n;]+/g, ' ').trim().slice(0, 120);
+    const phone = normalizePhone(body.phone);
+    if ((!to && !body.jid) || !name || phone.length < 10) return sendJson(res, 400, { ok: false, error: 'Informe o destino, o nome e o telefone do contato.' });
+    const org = String(body.company || '').replace(/[\r\n;]+/g, ' ').trim().slice(0, 120);
+    const vcard = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${name}`, org ? `ORG:${org};` : '', `TEL;type=CELL;type=VOICE;waid=${phone}:+${phone}`, 'END:VCARD'].filter(Boolean).join('\n');
+    const sent = await sendContent(sid, to, body.jid, { contacts: { displayName: name, contacts: [{ vcard }] } });
+    sendJson(res, 200, { ok: true, company_id: sid, to, jid: sent.jid, message_id: sent.id });
   },
 
   'GET /media': async (req, res, _body, query) => {

@@ -727,10 +727,28 @@ function whatsapp_send_message(PDO $pdo, int $companyId, string $to, string $mes
     ]);
     $ok = !empty($res['ok']);
     whatsapp_log($pdo, $companyId, $pedidoId, $tipo, $destino, $message, $ok ? 'sent' : 'error', $ok ? '' : (string)($res['error'] ?? 'Falha no envio'), $res);
+    whatsapp_mirror_if_enabled($pdo, $companyId, $cfg, $destino, $message, $ok, (string)($res['message_id'] ?? ''));
     return $ok;
   } catch (Throwable $e) {
     whatsapp_log($pdo, $companyId, $pedidoId, $tipo, $destino, $message, 'error', $e->getMessage());
+    whatsapp_mirror_if_enabled($pdo, $companyId, $cfg, $destino, $message . "\n[não enviado: " . $e->getMessage() . ']', false);
     return false;
+  }
+}
+
+/**
+ * "Mostrar envios" (Chatbot > Robô): registra o envio na conversa do Atendimento.
+ * Só carrega o módulo do chatbot quando a opção está ligada na empresa dona do WhatsApp.
+ */
+function whatsapp_mirror_if_enabled(PDO $pdo, int $companyId, array $cfg, string $to, string $body, bool $ok, string $messageId = '', ?array $file = null): void {
+  try {
+    $owner = (int)($cfg['shared_company_id'] ?? 0) ?: $companyId;
+    $bot = config_store_get($pdo, $owner, 'whatsapp_bot');
+    if (!is_array($bot) || empty($bot['show_sends'])) return;
+    if (!function_exists('whatsapp_chat_mirror_send')) require_once __DIR__ . '/whatsapp_chatbot.php';
+    whatsapp_chat_mirror_send($pdo, $companyId, $cfg, $to, $body, $ok, $messageId, $file);
+  } catch (Throwable $e) {
+    error_log('[whatsapp_mirror] ' . $e->getMessage());
   }
 }
 
@@ -882,6 +900,7 @@ function whatsapp_send_document(
       $res,
       $skipSchemaEnsure
     );
+    whatsapp_mirror_if_enabled($pdo, $companyId, $cfg, $destino, $caption, $ok, (string)($res['message_id'] ?? ''), ['bytes' => $binaryContent, 'mime' => $mimeType, 'name' => $fileName]);
     return ['ok' => $ok, 'error' => $error, 'response' => $res];
   } catch (Throwable $e) {
     $error = $e->getMessage();
@@ -900,6 +919,7 @@ function whatsapp_send_document(
       [],
       $skipSchemaEnsure
     );
+    whatsapp_mirror_if_enabled($pdo, $companyId, $cfg, $destino, trim($caption . "\n[não enviado: " . $error . ']'), false, '', ['bytes' => $binaryContent, 'mime' => $mimeType, 'name' => $fileName]);
     return ['ok' => false, 'error' => $error, 'response' => []];
   }
 }

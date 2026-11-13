@@ -396,6 +396,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     'Nome do atendente nas mensagens' => $cfg['sign_messages'] ? 'Sim' : 'Não',
     'Respondeu pelo celular: o robô volta depois de' => (int)$cfg['pause_hours'] . ' hora(s) sem resposta',
     '2ª via com as empresas do Grupo Empresarial' => $cfg['group_receivables'] ? 'Sim — ' . implode(', ', $groupNames) : 'Não (só esta empresa)',
+    'Mostrar envios nas conversas' => $cfg['show_sends'] ? 'Sim — boletos, pedidos, O.S., notas e mensagens automáticas aparecem no Atendimento' : 'Não',
     'Envios do grupo pelo WhatsApp desta empresa' => $cfg['group_whatsapp_shared'] ? 'Sim — ' . implode(', ', array_slice($groupNames, 1)) : 'Não (cada empresa usa o próprio WhatsApp)',
   ];
 ?>
@@ -441,6 +442,10 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   <div class="wab-grid" style="margin-top:12px">
     <div class="wab-field"><label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600"><input type="checkbox" name="sign_messages" value="1" <?= $cfg['sign_messages'] ? 'checked' : '' ?>> Mostrar o nome do atendente nas mensagens</label></div>
     <div class="wab-field"><label>Respondeu pelo celular: o robô volta depois de quantas horas sem resposta?</label><input type="number" name="pause_hours" min="1" max="72" value="<?= (int)$cfg['pause_hours'] ?>"></div>
+  </div>
+  <div class="wab-field" style="margin-top:12px;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:10px 12px">
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700"><input type="checkbox" name="show_sends" value="1" <?= $cfg['show_sends'] ? 'checked' : '' ?>> Mostrar envios</label>
+    <div class="wab-muted" style="margin-top:4px">Boletos, pedidos, O.S., notas fiscais e demais mensagens enviadas pelo sistema aparecem na conversa do cliente no Atendimento (marcadas como "📤 Envio automático"), com os checks de enviado/entregue/lido.</div>
   </div>
   <div class="wab-field" style="margin-top:12px;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:10px 12px">
     <?php if (count($groupNames) > 1): ?>

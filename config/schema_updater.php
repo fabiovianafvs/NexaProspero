@@ -610,6 +610,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'aed19d2e69676df69fd11b48443a2518a62b859bdaefcffa558df03d8dab9d78',
         'order' => 202611120200,
       ],
+      [
+        'id' => '20261113_whatsapp_status_envio_v1',
+        'module' => 'whatsapp_chatbot',
+        'version' => 202611130100,
+        'label' => 'WhatsApp - situação das mensagens (✓✓)',
+        'description' => 'Guarda se a mensagem enviada foi entregue e lida, para mostrar os checks na tela de Atendimento.',
+        'file' => __DIR__ . '/../db/20261113_whatsapp_status_envio_v1.sql',
+        'sha256' => 'dd0f2bb44450a037aed7ac2fc5d03b9fbbdfa860293b23f5d0977d45b16e9e41',
+        'order' => 202611130100,
+      ],
     ];
   }
 }

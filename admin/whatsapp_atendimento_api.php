@@ -48,7 +48,7 @@ try {
       if ((int)$chat['unread'] > 0 && ((int)$chat['user_id'] === $uid || (int)$chat['user_id'] === 0)) {
         whatsapp_chat_update($pdo, $cid, $chatId, ['unread' => 0]);
       }
-      $out(['ok' => true, 'chat' => whatsapp_att_chat_info($pdo, $cid, $chatId), 'messages' => whatsapp_att_messages($pdo, $cid, $chatId, $after), 'me' => $uid, 'supervisor' => $supervisor]);
+      $out(['ok' => true, 'chat' => whatsapp_att_chat_info($pdo, $cid, $chatId), 'messages' => whatsapp_att_messages($pdo, $cid, $chatId, $after), 'ticks' => whatsapp_att_ticks($pdo, $cid, $chatId), 'me' => $uid, 'supervisor' => $supervisor]);
 
     case 'options':
       $st = $pdo->prepare('SELECT id, name FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND is_active=1 ORDER BY name, id');
@@ -135,6 +135,10 @@ try {
     case 'crm':
       $id = whatsapp_att_crm($pdo, $cid, $loadChat(), $uid, (string)($_POST['note'] ?? ''));
       $out(['ok' => true, 'crm_id' => $id]);
+
+    case 'send_contact':
+      $ok = whatsapp_att_send_contact($pdo, $cid, $loadChat(), $uid, $supervisor, (string)($_POST['name'] ?? ''), (string)($_POST['phone'] ?? ''), (string)($_POST['company'] ?? ''));
+      $out(['ok' => true, 'sent' => $ok, 'warning' => $ok ? '' : 'O contato não saiu. Confira a conexão do WhatsApp (o motor precisa estar atualizado).']);
 
     case 'contact_save':
       $id = whatsapp_att_contact_save($pdo, $cid, $loadChat(), $_POST);

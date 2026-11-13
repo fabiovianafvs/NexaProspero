@@ -277,7 +277,8 @@ if (!function_exists('whatsapp_att_contact_save')) {
 
 if (!function_exists('whatsapp_att_messages')) {
   function whatsapp_att_messages(PDO $pdo, int $companyId, int $chatId, int $afterId = 0): array {
-    $cols = 'm.id, m.direction, m.sender, m.user_id, m.msg_type, m.body, m.media_path, m.media_mime, m.media_name, m.media_size, m.send_ok, m.created_at, u.name AS user_name';
+    $cols = 'm.id, m.direction, m.sender, m.user_id, m.msg_type, m.body, m.media_path, m.media_mime, m.media_name, m.media_size, m.send_ok, m.created_at, u.name AS user_name'
+      . (whatsapp_chat_has_wa_status($pdo) ? ', m.wa_status' : ', NULL AS wa_status');
     $join = 'LEFT JOIN users u ON u.company_id=m.company_id AND u.id=m.user_id';
     if ($afterId > 0) {
       $st = $pdo->prepare("SELECT $cols FROM whatsapp_bot_messages m $join WHERE m.company_id=? AND m.session_id=? AND m.id>? ORDER BY m.id LIMIT 300");
@@ -287,11 +288,24 @@ if (!function_exists('whatsapp_att_messages')) {
       $st->execute([$companyId, $chatId]);
     }
     $out = [];
+    $origins = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $m) {
+      $sender = (string)($m['sender'] ?? '');
+      $origin = '';
+      // Envio automático de outra empresa do grupo (WhatsApp único): mostra o nome dela.
+      if (preg_match('/^envio_(\d+)$/', $sender, $mm)) {
+        $oc = (int)$mm[1];
+        $origins[$oc] = $origins[$oc] ?? whatsapp_bot_company_name($pdo, $oc);
+        $origin = $origins[$oc];
+        $sender = 'envio';
+      }
       $out[] = [
+        'origin' => $origin,
+        'ws' => $m['wa_status'] !== null ? (int)$m['wa_status'] : null,
+        'contacts' => ($m['msg_type'] ?? '') === 'contact' ? whatsapp_vcard_parse((string)($m['body'] ?? '')) : [],
         'id' => (int)$m['id'],
         'dir' => (string)$m['direction'],
-        'sender' => (string)($m['sender'] ?? ($m['direction'] === 'IN' ? 'cliente' : 'robo')),
+        'sender' => $sender !== '' ? $sender : ($m['direction'] === 'IN' ? 'cliente' : 'robo'),
         'user' => (string)($m['user_name'] ?? ''),
         'type' => (string)($m['msg_type'] ?? 'text'),
         'body' => (string)($m['body'] ?? ''),
@@ -304,6 +318,27 @@ if (!function_exists('whatsapp_att_messages')) {
       ];
     }
     return $out;
+  }
+}
+
+if (!function_exists('whatsapp_att_ticks')) {
+  /** Situação (✓ / ✓✓ / lida / não enviada) das últimas mensagens enviadas, para atualizar os checks na tela. */
+  function whatsapp_att_ticks(PDO $pdo, int $companyId, int $chatId): array {
+    if (!whatsapp_chat_has_wa_status($pdo)) return [];
+    $st = $pdo->prepare("SELECT id, send_ok, wa_status FROM whatsapp_bot_messages WHERE company_id=? AND session_id=? AND direction='OUT' ORDER BY id DESC LIMIT 80");
+    $st->execute([$companyId, $chatId]);
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) $out[(string)$r['id']] = (int)$r['send_ok'] === 1 ? (int)($r['wa_status'] ?? 0) : -1;
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_att_send_contact')) {
+  function whatsapp_att_send_contact(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor, string $name, string $phone, string $org = ''): bool {
+    $chat = whatsapp_att_assert_owner($pdo, $companyId, $chat, $userId, $supervisor);
+    $ok = whatsapp_chat_send_contact($pdo, $companyId, whatsapp_chat_ctx($pdo, $companyId, $chat), mb_substr($name, 0, 120), $phone, mb_substr(trim($org), 0, 120), $userId);
+    whatsapp_chat_notify($companyId, (int)$chat['id'], ['status' => 'ATENDIMENTO']);
+    return $ok;
   }
 }
 
