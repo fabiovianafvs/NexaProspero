@@ -396,6 +396,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     'Nome do atendente nas mensagens' => $cfg['sign_messages'] ? 'Sim' : 'Não',
     'Respondeu pelo celular: o robô volta depois de' => (int)$cfg['pause_hours'] . ' hora(s) sem resposta',
     '2ª via com as empresas do Grupo Empresarial' => $cfg['group_receivables'] ? 'Sim — ' . implode(', ', $groupNames) : 'Não (só esta empresa)',
+    'Envios do grupo pelo WhatsApp desta empresa' => $cfg['group_whatsapp_shared'] ? 'Sim — ' . implode(', ', array_slice($groupNames, 1)) : 'Não (cada empresa usa o próprio WhatsApp)',
   ];
 ?>
 <section class="wab-card" id="config">
@@ -445,6 +446,8 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     <?php if (count($groupNames) > 1): ?>
       <label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700"><input type="checkbox" name="group_receivables" value="1" <?= $cfg['group_receivables'] ? 'checked' : '' ?>> 2ª via de boleto com as empresas do Grupo Empresarial</label>
       <div class="wab-muted" style="margin-top:4px">O cliente informa o CPF/CNPJ e recebe uma lista numerada das contas em aberto de <b><?= wab_h(implode(', ', $groupNames)) ?></b> (só das empresas onde ele tiver contas) e escolhe quais boletos quer receber.</div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700;margin-top:10px"><input type="checkbox" name="group_whatsapp_shared" value="1" <?= $cfg['group_whatsapp_shared'] ? 'checked' : '' ?>> Utilizar somente o WhatsApp desta empresa (principal) para os envios do grupo</label>
+      <div class="wab-muted" style="margin-top:4px">Boletos, pedidos, O.S., orçamentos, notas fiscais e demais envios de <b><?= wab_h(implode(', ', array_slice($groupNames, 1))) ?></b> passam a sair pelo WhatsApp desta empresa. Cada empresa continua com os próprios textos e modelos. As respostas dos clientes chegam aqui, no Atendimento desta empresa.</div>
     <?php else: ?>
       <div class="wab-muted">2ª via com várias empresas: disponível quando esta empresa faz parte de um <b>Grupo Empresarial</b> com outras empresas (Central SaaS).</div>
     <?php endif; ?>

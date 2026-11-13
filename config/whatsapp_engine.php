@@ -111,7 +111,7 @@ if (!function_exists('whatsapp_engine_migrate_company')) {
       $healthOk = true;
     }
 
-    $cfg = whatsapp_load_config($pdo, $companyId, false);
+    $cfg = whatsapp_load_config($pdo, $companyId, false, true);
     if (whatsapp_engine_is_url($engine, (string)$cfg['service_url'])) throw new RuntimeException('Esta empresa já está no motor novo.');
     $oldUrl = (string)$cfg['service_url'] !== '' ? (string)$cfg['service_url'] : WHATSAPP_LEGACY_SERVICE_URL;
     $sid = whatsapp_service_company_id($cfg, $companyId);
@@ -153,7 +153,7 @@ if (!function_exists('whatsapp_engine_migrate_company')) {
 if (!function_exists('whatsapp_engine_revert_company')) {
   function whatsapp_engine_revert_company(PDO $pdo, int $companyId, int $userId = 0): array {
     $engine = whatsapp_engine_config($pdo);
-    $cfg = whatsapp_load_config($pdo, $companyId, false);
+    $cfg = whatsapp_load_config($pdo, $companyId, false, true);
     if (!whatsapp_engine_is_url($engine, (string)$cfg['service_url'])) throw new RuntimeException('Esta empresa não está no motor novo.');
     $sid = whatsapp_service_company_id($cfg, $companyId);
     try { whatsapp_api_request(array_merge($cfg, ['timeout_seconds' => 15]), 'POST', '/logout', ['company_id' => $sid]); } catch (Throwable $e) {}

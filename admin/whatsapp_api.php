@@ -11,7 +11,7 @@ $waCompanyId = function_exists('multi_company_operational_company_id')
   : (int)COMPANY_ID;
 $waCrossContext = function_exists('multi_company_scope_is_cross_company')
   && multi_company_scope_is_cross_company($pdo, 'whatsapp_config');
-$cfg = whatsapp_load_config($pdo, $waCompanyId);
+$cfg = whatsapp_load_config($pdo, $waCompanyId, true, true);
 $action = (string)($_GET['action'] ?? $_POST['action'] ?? 'status');
 $serviceCompanyId = whatsapp_service_company_id($cfg, $waCompanyId);
 

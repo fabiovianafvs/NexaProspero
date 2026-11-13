@@ -77,6 +77,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-compose textarea{flex:1;border:0;border-radius:10px;padding:10px 12px;font:inherit;resize:none;max-height:140px;min-height:42px}
 .waa-ico{border:0;background:transparent;font-size:22px;cursor:pointer;padding:6px;color:#54656f}
 .waa-send{border:0;background:var(--g);color:#fff;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer}
+.waa-fthumb{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #d1d7db;flex:0 0 auto}.waa-drop{outline:3px dashed #00a884;outline-offset:-8px}
 .waa-filebar{background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:none;gap:8px;align-items:center}.waa-filebar.on{display:flex}.waa-filebar input{flex:1;border:1px solid #d1d7db;border-radius:8px;padding:7px 10px}
 .waa-welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mut);text-align:center;padding:30px;background:var(--bg)}
 .waa-welcome h3{color:#41525d;margin:8px 0}
@@ -132,7 +133,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <div class="waa-banner" id="waaBanner" style="display:none"></div>
       <div class="waa-answers" id="waaAnswers" style="display:none"></div>
       <div class="waa-msgs" id="waaMsgs"></div>
-      <div class="waa-filebar" id="waaFileBar"><span id="waaFileName"></span><input id="waaCaption" placeholder="Legenda (opcional)"><button class="waa-btn g" type="button" id="waaFileSend">Enviar</button><button class="waa-btn" type="button" id="waaFileCancel">✕</button></div>
+      <div class="waa-filebar" id="waaFileBar"><img id="waaFileThumb" class="waa-fthumb" alt="" hidden><span id="waaFileName"></span><input id="waaCaption" placeholder="Legenda (opcional)"><button class="waa-btn g" type="button" id="waaFileSend">Enviar</button><button class="waa-btn" type="button" id="waaFileCancel">✕</button></div>
       <form class="waa-compose" id="waaForm">
         <input type="file" id="waaFile" hidden>
         <div class="waa-quick" id="waaQuick"><input id="waaQuickQ" placeholder="Buscar mensagem rápida" autocomplete="off"><div id="waaQuickList"></div></div>
@@ -542,16 +543,48 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   $('waaRecCancel').addEventListener('click', cancelRec);
   $('waaRecSend').addEventListener('click', sendRec);
   toggleSend();
-  let pending = null;
-  $('waaAttach').addEventListener('click', () => $('waaFile').click());
-  $('waaFile').addEventListener('change', (e) => {
-    pending = e.target.files[0] || null;
-    if (!pending) return;
-    if (pending.size > 16 * 1024 * 1024) { alert('O arquivo deve ter no máximo 16 MB.'); pending = null; e.target.value = ''; return; }
-    $('waaFileName').textContent = '📎 ' + pending.name;
+  let pending = null, thumbUrl = '';
+  // Arquivo escolhido, colado (Ctrl+V de um print) ou arrastado: mostra a barra com miniatura e legenda.
+  const setPending = (file) => {
+    if (!file || !chatId || $('waaForm').style.display === 'none') return;
+    if (file.size > 16 * 1024 * 1024) { alert('O arquivo deve ter no máximo 16 MB.'); return; }
+    pending = file;
+    if (thumbUrl) { URL.revokeObjectURL(thumbUrl); thumbUrl = ''; }
+    const isImg = /^image\//.test(file.type || '');
+    if (isImg) { thumbUrl = URL.createObjectURL(file); $('waaFileThumb').src = thumbUrl; }
+    $('waaFileThumb').hidden = !isImg;
+    $('waaFileName').textContent = (isImg ? '🖼️ ' : '📎 ') + file.name;
+    // O texto que já estava digitado vira a legenda da imagem.
+    if (text.value.trim() && !$('waaCaption').value) { $('waaCaption').value = text.value.trim(); text.value = ''; resize(); toggleSend(); }
     $('waaFileBar').classList.add('on'); $('waaCaption').focus();
+  };
+  const pastedName = (file) => {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const ext = ((file.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '');
+    return 'print-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.' + ext;
+  };
+  $('waaAttach').addEventListener('click', () => $('waaFile').click());
+  $('waaFile').addEventListener('change', (e) => { const f = e.target.files[0] || null; e.target.value = ''; setPending(f); });
+  document.addEventListener('paste', (e) => {
+    if (!chatId || !e.clipboardData) return;
+    const t = e.target;
+    if (t && t.closest && (t.closest('.waa-modal') || (t.matches('input,textarea') && t !== text && t.id !== 'waaCaption'))) return;
+    const items = Array.from(e.clipboardData.items || []);
+    const it = items.find((i) => i.kind === 'file' && /^image\//.test(i.type)) || items.find((i) => i.kind === 'file');
+    const f = it ? it.getAsFile() : null;
+    if (!f) return;
+    e.preventDefault();
+    const named = /^image\//.test(f.type) && (!f.name || /^image\.\w+$/i.test(f.name)) ? new File([f], pastedName(f), { type: f.type }) : f;
+    setPending(named);
   });
-  const clearFile = () => { pending = null; $('waaFile').value = ''; $('waaCaption').value = ''; $('waaFileBar').classList.remove('on'); };
+  const mainPane = document.querySelector('.waa-main');
+  if (mainPane) {
+    mainPane.addEventListener('dragover', (e) => { if (chatId && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) { e.preventDefault(); mainPane.classList.add('waa-drop'); } });
+    mainPane.addEventListener('dragleave', (e) => { if (e.target === mainPane) mainPane.classList.remove('waa-drop'); });
+    mainPane.addEventListener('drop', (e) => { mainPane.classList.remove('waa-drop'); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) { e.preventDefault(); setPending(f); } });
+  }
+  $('waaCaption').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('waaFileSend').click(); } if (e.key === 'Escape') clearFile(); });
+  const clearFile = () => { pending = null; if (thumbUrl) { URL.revokeObjectURL(thumbUrl); thumbUrl = ''; } $('waaFileThumb').hidden = true; $('waaFile').value = ''; $('waaCaption').value = ''; $('waaFileBar').classList.remove('on'); };
   $('waaFileCancel').addEventListener('click', clearFile);
   $('waaFileSend').addEventListener('click', async () => {
     if (!pending) return;

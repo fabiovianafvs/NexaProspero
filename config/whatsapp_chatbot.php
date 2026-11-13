@@ -74,6 +74,8 @@ if (!function_exists('whatsapp_bot_defaults')) {
       'crm_service_type_id' => 0,
       // 2ª via: consultar também as outras empresas do mesmo Grupo Empresarial (pelo CPF/CNPJ).
       'group_receivables' => false,
+      // Envios (boletos, pedidos, O.S., notas...) das outras empresas do grupo saem pelo WhatsApp desta empresa.
+      'group_whatsapp_shared' => false,
       // Horário de atendimento (dia da semana 0=domingo ... 6=sábado; até 2 períodos por dia).
       'hours_enabled' => false,
       'hours' => whatsapp_bot_hours_default(),
@@ -193,6 +195,7 @@ if (!function_exists('whatsapp_bot_config')) {
     $cfg['enabled'] = !empty($cfg['enabled']);
     $cfg['sign_messages'] = !empty($cfg['sign_messages']);
     $cfg['group_receivables'] = !empty($cfg['group_receivables']);
+    $cfg['group_whatsapp_shared'] = !empty($cfg['group_whatsapp_shared']);
     $cfg['hours_enabled'] = !empty($cfg['hours_enabled']);
     $cfg['offhours_menu'] = !empty($cfg['offhours_menu']);
     $cfg['hours'] = whatsapp_bot_hours_norm($cfg['hours']);
@@ -205,7 +208,7 @@ if (!function_exists('whatsapp_bot_config')) {
 if (!function_exists('whatsapp_bot_sync_engine')) {
   /** Liga/desliga a entrega das mensagens recebidas (motor -> sistema) desta empresa. */
   function whatsapp_bot_sync_engine(PDO $pdo, int $companyId, bool $enabled): array {
-    $waCfg = whatsapp_load_config($pdo, $companyId, false);
+    $waCfg = whatsapp_load_config($pdo, $companyId, false, true);
     $engine = whatsapp_engine_config($pdo);
     if (!whatsapp_engine_is_url($engine, (string)$waCfg['service_url'])) {
       return ['ok' => false, 'message' => 'O WhatsApp desta empresa ainda está no motor antigo. Peça ao suporte para passar para o motor novo.'];
@@ -253,6 +256,7 @@ if (!function_exists('whatsapp_bot_save_config')) {
       $cfg['accept_text'] = mb_substr(trim((string)($input['accept_text'] ?? $cfg['accept_text'])), 0, 1000);
       $cfg['sign_messages'] = !empty($input['sign_messages']);
       $cfg['group_receivables'] = !empty($input['group_receivables']);
+      $cfg['group_whatsapp_shared'] = !empty($input['group_whatsapp_shared']);
       $cfg['pause_hours'] = max(1, min(72, (int)($input['pause_hours'] ?? 2)));
     } else {
       $cfg['enabled'] = !empty($cfg['enabled']) && $module;
@@ -894,7 +898,7 @@ if (!function_exists('whatsapp_chat_notify')) {
 
 if (!function_exists('whatsapp_chat_ctx')) {
   function whatsapp_chat_ctx(PDO $pdo, int $companyId, array $chat): array {
-    $wa = whatsapp_load_config($pdo, $companyId, false);
+    $wa = whatsapp_load_config($pdo, $companyId, false, true);
     return [
       'sid' => whatsapp_service_company_id($wa, $companyId),
       'contact' => (string)$chat['contact'],
@@ -1384,7 +1388,7 @@ if (!function_exists('whatsapp_bot_human_reply')) {
     $messageId = (string)($payload['message_id'] ?? '');
     if (whatsapp_chat_message_exists($pdo, $companyId, $messageId)) return 'repetida';
     $type = (string)($payload['type'] ?? 'text');
-    $wa = whatsapp_load_config($pdo, $companyId, false);
+    $wa = whatsapp_load_config($pdo, $companyId, false, true);
     $media = whatsapp_chat_media_from_payload($companyId, $wa, $sid, $payload);
     $lock = 'nexa_wa_chat_' . $companyId . '_' . md5($phone !== '' ? $phone : $contact);
     whatsapp_bot_lock($pdo, $lock);
@@ -1426,7 +1430,7 @@ if (!function_exists('whatsapp_bot_handle')) {
     if (whatsapp_chat_message_exists($pdo, $companyId, $messageId)) return 'repetida';
     $text = trim((string)($payload['text'] ?? ''));
     $type = (string)($payload['type'] ?? 'text');
-    $wa = whatsapp_load_config($pdo, $companyId, false);
+    $wa = whatsapp_load_config($pdo, $companyId, false, true);
     $media = whatsapp_chat_media_from_payload($companyId, $wa, $sid, $payload);
 
     $lock = 'nexa_wa_chat_' . $companyId . '_' . md5($phone !== '' ? $phone : $contact);

@@ -19,7 +19,7 @@ $waMcCsrf = ($waCrossContext && function_exists('multi_company_context_csrf_toke
 $waMcCtx = ($waCrossContext && function_exists('multi_company_context_request_token'))
   ? multi_company_context_request_token()
   : '';
-$cfg = whatsapp_load_config($pdo, $waCompanyId, false);
+$cfg = whatsapp_load_config($pdo, $waCompanyId, false, true);
 $messageModels = whatsapp_message_models_load($pdo, $waCompanyId);
 $appCfg = load_app_config($waCompanyId);
 
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     whatsapp_message_models_save($pdo, $waCompanyId, $messageModels);
 
-    $cfg = whatsapp_load_config($pdo, $waCompanyId, false);
+    $cfg = whatsapp_load_config($pdo, $waCompanyId, false, true);
     $messageModels = whatsapp_message_models_load($pdo, $waCompanyId);
     $msg = 'Configurações do WhatsApp salvas com sucesso.' . $syncMsg;
   } catch (Throwable $e) {
@@ -266,6 +266,7 @@ admin_topbar('Central - WhatsApp automático', 'whatsapp');
 
 <?php if ($waCrossContext): ?><div class="msg ok" style="margin-top:12px;"><strong>V11.22.1 · WhatsApp Multiempresa:</strong> esta tela está configurando a empresa selecionada pelo F11 (ID <?= (int)$waCompanyId ?>). QR Code, token, sessão e modelos ficam isolados desta empresa.</div><?php endif; ?>
 <?php $waBreaker = whatsapp_breaker_status($cfg); $waQueued = whatsapp_outbox_pending_count($pdo, $waCompanyId); ?>
+<?php $waShared = whatsapp_shared_owner($pdo, (int)$waCompanyId); if ($waShared): ?><div class="msg" style="margin-top:12px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;"><strong>Envios pelo WhatsApp de <?= htmlspecialchars($waShared['name'], ENT_QUOTES, 'UTF-8') ?>.</strong> Esta empresa faz parte de um Grupo Empresarial que usa somente o WhatsApp da empresa principal: boletos, pedidos, O.S. e notas desta empresa saem pelo número dela (com os textos e modelos configurados aqui). Não é preciso conectar um WhatsApp nesta empresa.</div><?php endif; ?>
 <?php if ($waBreaker['open']): ?><div class="msg err" style="margin-top:12px;"><strong>WhatsApp com problemas no momento.</strong> Os envios estão pausados por mais <?= (int)ceil($waBreaker['seconds_left'] / 60) ?> minuto(s) para não travar o sistema. Vendas, pedidos e notas continuam funcionando normalmente.</div><?php endif; ?>
 <?php if ($waQueued > 0): ?><div class="msg" style="margin-top:12px;background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;"><?= (int)$waQueued ?> mensagem(ns) automática(s) aguardando envio na fila. Elas são enviadas em segundo plano assim que o WhatsApp estiver disponível.</div><?php endif; ?>
 <?php if ($msg): ?><div class="msg ok" style="margin-top:12px;"><?= htmlspecialchars($msg) ?></div><?php endif; ?>

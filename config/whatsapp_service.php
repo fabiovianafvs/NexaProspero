@@ -283,7 +283,42 @@ function whatsapp_default_config(): array {
   ];
 }
 
-function whatsapp_load_config(PDO $pdo, int $companyId, bool $applyMessageModels = true): array {
+/**
+ * Grupo Empresarial com "Utilizar somente o WhatsApp da empresa principal" (Chatbot > Robô
+ * da empresa dona do WhatsApp): devolve [id da empresa principal, nome] para as outras empresas do grupo.
+ */
+function whatsapp_shared_owner(PDO $pdo, int $companyId): ?array {
+  // Guarda o resultado por 60 s (processos longos, como a fila de envio, enxergam a mudança logo).
+  static $memo = [];
+  if (isset($memo[$companyId]) && $memo[$companyId]['at'] > time() - 60) return $memo[$companyId]['v'];
+  $memo[$companyId] = ['at' => time(), 'v' => null];
+  try {
+    $st = $pdo->prepare("SELECT gc2.company_id, c.name
+      FROM business_group_companies gc
+      JOIN business_groups g ON g.id = gc.business_group_id AND g.is_active = 1
+      JOIN business_group_companies gc2 ON gc2.business_group_id = gc.business_group_id AND gc2.is_active = 1
+      JOIN companies c ON c.id = gc2.company_id
+      WHERE gc.company_id = ? AND gc.is_active = 1 AND gc2.company_id <> ?
+        AND LOWER(COALESCE(c.status, 'active')) NOT IN ('blocked', 'suspended', 'expired', 'cancelled', 'canceled', 'inactive')
+      ORDER BY gc2.is_primary DESC, gc2.company_id");
+    $st->execute([$companyId, $companyId]);
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+      $bot = config_store_get($pdo, (int)$row['company_id'], 'whatsapp_bot');
+      if (is_array($bot) && !empty($bot['group_whatsapp_shared'])) {
+        $memo[$companyId]['v'] = ['company_id' => (int)$row['company_id'], 'name' => (string)$row['name']];
+        return $memo[$companyId]['v'];
+      }
+    }
+  } catch (Throwable $e) {}
+  return null;
+}
+
+/**
+ * $ownConnection = true: a conexão da própria empresa (tela de configuração do WhatsApp, QR Code,
+ * chatbot). Sem isso, empresas do grupo que usam o WhatsApp da principal recebem a conexão dela
+ * (URL, token e sessão); textos, modelos e opções continuam sendo os da própria empresa.
+ */
+function whatsapp_load_config(PDO $pdo, int $companyId, bool $applyMessageModels = true, bool $ownConnection = false): array {
   $cfg = whatsapp_default_config();
   try {
     $over = config_store_get($pdo, $companyId, 'whatsapp');
@@ -320,6 +355,20 @@ function whatsapp_load_config(PDO $pdo, int $companyId, bool $applyMessageModels
       $pedidoModel = whatsapp_message_model_text($pdo, $companyId, 'pedido');
       if ($pedidoModel !== '') $cfg['templates']['order_customer_full'] = $pedidoModel;
     } catch (Throwable $e) {}
+  }
+
+  if (!$ownConnection && ($owner = whatsapp_shared_owner($pdo, $companyId))) {
+    $main = whatsapp_load_config($pdo, (int)$owner['company_id'], false, true);
+    if (!empty($main['enabled'])) {
+      $cfg['enabled'] = true;
+      $cfg['service_url'] = $main['service_url'];
+      $cfg['api_token'] = $main['api_token'];
+      $cfg['timeout_seconds'] = $main['timeout_seconds'];
+      // Sessão do WhatsApp da principal (os envios saem pelo número dela).
+      $cfg['session_company_id'] = whatsapp_service_company_id($main, (int)$owner['company_id']);
+      $cfg['shared_company_id'] = (int)$owner['company_id'];
+      $cfg['shared_company_name'] = (string)$owner['name'];
+    }
   }
 
   return $cfg;
