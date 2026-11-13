@@ -2817,6 +2817,7 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       'ipi_cst','ipi_cenq','ipi_base','ipi_rate','ipi_amount',
       'pis_cst','pis_base','pis_rate','pis_amount',
       'cofins_cst','cofins_base','cofins_rate','cofins_amount',
+      'ibs_cbs_class','ibs_cbs_cst','ibs_cbs_base','ibs_uf_rate','ibs_mun_rate','cbs_rate',
     ];
     $taxInputs = [];
     foreach ($taxNames as $taxName) $taxInputs[$taxName] = $taxArray($taxName);
@@ -2880,7 +2881,7 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       if ($maxQty > 0 && $qty > ($maxQty + 0.0001)) throw new RuntimeException('A quantidade informada não pode ser maior que a quantidade disponível na venda original.');
       $taxPayload = [];
       foreach ($taxNames as $taxName) {
-        $taxPayload[$taxName] = str_ends_with($taxName, '_cst') || in_array($taxName, ['icms_origin','icms_csosn','ipi_cenq'], true)
+        $taxPayload[$taxName] = str_ends_with($taxName, '_cst') || in_array($taxName, ['icms_origin','icms_csosn','ipi_cenq','ibs_cbs_class'], true)
           ? $rawAt($taxInputs[$taxName], $idx)
           : $numAt($taxInputs[$taxName], $idx);
       }
@@ -2979,6 +2980,7 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       $insItem = $pdo->prepare('INSERT INTO fiscal_document_items (fiscal_document_id, company_id, item_number, product_id, product_code, description, ncm, cest, cfop, unidade, quantity, unit_value, total_value, unidade_trib, quantity_trib, unit_value_trib, ind_total, order_item_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())');
       $insTax = $pdo->prepare('INSERT INTO fiscal_document_item_taxes (fiscal_document_item_id, fiscal_document_id, company_id, tax_group, tax_tag, origin_code, cst, csosn, class_code, base_calc, base_calc_st, rate, reduction_rate, mva_rate, amount, extra_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())');
       $totalProducts = 0.0; $n = 0; $totIcms = 0.0; $totIcmsSt = 0.0; $totFcpSt = 0.0; $totIpi = 0.0; $totPis = 0.0; $totCofins = 0.0;
+      $totIbsUf = 0.0; $totIbsMun = 0.0; $totCbs = 0.0;
       foreach ($items as $it) {
         $n++; $pid = (int)$it['product_id']; $manual = (array)($it['tax'] ?? []);
         $ps = $pdo->prepare('SELECT * FROM produtos WHERE company_id=? AND id=? LIMIT 1'); $ps->execute([$companyId, $pid]); $prod = $ps->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -3024,9 +3026,78 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
         $insTax->execute([$docItemId,$docId,$companyId,'PIS',in_array($pisCst,['01','02'],true)?'PISAliq':(in_array($pisCst,['04','05','06','07','08','09'],true)?'PISNT':'PISOutr'),'',$pisCst,'','',$pisBase,0,$pisRate,0,0,$pisAmount,null]);
         $cofCst=str_pad($codeValue('cofins_cst',preg_replace('/\D+/', '', (string)($tax['cofins_cst']??'01'))?:'01'),2,'0',STR_PAD_LEFT); $cofRate=$num('cofins_rate',max(0.0,(float)($tax['cofins_rate']??0))); $cofBase=$num('cofins_base',$cofRate>0?$line:0); $cofAmount=$num('cofins_amount',round($cofBase*$cofRate/100,2)); $totCofins += $cofAmount;
         $insTax->execute([$docItemId,$docId,$companyId,'COFINS',in_array($cofCst,['01','02'],true)?'COFINSAliq':(in_array($cofCst,['04','05','06','07','08','09'],true)?'COFINSNT':'COFINSOutr'),'',$cofCst,'','',$cofBase,0,$cofRate,0,0,$cofAmount,null]);
+        // IBS/CBS (Reforma Tributária): a NF-e exige o grupo em todos os itens.
+        // Usa o que foi informado em "Impostos do item"; o que ficar em branco vem
+        // do cadastro fiscal do produto (mesma regra das notas de pedidos).
+        if (!$isInternalOrderReturn && function_exists('fiscal_ibs_cbs_resolve')) {
+          $itemName = trim((string)($prod['nome'] ?? '')) ?: ('Produto #' . $pid);
+          $ibsTax = $tax;
+          $manualClass = substr(preg_replace('/\D+/', '', (string)($manual['ibs_cbs_class'] ?? '')) ?: '', 0, 6);
+          if ($manualClass !== '') {
+            $ibsTax['ibs_cbs_classification_code'] = $manualClass;
+            if (fiscal_ibs_cbs_rate_mode($ibsTax) === 'DESATIVADO') $ibsTax['ibs_cbs_rate_mode'] = 'AUTO';
+          }
+          $manualIbsRates = array_filter(['ibs_uf_rate'=>$manual['ibs_uf_rate'] ?? null, 'ibs_mun_rate'=>$manual['ibs_mun_rate'] ?? null, 'cbs_rate'=>$manual['cbs_rate'] ?? null], static fn($v) => $v !== null);
+          if ($manualIbsRates) {
+            $ibsTax['ibs_cbs_rate_mode'] = 'MANUAL';
+            foreach (['ibs_uf_rate','ibs_mun_rate','cbs_rate'] as $rateKey) $ibsTax[$rateKey] = max(0.0, (float)($manual[$rateKey] ?? 0));
+          }
+          $ibsOpUf = trim((string)($participant['state'] ?? '')) ?: (string)($cfg['uf'] ?? '');
+          $ibsOpCity = fiscal_digits((string)($participant['city_ibge'] ?? '')) ?: fiscal_digits((string)($cfg['city_ibge'] ?? ''));
+          $ibsResolved = fiscal_ibs_cbs_resolve($pdo, $companyId, $ibsTax, $cfg, '55', $issue, $ibsOpUf, $ibsOpCity);
+          if (empty($ibsResolved['enabled'])) {
+            throw new RuntimeException('IBS/CBS do item ' . $n . ' (' . $itemName . '): ' . trim((string)($ibsResolved['reason'] ?? 'configuração incompleta.'))
+              . ' Abra "Impostos do item" e informe o cClassTrib (ex.: 000001) ou cadastre o cClassTrib no produto.');
+          }
+          $manualIbsCst = preg_replace('/\D+/', '', (string)($manual['ibs_cbs_cst'] ?? '')) ?: '';
+          if ($manualIbsCst !== '' && str_pad(substr($manualIbsCst, 0, 3), 3, '0', STR_PAD_LEFT) !== (string)$ibsResolved['cst']) {
+            throw new RuntimeException('IBS/CBS do item ' . $n . ' (' . $itemName . '): o CST ' . $manualIbsCst . ' não corresponde ao cClassTrib ' . $ibsResolved['class_code']
+              . ' (CST ' . $ibsResolved['cst'] . '). Deixe o CST em branco para usar o do cClassTrib.');
+          }
+          $manualIbsBase = $manual['ibs_cbs_base'] ?? null;
+          $ibsCalc = $manualIbsBase !== null
+            ? fiscal_ibs_cbs_calculate((float)$manualIbsBase, $ibsResolved, [])
+            : fiscal_ibs_cbs_calculate($line, $ibsResolved, ['icms'=>$icmsAmount, 'pis'=>$pisAmount, 'cofins'=>$cofAmount, 'ipi'=>0, 'iss'=>0]);
+          $ibsBase = (float)$ibsCalc['base'];
+          $totIbsUf += (float)$ibsCalc['ibs_uf_amount'];
+          $totIbsMun += (float)$ibsCalc['ibs_mun_amount'];
+          $totCbs += (float)$ibsCalc['cbs_amount'];
+          $ibsExtra = json_encode([
+            'cClassTrib' => (string)$ibsResolved['class_code'],
+            'CST' => (string)$ibsResolved['cst'],
+            'rate_mode' => (string)$ibsResolved['mode'],
+            'rate_source' => (string)$ibsResolved['source'],
+            'rate_date' => (string)$ibsResolved['date'],
+            'operation_uf' => (string)$ibsResolved['uf'],
+            'operation_city_ibge' => (string)$ibsResolved['city_ibge'],
+            'base_calc_gross' => $manualIbsBase !== null ? (float)$manualIbsBase : $line,
+            'excluded_legacy_taxes' => (float)$ibsCalc['excluded_total'],
+            'base_calc' => $ibsBase,
+            'ibs_reduction_rate' => (float)$ibsCalc['ibs_reduction_rate'],
+            'cbs_reduction_rate' => (float)$ibsCalc['cbs_reduction_rate'],
+            'ibs_uf_rate' => (float)$ibsCalc['ibs_uf_rate'],
+            'ibs_uf_effective_rate' => (float)$ibsCalc['ibs_uf_effective_rate'],
+            'ibs_uf_trib_op' => (float)$ibsCalc['ibs_uf_trib_op'],
+            'ibs_uf_amount' => (float)$ibsCalc['ibs_uf_amount'],
+            'ibs_mun_rate' => (float)$ibsCalc['ibs_mun_rate'],
+            'ibs_mun_effective_rate' => (float)$ibsCalc['ibs_mun_effective_rate'],
+            'ibs_mun_trib_op' => (float)$ibsCalc['ibs_mun_trib_op'],
+            'ibs_mun_amount' => (float)$ibsCalc['ibs_mun_amount'],
+            'ibs_amount' => (float)$ibsCalc['ibs_amount'],
+            'cbs_rate' => (float)$ibsCalc['cbs_rate'],
+            'cbs_effective_rate' => (float)$ibsCalc['cbs_effective_rate'],
+            'cbs_trib_op' => (float)$ibsCalc['cbs_trib_op'],
+            'cbs_amount' => (float)$ibsCalc['cbs_amount'],
+          ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+          $insTax->execute([$docItemId,$docId,$companyId,'IBSCBS','IBSCBS','',(string)$ibsResolved['cst'],'',(string)$ibsResolved['class_code'],$ibsBase,0,
+            (float)$ibsCalc['ibs_uf_rate'] + (float)$ibsCalc['ibs_mun_rate'] + (float)$ibsCalc['cbs_rate'],0,0,(float)$ibsCalc['ibs_amount'] + (float)$ibsCalc['cbs_amount'],$ibsExtra]);
+        }
       }
       $totalDocument = round($totalProducts + $totIpi + $totIcmsSt + $totFcpSt, 2);
       $pdo->prepare('UPDATE fiscal_documents SET total_products=?, total_document=?, total_icms=?, total_icms_st=?, total_ipi=?, total_pis=?, total_cofins=?, updated_at=NOW() WHERE company_id=? AND id=?')->execute([round($totalProducts,2),$totalDocument,round($totIcms,2),round($totIcmsSt,2),round($totIpi,2),round($totPis,2),round($totCofins,2),$companyId,$docId]);
+      if (($totIbsUf + $totIbsMun + $totCbs) > 0 && fiscal_column_exists($pdo, 'fiscal_documents', 'total_cbs')) {
+        $pdo->prepare('UPDATE fiscal_documents SET total_ibs_uf=?, total_ibs_mun=?, total_cbs=? WHERE company_id=? AND id=?')->execute([round($totIbsUf,2), round($totIbsMun,2), round($totCbs,2), $companyId, $docId]);
+      }
       if ($isInternalOrderReturn) {
         $pdo->prepare('INSERT INTO fiscal_document_events (fiscal_document_id, company_id, event_type, event_sequence, event_datetime, status_code, status_message, request_xml, notes, created_at) VALUES (?,?,?,?,NOW(),?,?,?,?,NOW())')->execute([$docId, $companyId, 'DEVOLUCAO_INTERNA_PEDIDO', 1, 'INTERNA', 'Devolução interna registrada a partir de pedido sem documento fiscal.', null, 'Controle interno: sem chave de referência e sem transmissão para a SEFAZ.']);
       } else {
