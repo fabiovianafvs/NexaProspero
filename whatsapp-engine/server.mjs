@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.6';
+const SERVICE_VERSION = 'engine-1.7';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -704,7 +704,14 @@ async function handleInbound(state, msg) {
 
   // Contatos novos podem vir como LID; o número real vem em remoteJidAlt/senderPn.
   const alt = String(key.remoteJidAlt || key.senderPn || msg.senderPn || '');
-  const pnJid = remote.endsWith('@s.whatsapp.net') ? remote : (alt.endsWith('@s.whatsapp.net') ? alt : '');
+  let pnJid = remote.endsWith('@s.whatsapp.net') ? remote : (alt.endsWith('@s.whatsapp.net') ? alt : '');
+  // Sem o número junto: consulta o mapa LID -> número (senão o sistema abre outra conversa).
+  if (!pnJid && remote.endsWith('@lid')) {
+    try {
+      const pn = await state.sock?.signalRepository?.lidMapping?.getPNForLID?.(remote);
+      if (pn && String(pn).includes('@s.whatsapp.net')) pnJid = String(pn);
+    } catch (_) {}
+  }
   const payload = {
     event: key.fromMe ? 'human_reply' : 'message',
     company_id: state.sid,

@@ -399,6 +399,21 @@ if (!function_exists('whatsapp_bot_digits')) {
   function whatsapp_bot_digits($v): string { return preg_replace('/\D+/', '', (string)$v) ?? ''; }
 }
 
+if (!function_exists('whatsapp_bot_phone_candidates')) {
+  /**
+   * O mesmo celular com e sem o 9º dígito: contas antigas do WhatsApp respondem
+   * sem o 9 (55 31 8888-7777) mesmo quando o número foi digitado com ele.
+   */
+  function whatsapp_bot_phone_candidates(string $phone): array {
+    $d = whatsapp_bot_digits($phone);
+    if ($d === '') return [];
+    $out = [$d];
+    if (strlen($d) === 13 && strncmp($d, '55', 2) === 0 && $d[4] === '9') $out[] = substr($d, 0, 4) . substr($d, 5);
+    if (strlen($d) === 12 && strncmp($d, '55', 2) === 0 && in_array($d[4], ['6', '7', '8', '9'], true)) $out[] = substr($d, 0, 4) . '9' . substr($d, 4);
+    return $out;
+  }
+}
+
 if (!function_exists('whatsapp_bot_valid_cpf')) {
   function whatsapp_bot_valid_cpf(string $c): bool {
     if (strlen($c) !== 11 || preg_match('/^(\d)\1{10}$/', $c)) return false;
@@ -806,15 +821,18 @@ if (!function_exists('whatsapp_chat_get')) {
 if (!function_exists('whatsapp_chat_find_or_create')) {
   /**
    * Conversa do contato. O mesmo cliente pode chegar como número (@s.whatsapp.net)
-   * ou como LID (@lid): procura pelo endereço e, se não achar, pelo telefone.
+   * ou como LID (@lid): procura pelo endereço e, se não achar, pelo telefone
+   * (com e sem o 9º dígito, para a resposta cair na conversa iniciada pelo painel).
    */
   function whatsapp_chat_find_or_create(PDO $pdo, int $companyId, string $contact, string $phone): array {
-    $st = $pdo->prepare('SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND contact=? LIMIT 1');
+    $st = $pdo->prepare('SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND contact=? ORDER BY last_message_at DESC, id DESC LIMIT 1');
     $st->execute([$companyId, $contact]);
     $id = (int)$st->fetchColumn();
-    if (!$id && $phone !== '') {
-      $st = $pdo->prepare('SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND phone=? ORDER BY last_message_at DESC, id DESC LIMIT 1');
-      $st->execute([$companyId, $phone]);
+    $cands = whatsapp_bot_phone_candidates($phone);
+    if (!$id && $cands) {
+      $in = implode(',', array_fill(0, count($cands), '?'));
+      $st = $pdo->prepare("SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND phone IN ($in) ORDER BY last_message_at DESC, id DESC LIMIT 1");
+      $st->execute(array_merge([$companyId], $cands));
       $id = (int)$st->fetchColumn();
       if ($id) $pdo->prepare('UPDATE whatsapp_bot_sessions SET contact=? WHERE company_id=? AND id=?')->execute([$contact, $companyId, $id]);
     }
@@ -960,9 +978,7 @@ if (!function_exists('whatsapp_chat_mirror_send')) {
       if (strlen($d) === 10 || strlen($d) === 11) $d = '55' . $d;
       if (strlen($d) < 12) return;
       // Celular com e sem o 9º dígito (o WhatsApp de contas antigas informa sem o 9).
-      $cands = [$d];
-      if (strlen($d) === 13 && $d[4] === '9') $cands[] = substr($d, 0, 4) . substr($d, 5);
-      if (strlen($d) === 12 && in_array($d[4], ['6', '7', '8', '9'], true)) $cands[] = substr($d, 0, 4) . '9' . substr($d, 4);
+      $cands = whatsapp_bot_phone_candidates($d);
       $in = implode(',', array_fill(0, count($cands), '?'));
       $st = $pdo->prepare("SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND phone IN ($in) ORDER BY last_message_at DESC, id DESC LIMIT 1");
       $st->execute(array_merge([$owner], $cands));
