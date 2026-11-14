@@ -3924,6 +3924,15 @@ if (!function_exists('fiscal_xml_generate_entry')) {
       if ($pdo->inTransaction()) $pdo->rollBack();
       throw $e;
     }
+    // Vínculos conferidos nesta entrada passam a valer para as próximas notas do fornecedor
+    // (inclusive os sugeridos pelo agente de IA, que só viram regra depois da conferência).
+    try {
+      foreach (fiscal_xml_items($pdo, $companyId, $xmlId) as $linkItem) {
+        $linkProductId = (int)($linkItem['product_id'] ?? 0);
+        if ($linkProductId <= 0) continue;
+        fiscal_xml_save_product_link($pdo, $companyId, (string)($xml['supplier_doc'] ?? ''), (string)($linkItem['product_code'] ?? ''), (string)($linkItem['ean'] ?? ''), $linkProductId, fiscal_xml_parse_decimal($linkItem['conversion_factor'] ?? 1, 1.0), $xmlId, (int)$linkItem['id']);
+      }
+    } catch (Throwable $e) {}
     return $created;
   }
 }

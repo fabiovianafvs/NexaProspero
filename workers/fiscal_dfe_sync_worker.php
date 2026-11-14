@@ -10,6 +10,7 @@ $root = dirname(__DIR__);
 require_once $root . '/config/nexa_env.php';
 require $root . '/config/pdo.php';
 require_once $root . '/config/fiscal_operational.php';
+require_once $root . '/config/ia_entrada_notas.php';
 
 $options = getopt('', ['company::', 'max-companies::', 'max-batches::', 'force']);
 $companyId = max(0, (int)($options['company'] ?? 0));
@@ -61,12 +62,37 @@ foreach ($companyIds as $cid) {
     } catch (Throwable $e) {
         $errors++;
         fwrite(STDERR, '[ERRO] Empresa ' . $cid . ' | ' . $e->getMessage() . PHP_EOL);
+    }
+    // Agente de IA (modo automático): ciência e preparo das notas que acabaram de chegar.
+    try {
+        $ia = ia_entrada_run_auto($pdo, $cid);
+        if ($ia['notas'] > 0 || $ia['ciencia'] > 0) {
+            echo '[IA] Empresa ' . $cid . ' | ciência=' . $ia['ciencia'] . ' | notas preparadas=' . $ia['notas'] . ' | erros=' . $ia['erros'] . PHP_EOL;
+        }
+    } catch (Throwable $e) {
+        fwrite(STDERR, '[IA] Empresa ' . $cid . ' | ' . $e->getMessage() . PHP_EOL);
     } finally {
         try {
             $stRelease = $pdo->prepare('SELECT RELEASE_LOCK(?)');
             $stRelease->execute([$lockName]);
         } catch (Throwable $e) {
         }
+    }
+}
+
+// Agente de IA: empresas no modo automático que não buscaram agora (ex.: a busca foi
+// feita pelo botão do Radar) também têm as notas novas preparadas nesta passada.
+if ($companyId <= 0) {
+    try {
+        $iaCompanies = $pdo->query("SELECT company_id FROM app_config WHERE cfg_key='ia' AND cfg_json LIKE '%\"mode\":\"auto\"%'")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        foreach (array_diff(array_map('intval', $iaCompanies), $companyIds) as $iaCid) {
+            $ia = ia_entrada_run_auto($pdo, (int)$iaCid);
+            if ($ia['notas'] > 0 || $ia['ciencia'] > 0) {
+                echo '[IA] Empresa ' . $iaCid . ' | ciência=' . $ia['ciencia'] . ' | notas preparadas=' . $ia['notas'] . ' | erros=' . $ia['erros'] . PHP_EOL;
+            }
+        }
+    } catch (Throwable $e) {
+        fwrite(STDERR, '[IA] ' . $e->getMessage() . PHP_EOL);
     }
 }
 

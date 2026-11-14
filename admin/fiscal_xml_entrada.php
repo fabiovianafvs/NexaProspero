@@ -548,6 +548,56 @@ if ($err) echo '<div class="msg err">' . fiscal_h($err) . '</div>';
   </form>
 </div>
 
+<?php
+// Agente de IA: o que foi feito em cada item, para conferir antes de gerar a entrada.
+$iaRun = null;
+try {
+  require_once __DIR__ . '/../config/ia_entrada_notas.php';
+  $iaRun = ia_entrada_run_for_xml($pdo, $cid, $id);
+} catch (Throwable $e) {}
+if ($iaRun && in_array((string)$iaRun['status'], ['PRONTA', 'REVISAR', 'ERRO'], true)):
+  $iaRes = json_decode((string)($iaRun['details_json'] ?? ''), true) ?: [];
+  $iaGenerated = (string)($xml['status'] ?? '') === 'ENTRADA_GERADA';
+?>
+<style>
+.ia-card{border:1px solid #ddd6fe!important;background:linear-gradient(180deg,#faf8ff,#fff)!important}.ia-card h2{margin:0;color:#4c1d95}.ia-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.ia-sum{font-size:13px;color:#475569;margin-top:4px}
+.ia-items{display:grid;gap:6px;margin-top:10px}.ia-item{display:grid;grid-template-columns:34px minmax(180px,1.3fr) minmax(180px,1.2fr) minmax(220px,2fr);gap:10px;align-items:start;border:1px solid #ede9fe;border-radius:12px;padding:8px 10px;background:#fff;font-size:13px}
+.ia-item .n{font-weight:900;color:#64748b}.ia-item .xml b{color:#0b1f5b}.ia-item small{display:block;color:#64748b}.ia-tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:800;margin-bottom:3px}.ia-tag.ok{background:#dcfce7;color:#166534}.ia-tag.new{background:#ede9fe;color:#5b21b6}.ia-tag.warn{background:#fef3c7;color:#92400e}
+.ia-notes{margin:0;padding-left:16px;color:#334155}.ia-notes li{margin:1px 0}.ia-att{border-color:#fde68a;background:#fffdf5}
+@media(max-width:900px){.ia-item{grid-template-columns:28px 1fr}.ia-item>div:nth-child(n+3){grid-column:2}}
+</style>
+<div class="fiscal-card ia-card" id="iaEntrada">
+  <div class="ia-head">
+    <div>
+      <h2>✨ Preparado pelo agente de IA</h2>
+      <div class="ia-sum"><?= fiscal_h((string)($iaRun['summary'] ?? '')) ?> · <?= fiscal_h(date('d/m/Y H:i', strtotime((string)($iaRun['finished_at'] ?: $iaRun['started_at'])))) ?><?= !empty($iaRes['model']) && !empty($iaRes['ai_used']) ? ' · ' . fiscal_h(preg_replace('/\s*\(.*$/', '', (string)(ia_models()[(string)$iaRes['model']]['label'] ?? $iaRes['model']))) : '' ?></div>
+    </div>
+    <?php if (!$iaGenerated): ?><span class="fiscal-badge <?= $iaRun['status'] === 'PRONTA' ? '' : 'off' ?>"><?= $iaRun['status'] === 'PRONTA' ? 'Pronta para conferir' : ($iaRun['status'] === 'ERRO' ? 'Erro no preparo' : 'Confira os itens destacados') ?></span><?php endif; ?>
+  </div>
+  <?php if ($iaRun['status'] === 'ERRO'): ?><div class="msg err" style="margin-top:10px"><?= fiscal_h((string)($iaRun['error_message'] ?? '')) ?></div><?php endif; ?>
+  <?php if (!$iaGenerated && !empty($iaRes['items'])): ?>
+  <div class="fiscal-muted" style="margin-top:6px">Confira os vínculos, o fator, o CFOP e os preços abaixo; depois gere a entrada normalmente. Os vínculos escolhidos pela IA passam a valer para as próximas notas do fornecedor só depois que a entrada for gerada.</div>
+  <div class="ia-items">
+    <?php foreach ((array)$iaRes['items'] as $iaIt): [$iaLbl, $iaCls] = ia_entrada_result_label((string)($iaIt['result'] ?? '')); $iaAtt = !empty($iaIt['attention']) || ($iaIt['result'] ?? '') === 'revisar'; ?>
+    <div class="ia-item<?= $iaAtt ? ' ia-att' : '' ?>">
+      <div class="n"><?= (int)($iaIt['n'] ?? 0) ?></div>
+      <div class="xml"><b><?= fiscal_h((string)($iaIt['name'] ?? '')) ?></b><small><?= fiscal_h(rtrim(rtrim(number_format((float)($iaIt['qty'] ?? 0), 4, ',', '.'), '0'), ',') . ' ' . (string)($iaIt['unit'] ?? '')) ?> · R$ <?= number_format((float)($iaIt['landed'] ?? 0), 2, ',', '.') ?><?= ($iaIt['code'] ?? '') !== '' ? ' · cód. ' . fiscal_h((string)$iaIt['code']) : '' ?></small></div>
+      <div>
+        <span class="ia-tag <?= $iaCls ?>"><?= fiscal_h($iaLbl) ?><?= ($iaIt['result'] ?? '') === 'ia' ? ' · ' . (int)($iaIt['confidence'] ?? 0) . '%' : '' ?></span>
+        <?php if ((int)($iaIt['product_id'] ?? 0) > 0): ?><div><b>#<?= (int)$iaIt['product_id'] ?></b> <?= fiscal_h((string)($iaIt['product_name'] ?? '')) ?></div><?php elseif (!empty($iaIt['suggestion'])): ?><div>Sugestão: <b>#<?= (int)$iaIt['suggestion']['id'] ?></b> <?= fiscal_h((string)$iaIt['suggestion']['nome']) ?></div><?php endif; ?>
+        <small>Fator <?= fiscal_h(ia_entrada_factor_txt((float)($iaIt['factor'] ?? 1))) ?><?= abs((float)($iaIt['factor'] ?? 1) - (float)($iaIt['factor_old'] ?? 1)) > 0.0001 ? ' (era ' . fiscal_h(ia_entrada_factor_txt((float)$iaIt['factor_old'])) . ')' : '' ?> · CFOP <?= fiscal_h((string)($iaIt['cfop_from'] ?? '')) ?> → <?= fiscal_h((string)($iaIt['cfop_to'] ?? '')) ?><?= !empty($iaIt['rule']) ? ' (regra ' . fiscal_h((string)$iaIt['rule']) . ')' : '' ?></small>
+      </div>
+      <div>
+        <?php $iaNotes = (array)($iaIt['notes'] ?? []); if (!empty($iaIt['reason'])) array_unshift($iaNotes, (string)$iaIt['reason']); ?>
+        <?php if ($iaNotes): ?><ul class="ia-notes"><?php foreach ($iaNotes as $iaNote): ?><li><?= fiscal_h((string)$iaNote) ?></li><?php endforeach; ?></ul><?php else: ?><span class="fiscal-muted">—</span><?php endif; ?>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <?php elseif ($iaGenerated): ?><div class="fiscal-muted" style="margin-top:6px">A entrada desta nota já foi gerada.</div><?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="fiscal-card" id="itensXml">
   <div class="fiscal-list-head">
     <div>

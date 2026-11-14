@@ -620,6 +620,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'dd0f2bb44450a037aed7ac2fc5d03b9fbbdfa860293b23f5d0977d45b16e9e41',
         'order' => 202611130100,
       ],
+      [
+        'id' => '20261114_ia_agentes_v1',
+        'module' => 'ia_agentes',
+        'version' => 202611140100,
+        'label' => 'Agentes de IA',
+        'description' => 'Execuções dos agentes de IA (preparo da entrada de notas do Radar) e consumo da IA por empresa.',
+        'file' => __DIR__ . '/../db/20261114_ia_agentes_v1.sql',
+        'sha256' => '85941d4bd0b9104c015e246d780107369b889ef98c4148f567bc772419d5f22b',
+        'order' => 202611140100,
+      ],
     ];
   }
 }

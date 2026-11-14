@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require __DIR__ . '/_fiscal.php';
+require_once __DIR__ . '/../config/ia_entrada_notas.php';
 
 $cid = fiscal_v10_entry_company_id($pdo);
 $entryCrossContext = fiscal_v10_entry_is_cross_context($pdo);
@@ -25,6 +26,16 @@ try {
         . '. XMLs completos: ' . (int)($res['xmls_stored'] ?? 0)
         . '. Resumos: ' . (int)($res['summaries_stored'] ?? 0)
         . '. NSU: ' . (string)($res['last_nsu'] ?? '0') . '/' . (string)($res['max_nsu'] ?? '0') . '.';
+      // Agente de IA no modo automático: já prepara as primeiras notas novas.
+      try {
+        $iaCfgAuto = ia_config($pdo, $cid);
+        if ($iaCfgAuto['enabled'] && $iaCfgAuto['entrada']['enabled'] && $iaCfgAuto['entrada']['mode'] === 'auto' && ia_available($pdo, $cid, $iaCfgAuto)) {
+          @set_time_limit(300);
+          $iaDone = 0;
+          foreach (ia_entrada_pending_radar($pdo, $cid, $iaCfgAuto['entrada']['since'] ?: null, 3) as $iaRid) { ia_entrada_process_radar($pdo, $cid, $iaRid, 'auto', auth_user_id()); $iaDone++; }
+          if ($iaDone) $msg .= ' Agente de IA preparou ' . $iaDone . ' nota(s); as demais serão preparadas na próxima busca automática do Radar.';
+        }
+      } catch (Throwable $e) {}
       header('Location: ' . fiscal_v10_entry_context_url('fiscal_radar_xml.php?ok=' . rawurlencode($msg)));
       exit;
     }
@@ -47,6 +58,20 @@ try {
         . '. Resumos/eventos: ' . (int)($res['summaries_stored'] ?? 0)
         . '. Retorno: ' . trim((string)($res['status_code'] ?? '') . ' ' . (string)($res['status_message'] ?? '')) . '.';
       header('Location: ' . fiscal_v10_entry_context_url('fiscal_radar_xml.php?ok=' . rawurlencode($msg)));
+      exit;
+    }
+    if ($action === 'ia_preparar') {
+      // Agente de IA: só na empresa de login (o F11 não usa agentes).
+      if ($entryCrossContext) throw new RuntimeException('O agente de IA só prepara notas da empresa de login.');
+      $iaReason = ia_unavailable_reason($pdo, $cid);
+      if ($iaReason !== '') throw new RuntimeException($iaReason);
+      if (!ia_config($pdo, $cid)['entrada']['enabled']) throw new RuntimeException('Ligue o agente de entrada de notas em Configurações > Agentes de IA.');
+      @set_time_limit(300);
+      $run = ia_entrada_process_radar($pdo, $cid, (int)($_POST['radar_id'] ?? 0), 'manual', auth_user_id());
+      if (($run['status'] ?? '') === 'ERRO') throw new RuntimeException('O agente não conseguiu preparar a nota: ' . (string)($run['error_message'] ?? ''));
+      $xmlIdRun = (int)($run['xml_import_id'] ?? 0);
+      $target = $xmlIdRun > 0 ? 'fiscal_xml_entrada.php?id=' . $xmlIdRun . '&ok=' . rawurlencode('Nota preparada pelo agente de IA: ' . (string)($run['summary'] ?? '')) . '#iaEntrada' : 'fiscal_radar_xml.php?ok=' . rawurlencode((string)($run['summary'] ?? 'Nota analisada.'));
+      header('Location: ' . fiscal_v10_entry_context_url($target));
       exit;
     }
     if ($action === 'preparar_entrada_xml') {
@@ -119,6 +144,22 @@ try {
   }
 } catch (Throwable $e) { if ($err === '') $err = $e->getMessage(); }
 
+// Agente de IA: situação de cada nota e se o botão aparece.
+$iaOn = false;
+$iaRuns = [];
+try {
+  if (!$entryCrossContext && ia_ready($pdo) && ia_module_enabled($pdo, $cid)) {
+    $iaCfg = ia_config($pdo, $cid);
+    $iaOn = $iaCfg['enabled'] && $iaCfg['entrada']['enabled'];
+    $radarIds = array_map(static fn($r) => (int)$r['id'], $dfeRows);
+    if ($radarIds) {
+      $stIa = $pdo->prepare("SELECT ref_id, status, summary, xml_import_id FROM ai_agent_runs WHERE company_id=? AND agent='entrada_notas' AND ref_type='radar' AND ref_id IN (" . implode(',', array_fill(0, count($radarIds), '?')) . ')');
+      $stIa->execute(array_merge([$cid], $radarIds));
+      foreach ($stIa->fetchAll(PDO::FETCH_ASSOC) ?: [] as $iaRow) $iaRuns[(int)$iaRow['ref_id']] = $iaRow;
+    }
+  }
+} catch (Throwable $e) {}
+
 $dfeKpis = ['total'=>count($dfeRows), 'novos'=>0, 'completos'=>0, 'valor'=>0.0];
 foreach ($dfeRows as $row) {
   if (in_array((string)($row['radar_status'] ?? ''), ['NOVO','ANALISADO'], true)) $dfeKpis['novos']++;
@@ -149,6 +190,8 @@ if ($err) echo '<div class="msg err">' . fiscal_h(trim($err)) . '</div>';
   .radar-dfe-action-title{font-size:12px;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.02em;flex:1 1 240px;min-width:220px}
   .radar-dfe-action-buttons{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;width:auto;margin-left:auto}
   .radar-dfe-action-buttons form{display:inline-flex;margin:0}.radar-dfe-action-buttons .btn{white-space:nowrap}
+  .radar-ia-btn{background:#f5f3ff!important;border-color:#c4b5fd!important;color:#5b21b6!important;font-weight:800}
+  .radar-ia-chip{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;background:#ede9fe;color:#5b21b6}.radar-ia-chip.ok{background:#dcfce7;color:#166534}.radar-ia-chip.warn{background:#fef3c7;color:#92400e}.radar-ia-chip.err{background:#fee2e2;color:#991b1b}
   @media(max-width:900px){.radar-filters{display:grid;grid-template-columns:1fr}.radar-filters label,.radar-filters .radar-search{min-width:0;width:100%}.radar-filter-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;margin-left:0}.radar-filter-actions .btn{width:100%}.radar-dfe-action-panel{align-items:stretch;flex-direction:column}.radar-dfe-action-title{width:100%;min-width:0}.radar-dfe-action-buttons{width:100%;margin-left:0}.radar-dfe-action-buttons .btn{flex:1 1 160px;justify-content:center}}
 </style>
 <script>
@@ -228,7 +271,7 @@ function radarSolicitarJustificativa(form) {
       <td data-label="Origem"><?= fiscal_h($x['source'] ?? '') ?><?php if (!empty($x['dfe_nsu'])): ?><div class="fiscal-muted">NSU <?= fiscal_h($x['dfe_nsu']) ?></div><?php endif; ?></td>
       <td data-label="Emissão"><?= fiscal_h(fiscal_date_br(substr((string)($x['issue_datetime'] ?? ''),0,10))) ?></td>
       <td data-label="Total"><strong>R$ <?= number_format((float)($x['total_document'] ?? 0), 2, ',', '.') ?></strong></td>
-      <td data-label="Status"><span class="fiscal-badge <?= ($x['radar_status'] ?? '') === 'IMPORTADO' ? '' : 'off' ?>"><?= fiscal_h($x['radar_status'] ?? '') ?></span><?php if ($kind): ?><div class="fiscal-muted"><?= fiscal_h($kind) ?></div><?php endif; ?><?php if (!empty($x['manifest_status'])): ?><div class="fiscal-muted">Manifestação: <?= fiscal_h($x['manifest_status']) ?></div><?php endif; ?></td>
+      <td data-label="Status"><span class="fiscal-badge <?= ($x['radar_status'] ?? '') === 'IMPORTADO' ? '' : 'off' ?>"><?= fiscal_h($x['radar_status'] ?? '') ?></span><?php $iaRun = $iaRuns[(int)$x['id']] ?? null; if ($iaRun): [$iaLbl, $iaCls] = match ((string)$iaRun['status']) { 'PRONTA' => ['IA: pronta para conferir', 'ok'], 'REVISAR' => ['IA: conferir itens', 'warn'], 'PROCESSANDO' => ['IA: preparando…', ''], 'IGNORADA' => ['IA: já lançada', ''], default => ['IA: erro', 'err'] }; ?><div><span class="radar-ia-chip <?= $iaCls ?>" title="<?= fiscal_h($iaRun['summary'] ?? '') ?>"><?= fiscal_h($iaLbl) ?></span></div><?php endif; ?><?php if ($kind): ?><div class="fiscal-muted"><?= fiscal_h($kind) ?></div><?php endif; ?><?php if (!empty($x['manifest_status'])): ?><div class="fiscal-muted">Manifestação: <?= fiscal_h($x['manifest_status']) ?></div><?php endif; ?></td>
     </tr>
     <tr class="radar-dfe-action-row">
       <td colspan="6">
@@ -236,6 +279,7 @@ function radarSolicitarJustificativa(form) {
           <span class="radar-dfe-action-title">Ações da NF-e modelo <?= fiscal_h($x['model'] ?? '') ?> série <?= fiscal_h($x['series'] ?? '') ?> / nº <?= fiscal_h($x['document_number'] ?? '') ?></span>
           <div class="radar-dfe-action-buttons">
             <?php if ($hasXml): ?>
+              <?php if ($iaOn && !isset($iaRuns[(int)$x['id']])): ?><form method="post" onsubmit="const b=this.querySelector('button');b.disabled=true;b.textContent='Preparando com IA…'"><input type="hidden" name="action" value="ia_preparar"><input type="hidden" name="radar_id" value="<?= (int)$x['id'] ?>"><button class="btn btn-sm radar-ia-btn">✨ Preparar com IA</button></form><?php elseif ($iaOn && (int)($iaRuns[(int)$x['id']]['xml_import_id'] ?? 0) > 0): ?><a class="btn btn-sm radar-ia-btn" href="<?= fiscal_h(fiscal_v10_entry_context_url('fiscal_xml_entrada.php?id=' . (int)$iaRuns[(int)$x['id']]['xml_import_id'] . '#iaEntrada')) ?>">✨ Ver preparo da IA</a><?php endif; ?>
               <form method="post"><input type="hidden" name="action" value="preparar_entrada_xml"><input type="hidden" name="radar_id" value="<?= (int)$x['id'] ?>"><button class="btn btn-primary btn-sm">Conferir entrada</button></form>
             <?php else: ?>
               <?php if ($entryCrossContext): ?>
