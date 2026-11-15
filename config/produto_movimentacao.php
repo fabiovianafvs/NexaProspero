@@ -35,16 +35,21 @@ if (!function_exists('produto_movimentacao_origin_label')) {
 }
 
 if (!function_exists('produto_movimentacao_data')) {
-  function produto_movimentacao_data(PDO $pdo, int $companyId, int $productId, int $limit = 100, int $offset = 0): array {
-    $out = ['rows' => [], 'more' => false, 'has_user' => false];
+  /** $from/$to: período (AAAA-MM-DD, inclusive). Sem período: últimos 90 dias. */
+  function produto_movimentacao_data(PDO $pdo, int $companyId, int $productId, int $limit = 100, int $offset = 0, string $from = '', string $to = ''): array {
+    $isDate = static fn(string $d) => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
+    if (!$isDate($to)) $to = date('Y-m-d');
+    if (!$isDate($from)) $from = date('Y-m-d', strtotime($to . ' -90 days'));
+    if ($from > $to) [$from, $to] = [$to, $from];
+    $out = ['rows' => [], 'more' => false, 'has_user' => false, 'from' => $from, 'to' => $to];
     if ($productId <= 0 || !fiscal_table_exists($pdo, 'estoque_movimentos')) return $out;
     $has = static fn(string $c) => fiscal_column_exists($pdo, 'estoque_movimentos', $c);
     $cols = 'm.id, m.tipo, m.origem_tipo, m.origem_id, m.qtd, m.saldo_anterior, m.saldo_posterior, m.observacao, m.created_at';
     foreach (['custo_unitario', 'custo_medio_posterior', 'usuario_id'] as $c) if ($has($c)) $cols .= ', m.' . $c;
     $out['has_user'] = $has('usuario_id');
     $limit = max(1, min(300, $limit));
-    $st = $pdo->prepare("SELECT $cols FROM estoque_movimentos m WHERE m.company_id = ? AND m.produto_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT " . ($limit + 1) . ' OFFSET ' . max(0, $offset));
-    $st->execute([$companyId, $productId]);
+    $st = $pdo->prepare("SELECT $cols FROM estoque_movimentos m WHERE m.company_id = ? AND m.produto_id = ? AND m.created_at >= ? AND m.created_at < ? ORDER BY m.created_at DESC, m.id DESC LIMIT " . ($limit + 1) . ' OFFSET ' . max(0, $offset));
+    $st->execute([$companyId, $productId, $from . ' 00:00:00', date('Y-m-d', strtotime($to . ' +1 day')) . ' 00:00:00']);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     if (count($rows) > $limit) { $out['more'] = true; array_pop($rows); }
 

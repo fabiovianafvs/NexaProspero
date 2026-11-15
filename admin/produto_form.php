@@ -78,7 +78,7 @@ if (isset($_GET['movimentacao']) && $_SERVER['REQUEST_METHOD'] === 'GET') {
   require_once __DIR__ . '/../config/produto_movimentacao.php';
   header('Content-Type: application/json; charset=utf-8');
   try {
-    echo json_encode(['ok' => true] + produto_movimentacao_data($pdo, (int)$productStockCompanyId, $id, 100, max(0, (int)($_GET['offset'] ?? 0))), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(['ok' => true] + produto_movimentacao_data($pdo, (int)$productStockCompanyId, $id, 100, max(0, (int)($_GET['offset'] ?? 0)), (string)($_GET['de'] ?? ''), (string)($_GET['ate'] ?? '')), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   } catch (Throwable $e) {
     echo json_encode(['ok' => false, 'error' => 'Não foi possível carregar a movimentação deste produto.'], JSON_UNESCAPED_UNICODE);
   }
@@ -1847,7 +1847,7 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
 .product-suppliers-sub{margin:4px 0 6px;font-size:11px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.03em}.product-suppliers-sub.next{margin-top:16px}.product-info-note{font-size:11px;color:#64748b;margin:0 0 10px}
 .product-suppliers-wrap{overflow:auto;border:1px solid #dbeafe;border-radius:14px;background:#fff}.product-suppliers-table{width:100%;border-collapse:collapse;font-size:12px}.product-suppliers-table th{background:#f1f5ff;color:#475569;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:8px;white-space:nowrap;position:sticky;top:0}.product-suppliers-table td{padding:8px;border-top:1px solid #eef4ff;vertical-align:top}.product-suppliers-table td.num,.product-suppliers-table th.num{text-align:right;white-space:nowrap}.product-suppliers-table small{display:block;color:#64748b}.product-suppliers-table b{color:#0b1f5b}
 .product-suppliers-var{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;font-size:10.5px;font-weight:900}.product-suppliers-var.up{background:#fee2e2;color:#991b1b}.product-suppliers-var.down{background:#dcfce7;color:#166534}.product-suppliers-var.eq{background:#e2e8f0;color:#475569}
-.product-mov-type{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:900}.product-mov-type.in{background:#dcfce7;color:#166534}.product-mov-type.out{background:#fee2e2;color:#991b1b}.product-mov-qty.in{color:#166534;font-weight:900}.product-mov-qty.out{color:#b91c1c;font-weight:900}.product-mov-more{display:flex;justify-content:center;margin-top:10px}
+.product-mov-type{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:900}.product-mov-type.in{background:#dcfce7;color:#166534}.product-mov-type.out{background:#fee2e2;color:#991b1b}.product-mov-qty.in{color:#166534;font-weight:900}.product-mov-qty.out{color:#b91c1c;font-weight:900}.product-mov-more{display:flex;justify-content:center;margin-top:10px}.product-mov-filter{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid #dbeafe;border-radius:14px;background:#f8fbff}.product-mov-filter label{display:grid;gap:3px;font-size:11px;font-weight:800;color:#475569}.product-mov-filter input{height:34px;border:1px solid #cbd5e1;border-radius:9px;padding:0 8px;font:inherit;width:auto}.product-mov-filter span{margin-left:auto;font-size:12px;color:#64748b;align-self:center}@media(max-width:760px){.product-mov-filter span{margin-left:0;width:100%}}
 @media(max-width:760px){.product-info-backdrop{padding-top:0!important}.product-suppliers-table thead{display:none}.product-suppliers-table tr{display:block;border-top:1px solid #e2e8f0;padding:6px 0}.product-suppliers-table td{display:flex;justify-content:space-between;gap:10px;border:0;padding:3px 10px;text-align:right}.product-suppliers-table td::before{content:attr(data-label);font-weight:800;color:#64748b;text-align:left}}
 .product-main-line,.product-secondary-line,.product-commercial-line,.product-flags-panel,.product-stock-panel{grid-column:1/-1}
 .product-main-line{display:grid;grid-template-columns:minmax(110px,.55fr) minmax(290px,1.45fr) minmax(240px,2fr) minmax(90px,.55fr) minmax(120px,.65fr);gap:10px;align-items:end}
@@ -2700,9 +2700,9 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
   const variation=v=>{if(v===null||v===undefined)return'';const c=v>0.05?'up':(v<-0.05?'down':'eq');return '<span class="product-suppliers-var '+c+'" title="Em relação à compra anterior do mesmo fornecedor">'+(v>0?'▲ ':v<0?'▼ ':'')+brl(Math.abs(v),1)+'%</span>';};
   const kinds={
     fornecedores:{title:'Fornecedores e compras',sub:'Custo completo por unidade de estoque: produto + IPI, ST e FCP-ST + frete, seguro e outras despesas − desconto.'},
-    movimentacao:{title:'Movimentação de estoque',sub:'Vendas, entradas, devoluções, acertos e demais movimentos, do mais recente para o mais antigo.'}
+    movimentacao:{title:'Movimentação de estoque',sub:'Vendas, entradas, devoluções, acertos e demais movimentos do período, do mais recente para o mais antigo.'}
   };
-  let current='',cache={},movRows=[],movMore=false,movHasUser=false,loading=false,lastFocus=null;
+  let current='',cache={},movRows=[],movMore=false,movHasUser=false,movFrom='',movTo='',loading=false,lastFocus=null;
 
   function renderSuppliers(d){
     if(!d.suppliers.length&&!d.purchases.length)return '<div class="product-suppliers-empty">Nenhuma compra deste produto por entrada de NF-e ainda.</div>';
@@ -2735,9 +2735,14 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
     }
     return h;
   }
+  function movFilter(){
+    return '<form class="product-mov-filter" data-mov-filter><label>De<input type="date" name="de" value="'+esc(movFrom)+'" required></label><label>Até<input type="date" name="ate" value="'+esc(movTo)+'" required></label>'
+      +'<button class="btn btn-primary btn-sm" type="submit">Filtrar</button><button class="btn btn-sm" type="button" data-mov-90>Últimos 90 dias</button>'
+      +'<span>'+movRows.length+' movimento(s)'+(movMore?' · há mais':'')+'</span></form>';
+  }
   function renderMovements(){
-    if(!movRows.length)return '<div class="product-suppliers-empty">Nenhuma movimentação de estoque deste produto ainda.</div>';
-    let h='<div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data/hora</th><th>Operação</th><th>Pessoa</th><th>Tipo</th><th class="num">Quantidade</th><th class="num">Custo / venda</th><th class="num">Saldo</th><th>Usuário</th></tr></thead><tbody>';
+    if(!movRows.length)return movFilter()+'<div class="product-suppliers-empty">Nenhuma movimentação de estoque deste produto no período.</div>';
+    let h=movFilter()+'<div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data/hora</th><th>Operação</th><th>Pessoa</th><th>Tipo</th><th class="num">Quantidade</th><th class="num">Custo / venda</th><th class="num">Saldo</th><th>Usuário</th></tr></thead><tbody>';
     movRows.forEach(r=>{
       const io=r.type==='entrada'?'in':'out';
       h+='<tr><td data-label="Data/hora" style="white-space:nowrap">'+dtime(r.date)+'</td>'
@@ -2759,12 +2764,12 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
     if(loading)return;
     if(!force&&!append&&cache[kind]!==undefined){body.innerHTML=cache[kind];return;}
     loading=true;
-    if(!append)body.innerHTML='<div class="product-suppliers-empty">Carregando…</div>';
+    if(!append)body.innerHTML=(kind==='movimentacao'?movFilter():'')+'<div class="product-suppliers-empty">Carregando…</div>';
     const base=modal.dataset['url'+kind.charAt(0).toUpperCase()+kind.slice(1)];
-    const url=kind==='movimentacao'?base+'&offset='+(append?movRows.length:0):base;
+    const url=kind==='movimentacao'?base+'&offset='+(append?movRows.length:0)+(movFrom?'&de='+encodeURIComponent(movFrom):'')+(movTo?'&ate='+encodeURIComponent(movTo):''):base;
     fetchJson(url).then(d=>{
       let html;
-      if(kind==='movimentacao'){movRows=append?movRows.concat(d.rows):d.rows;movMore=!!d.more;movHasUser=!!d.has_user;html=renderMovements();}
+      if(kind==='movimentacao'){movRows=append?movRows.concat(d.rows):d.rows;movMore=!!d.more;movHasUser=!!d.has_user;movFrom=d.from||movFrom;movTo=d.to||movTo;html=renderMovements();}
       else html=renderSuppliers(d);
       cache[kind]=html;
       if(current===kind)body.innerHTML=html;
@@ -2784,6 +2789,11 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
     if(e.target===modal||e.target.closest('[data-info-close]'))close();
     else if(e.target.closest('[data-info-refresh]')&&current)load(current,true,false);
     else if(e.target.closest('[data-mov-more]')){e.target.closest('[data-mov-more]').disabled=true;load('movimentacao',false,true);}
+    else if(e.target.closest('[data-mov-90]')){movFrom='';movTo='';load('movimentacao',true,false);}
+  });
+  modal.addEventListener('submit',e=>{
+    const f=e.target.closest('[data-mov-filter]');if(!f)return;
+    e.preventDefault();movFrom=f.elements.de.value;movTo=f.elements.ate.value;load('movimentacao',true,false);
   });
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)close();});
 })();
