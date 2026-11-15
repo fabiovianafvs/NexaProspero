@@ -295,6 +295,12 @@ try {
       exit;
     }
     if ($action === 'generate_entry') {
+      // Produto/fator alterados na tabela de itens sem "Salvar vínculos e fatores":
+      // grava antes de revisar preços e gerar a entrada.
+      $genXml = fiscal_xml_get($pdo, $cid, $id);
+      if (!empty($_POST['save_links_first']) && !empty($_POST['conversion_factor']) && $genXml && (string)($genXml['status'] ?? '') !== 'ENTRADA_GERADA') {
+        fiscal_xml_save_item_links($pdo, $cid, $id, $_POST);
+      }
       $operationId = (int)($_POST['operation_id'] ?? 0);
       $opCheck = fiscal_operation($pdo, $cid, $operationId);
       if (!$opCheck || (int)($opCheck['is_active'] ?? 0) !== 1 || (string)($opCheck['direction'] ?? '') !== 'ENTRADA') {
@@ -558,6 +564,8 @@ try {
 if ($iaRun && in_array((string)$iaRun['status'], ['PRONTA', 'REVISAR', 'ERRO'], true)):
   $iaRes = json_decode((string)($iaRun['details_json'] ?? ''), true) ?: [];
   $iaGenerated = (string)($xml['status'] ?? '') === 'ENTRADA_GERADA';
+  $iaCurrent = [];
+  foreach (fiscal_xml_items($pdo, $cid, $id) as $iaCurItem) $iaCurrent[(int)$iaCurItem['id']] = $iaCurItem;
 ?>
 <style>
 .ia-card{border:1px solid #ddd6fe!important;background:linear-gradient(180deg,#faf8ff,#fff)!important}.ia-card h2{margin:0;color:#4c1d95}.ia-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.ia-sum{font-size:13px;color:#475569;margin-top:4px}
@@ -585,7 +593,8 @@ if ($iaRun && in_array((string)$iaRun['status'], ['PRONTA', 'REVISAR', 'ERRO'], 
       <div>
         <span class="ia-tag <?= $iaCls ?>"><?= fiscal_h($iaLbl) ?><?= ($iaIt['result'] ?? '') === 'ia' ? ' · ' . (int)($iaIt['confidence'] ?? 0) . '%' : '' ?></span>
         <?php if ((int)($iaIt['product_id'] ?? 0) > 0): ?><div><b>#<?= (int)$iaIt['product_id'] ?></b> <?= fiscal_h((string)($iaIt['product_name'] ?? '')) ?></div><?php elseif (!empty($iaIt['suggestion'])): ?><div>Sugestão: <b>#<?= (int)$iaIt['suggestion']['id'] ?></b> <?= fiscal_h((string)$iaIt['suggestion']['nome']) ?></div><?php endif; ?>
-        <small>Fator <?= fiscal_h(ia_entrada_factor_txt((float)($iaIt['factor'] ?? 1))) ?><?= abs((float)($iaIt['factor'] ?? 1) - (float)($iaIt['factor_old'] ?? 1)) > 0.0001 ? ' (era ' . fiscal_h(ia_entrada_factor_txt((float)$iaIt['factor_old'])) . ')' : '' ?> · CFOP <?= fiscal_h((string)($iaIt['cfop_from'] ?? '')) ?> → <?= fiscal_h((string)($iaIt['cfop_to'] ?? '')) ?><?= !empty($iaIt['rule']) ? ' (regra ' . fiscal_h((string)$iaIt['rule']) . ')' : '' ?></small>
+        <?php $iaNowFactor = (float)($iaCurrent[(int)($iaIt['item_id'] ?? 0)]['conversion_factor'] ?? ($iaIt['factor'] ?? 1)); $iaAiFactor = (float)($iaIt['factor'] ?? 1); ?>
+        <small>Fator <?= fiscal_h(ia_entrada_factor_txt($iaNowFactor)) ?><?= abs($iaNowFactor - $iaAiFactor) > 0.0001 ? ' (IA sugeriu ' . fiscal_h(ia_entrada_factor_txt($iaAiFactor)) . ')' : (abs($iaAiFactor - (float)($iaIt['factor_old'] ?? 1)) > 0.0001 ? ' (era ' . fiscal_h(ia_entrada_factor_txt((float)$iaIt['factor_old'])) . ')' : '') ?> · CFOP <?= fiscal_h((string)($iaIt['cfop_from'] ?? '')) ?> → <?= fiscal_h((string)($iaIt['cfop_to'] ?? '')) ?><?= !empty($iaIt['rule']) ? ' (regra ' . fiscal_h((string)$iaIt['rule']) . ')' : '' ?></small>
       </div>
       <div>
         <?php $iaNotes = (array)($iaIt['notes'] ?? []); if (!empty($iaIt['reason'])) array_unshift($iaNotes, (string)$iaIt['reason']); ?>
@@ -1730,6 +1739,16 @@ if ($iaRun && in_array((string)$iaRun['status'], ['PRONTA', 'REVISAR', 'ERRO'], 
   const generateForm=document.getElementById('generateEntryForm');
   if(generateForm){
     generateForm.addEventListener('submit',function(e){
+      // Leva junto o que foi alterado na tabela de itens (produto e fator), mesmo sem
+      // clicar em "Salvar vínculos e fatores"; o servidor grava antes de gerar.
+      generateForm.querySelectorAll('.xml-items-copy').forEach(function(n){n.remove();});
+      const itemsForm=document.getElementById('xmlItensForm');
+      if(itemsForm){
+        itemsForm.querySelectorAll('input[name^="conversion_factor["],input[name^="item_product_id["],input[name^="item_product_search["]').forEach(function(src){
+          const h=document.createElement('input');h.type='hidden';h.name=src.name;h.value=src.value;h.className='xml-items-copy';generateForm.appendChild(h);
+        });
+        const flag=document.createElement('input');flag.type='hidden';flag.name='save_links_first';flag.value='1';flag.className='xml-items-copy';generateForm.appendChild(flag);
+      }
       const enabled=document.getElementById('enablePricingScreen');
       if(enabled&&enabled.checked)return;
       const message=<?= json_encode($entryAllowFinance ? 'Gerar a entrada agora, atualizar o custo completo da nota e manter o preço de venda atual?' : 'Gerar a entrada de mercadoria agora, atualizar o custo completo da nota e manter o preço de venda atual?', JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
