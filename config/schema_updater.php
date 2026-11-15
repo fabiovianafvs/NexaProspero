@@ -630,6 +630,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '85941d4bd0b9104c015e246d780107369b889ef98c4148f567bc772419d5f22b',
         'order' => 202611140100,
       ],
+      [
+        'id' => '20261115_estoque_mov_usuario_v1',
+        'module' => 'estoque',
+        'version' => 202611150100,
+        'label' => 'Estoque - usuário da movimentação',
+        'description' => 'Grava o usuário do painel que fez cada movimento de estoque (venda, entrada, acerto...), mostrado na aba Movimentação de estoque do produto.',
+        'file' => __DIR__ . '/../db/20261115_estoque_mov_usuario_v1.sql',
+        'sha256' => 'cce9c73b931192500bad788da282650cbcee8ad9d11f22e89dcd6667684b9ac3',
+        'order' => 202611150100,
+      ],
     ];
   }
 }

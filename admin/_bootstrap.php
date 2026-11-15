@@ -9,6 +9,19 @@ require_once __DIR__ . '/../config/access_control.php';
 
 require_company_admin(COMPANY_ID);
 
+// Movimentação de estoque: ao fim de cada POST (toda gravação é POST), marca o
+// usuário logado nos movimentos de estoque criados nesta requisição.
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($pdo) && $pdo instanceof PDO && function_exists('auth_user_id')) {
+  $nexaStockUserId = (int)(auth_user_id() ?? 0);
+  if ($nexaStockUserId > 0) {
+    require_once __DIR__ . '/../config/stock_movement_user.php';
+    $nexaStockReqStart = microtime(true);
+    register_shutdown_function(static function () use ($pdo, $nexaStockUserId, $nexaStockReqStart): void {
+      stock_movements_stamp_user($pdo, $nexaStockUserId, $nexaStockReqStart);
+    });
+  }
+}
+
 $page = basename($_SERVER['PHP_SELF'] ?? '');
 $pageLower = strtolower($page);
 

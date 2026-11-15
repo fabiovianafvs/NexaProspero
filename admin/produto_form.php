@@ -73,6 +73,17 @@ if (isset($_GET['fornecedores']) && $_SERVER['REQUEST_METHOD'] === 'GET') {
   }
   exit;
 }
+// Aba Movimentação de estoque (carregada só quando a aba é aberta).
+if (isset($_GET['movimentacao']) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+  require_once __DIR__ . '/../config/produto_movimentacao.php';
+  header('Content-Type: application/json; charset=utf-8');
+  try {
+    echo json_encode(['ok' => true] + produto_movimentacao_data($pdo, (int)$productStockCompanyId, $id, 100, max(0, (int)($_GET['offset'] ?? 0))), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  } catch (Throwable $e) {
+    echo json_encode(['ok' => false, 'error' => 'Não foi possível carregar a movimentação deste produto.'], JSON_UNESCAPED_UNICODE);
+  }
+  exit;
+}
 $erro = '';
 $msg = '';
 if (isset($_GET['saved'])) {
@@ -1070,7 +1081,7 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
       <?php if ($productOrderOptionsEnabled): ?><a href="#adicionaisProduto">Adicionais</a><?php endif; ?>
       <?php if ($technicalConfigEnabled): ?><a href="#abaFichaTecnicaProduto">Ficha Técnica</a><?php endif; ?>
       <?php if ($fiscalEnabled): ?><a href="#abaFiscalProduto">Fiscal</a><?php endif; ?>
-      <?php if ((int)$id > 0): ?><a href="#fornecedoresProduto" data-load-suppliers>Fornecedores</a><?php endif; ?>
+      <?php if ((int)$id > 0): ?><a href="#" data-product-info="fornecedores">Fornecedores</a><a href="#" data-product-info="movimentacao">Movimentação de estoque</a><?php endif; ?>
     </div>
     <div class="form-grid" id="dadosProduto">
       <div class="product-main-line">
@@ -1717,16 +1728,6 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
         </div>
       </div>
 
-      <?php if ((int)$id > 0): ?>
-      <div class="product-suppliers-panel" id="fornecedoresProduto" data-suppliers-url="produto_form.php?fornecedores=1&amp;id=<?= (int)$id ?>">
-        <div class="product-suppliers-head">
-          <div><strong>Fornecedores e compras</strong><span>Compras pelas entradas de NF-e. Custo completo por unidade de estoque: valor do produto + IPI, ST e FCP-ST + frete, seguro e outras despesas − desconto.</span></div>
-          <button class="btn btn-sm" type="button" data-load-suppliers>Atualizar</button>
-        </div>
-        <div data-suppliers-body class="product-suppliers-empty">Abra a aba Fornecedores para carregar as compras deste produto.</div>
-      </div>
-      <?php endif; ?>
-
       <div class="actions right product-form-actions" style="grid-column:1/-1;">
         <div class="actions-right">
           <a class="btn" href="produtos.php">Cancelar</a>
@@ -1747,6 +1748,19 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
       </form>
     <?php endif; ?>
   </div>
+
+  <?php if ((int)$id > 0): ?>
+  <div class="product-modal-backdrop product-info-backdrop" id="productInfoModal" hidden aria-hidden="true"
+       data-url-fornecedores="produto_form.php?fornecedores=1&amp;id=<?= (int)$id ?>" data-url-movimentacao="produto_form.php?movimentacao=1&amp;id=<?= (int)$id ?>">
+    <div class="product-modal product-info-dialog" role="dialog" aria-modal="true" aria-labelledby="productInfoTitle">
+      <div class="product-modal-head">
+        <div><strong id="productInfoTitle"></strong><span id="productInfoSub"></span></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-sm" type="button" data-info-refresh>Atualizar</button><button class="btn btn-sm" type="button" data-info-close>Fechar</button></div>
+      </div>
+      <div class="product-modal-body" id="productInfoBody"></div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="product-modal-backdrop" id="productLookupModal" hidden aria-hidden="true">
     <div class="product-modal" role="dialog" aria-modal="true" aria-labelledby="productLookupTitle">
@@ -1828,12 +1842,13 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
 <style>
 .product-composition-panel{grid-column:1/-1;border:1px solid #c7d7f2;border-radius:18px;background:#f8fbff;padding:14px}.product-composition-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}.product-composition-head>div:first-child strong{display:block;color:#0b1f5b;font-size:15px}.product-composition-head>div:first-child span{display:block;color:#64748b;font-size:11px;margin-top:3px;max-width:850px}.product-composition-stock-summary{min-width:210px;border:1px solid #dbeafe;border-radius:14px;background:#fff;padding:9px 12px;display:grid;gap:2px}.product-composition-stock-summary small{font-size:10px;color:#64748b;font-weight:800}.product-composition-stock-summary b{font-size:18px;color:#0b1f5b}.product-composition-flags{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.product-composition-explanation{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:12px}.product-composition-settings{display:grid;grid-template-columns:minmax(220px,360px);margin-bottom:12px}.product-composition-table-wrap{overflow:auto;border:1px solid #dbeafe;border-radius:14px;background:#fff}.product-composition-table{width:100%;border-collapse:collapse;min-width:760px}.product-composition-table th,.product-composition-table td{padding:9px;border-bottom:1px solid #eef4ff;text-align:left;vertical-align:middle}.product-composition-table th{background:#f1f5ff;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em}.product-composition-table tbody tr:last-child td{border-bottom:0}.product-composition-table th:nth-child(1){width:46%}.product-composition-table th:nth-child(2){width:22%}.product-composition-table th:nth-child(3){width:20%}.composition-material-stock{font-size:12px;font-weight:850;color:#334155}.product-composition-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}@media(max-width:760px){.product-composition-head{display:grid}.product-composition-stock-summary{min-width:0}.product-composition-settings{grid-template-columns:1fr}}
 .options-builder{display:grid;gap:14px}
-.product-suppliers-panel{grid-column:1/-1;border:1px solid #dbe4f0;border-radius:18px;background:#f8fbff;padding:12px;scroll-margin-top:150px}.product-suppliers-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}.product-suppliers-head strong{display:block;color:#0b1f5b;font-size:15px}.product-suppliers-head span{display:block;color:#64748b;font-size:11px;margin-top:2px;max-width:900px}
-.product-suppliers-empty{padding:14px;border:1px dashed #cbd5e1;border-radius:14px;background:#fff;color:#64748b;font-size:13px;text-align:center}
-.product-suppliers-sub{margin:14px 0 6px;font-size:11px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.03em}
-.product-suppliers-wrap{overflow:auto;border:1px solid #dbeafe;border-radius:14px;background:#fff}.product-suppliers-table{width:100%;border-collapse:collapse;font-size:12px}.product-suppliers-table th{background:#f1f5ff;color:#475569;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:8px;white-space:nowrap}.product-suppliers-table td{padding:8px;border-top:1px solid #eef4ff;vertical-align:top}.product-suppliers-table td.num,.product-suppliers-table th.num{text-align:right;white-space:nowrap}.product-suppliers-table small{display:block;color:#64748b}.product-suppliers-table b{color:#0b1f5b}
+.product-info-backdrop{align-items:flex-start!important;padding-top:3vh!important}.product-info-dialog{width:min(1320px,97vw)!important;max-height:92vh!important}.product-info-dialog .product-modal-body{display:block}
+.product-suppliers-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:14px;background:#fff;color:#64748b;font-size:13px;text-align:center}
+.product-suppliers-sub{margin:4px 0 6px;font-size:11px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.03em}.product-suppliers-sub.next{margin-top:16px}.product-info-note{font-size:11px;color:#64748b;margin:0 0 10px}
+.product-suppliers-wrap{overflow:auto;border:1px solid #dbeafe;border-radius:14px;background:#fff}.product-suppliers-table{width:100%;border-collapse:collapse;font-size:12px}.product-suppliers-table th{background:#f1f5ff;color:#475569;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:8px;white-space:nowrap;position:sticky;top:0}.product-suppliers-table td{padding:8px;border-top:1px solid #eef4ff;vertical-align:top}.product-suppliers-table td.num,.product-suppliers-table th.num{text-align:right;white-space:nowrap}.product-suppliers-table small{display:block;color:#64748b}.product-suppliers-table b{color:#0b1f5b}
 .product-suppliers-var{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;font-size:10.5px;font-weight:900}.product-suppliers-var.up{background:#fee2e2;color:#991b1b}.product-suppliers-var.down{background:#dcfce7;color:#166534}.product-suppliers-var.eq{background:#e2e8f0;color:#475569}
-@media(max-width:760px){.product-suppliers-head{flex-direction:column}.product-suppliers-table thead{display:none}.product-suppliers-table tr{display:block;border-top:1px solid #e2e8f0;padding:6px 0}.product-suppliers-table td{display:flex;justify-content:space-between;gap:10px;border:0;padding:3px 10px;text-align:right}.product-suppliers-table td::before{content:attr(data-label);font-weight:800;color:#64748b;text-align:left}.product-suppliers-table td.num{text-align:right}}
+.product-mov-type{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:900}.product-mov-type.in{background:#dcfce7;color:#166534}.product-mov-type.out{background:#fee2e2;color:#991b1b}.product-mov-qty.in{color:#166534;font-weight:900}.product-mov-qty.out{color:#b91c1c;font-weight:900}.product-mov-more{display:flex;justify-content:center;margin-top:10px}
+@media(max-width:760px){.product-info-backdrop{padding-top:0!important}.product-suppliers-table thead{display:none}.product-suppliers-table tr{display:block;border-top:1px solid #e2e8f0;padding:6px 0}.product-suppliers-table td{display:flex;justify-content:space-between;gap:10px;border:0;padding:3px 10px;text-align:right}.product-suppliers-table td::before{content:attr(data-label);font-weight:800;color:#64748b;text-align:left}}
 .product-main-line,.product-secondary-line,.product-commercial-line,.product-flags-panel,.product-stock-panel{grid-column:1/-1}
 .product-main-line{display:grid;grid-template-columns:minmax(110px,.55fr) minmax(290px,1.45fr) minmax(240px,2fr) minmax(90px,.55fr) minmax(120px,.65fr);gap:10px;align-items:end}
 .product-secondary-line{display:grid;grid-template-columns:minmax(110px,.55fr) minmax(260px,1.6fr) minmax(130px,.7fr) minmax(280px,1.6fr);gap:10px;align-items:end}
@@ -2669,20 +2684,28 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
 
 <script>
 (function(){
-  const panel=document.getElementById('fornecedoresProduto');
-  if(!panel)return;
-  const body=panel.querySelector('[data-suppliers-body]');
+  const modal=document.getElementById('productInfoModal');
+  if(!modal)return;
+  const body=document.getElementById('productInfoBody'),title=document.getElementById('productInfoTitle'),sub=document.getElementById('productInfoSub');
   const unit=<?= json_encode((string)($produto['unidade_estoque'] ?? ''), JSON_UNESCAPED_UNICODE) ?>||'un.';
+  const productName=<?= json_encode((string)($produto['nome'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const brl=(v,d)=>Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d??2,maximumFractionDigits:d??2});
+  const money=v=>'R$ '+brl(v,4).replace(/0{1,2}$/,'');
   const num=v=>Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:4});
   const dt=v=>{if(!v)return'—';const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:esc(v);};
+  const dtime=v=>{const m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]+' '+m[4]+':'+m[5]:dt(v);};
   const doc=v=>{v=String(v||'');return v.length===14?v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5'):(v.length===11?v.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/,'$1.$2.$3-$4'):v);};
-  const nf=p=>p.xml_id?'<a href="fiscal_xml_entrada.php?id='+p.xml_id+'" target="_blank" rel="noopener">NF '+esc(p.nf)+'</a>':'—';
+  const link=(href,txt)=>href?'<a href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(txt)+'</a>':esc(txt);
   const variation=v=>{if(v===null||v===undefined)return'';const c=v>0.05?'up':(v<-0.05?'down':'eq');return '<span class="product-suppliers-var '+c+'" title="Em relação à compra anterior do mesmo fornecedor">'+(v>0?'▲ ':v<0?'▼ ':'')+brl(Math.abs(v),1)+'%</span>';};
-  let loaded=false,loading=false;
-  function render(d){
-    if(!d.suppliers.length&&!d.purchases.length){body.className='product-suppliers-empty';body.innerHTML='Nenhuma compra deste produto por entrada de NF-e ainda.';return;}
+  const kinds={
+    fornecedores:{title:'Fornecedores e compras',sub:'Custo completo por unidade de estoque: produto + IPI, ST e FCP-ST + frete, seguro e outras despesas − desconto.'},
+    movimentacao:{title:'Movimentação de estoque',sub:'Vendas, entradas, devoluções, acertos e demais movimentos, do mais recente para o mais antigo.'}
+  };
+  let current='',cache={},movRows=[],movMore=false,movHasUser=false,loading=false,lastFocus=null;
+
+  function renderSuppliers(d){
+    if(!d.suppliers.length&&!d.purchases.length)return '<div class="product-suppliers-empty">Nenhuma compra deste produto por entrada de NF-e ainda.</div>';
     let h='<div class="product-suppliers-sub">Fornecedores</div><div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Código</th><th>Fornecedor</th><th>Código do produto no fornecedor</th><th class="num">Fator</th><th>Unidade</th><th class="num">Último custo / '+esc(unit)+'</th><th>Última compra</th><th class="num">Compras</th></tr></thead><tbody>';
     d.suppliers.forEach(s=>{
       h+='<tr><td data-label="Código">'+(s.supplier_code?'<b>'+esc(s.supplier_code)+'</b>':'—')+'</td>'
@@ -2690,39 +2713,79 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
         +'<td data-label="Cód. no fornecedor">'+(s.codes.length?esc(s.codes.join(', ')):'—')+'</td>'
         +'<td class="num" data-label="Fator">'+num(s.factor)+'</td>'
         +'<td data-label="Unidade">'+esc(s.unit||'—')+'</td>'
-        +'<td class="num" data-label="Último custo"><div>'+(s.cost===null?'—':'<b>R$ '+brl(s.cost,4).replace(/0{1,2}$/,'')+'</b>'+variation(s.variation))+'</div></td>'
-        +'<td data-label="Última compra"><div>'+(s.date?dt(s.date)+'<small>'+nf(s)+'</small>':'<small>vínculo salvo, sem compra</small>')+'</div></td>'
+        +'<td class="num" data-label="Último custo"><div>'+(s.cost===null?'—':'<b>'+money(s.cost)+'</b>'+variation(s.variation))+'</div></td>'
+        +'<td data-label="Última compra"><div>'+(s.date?dt(s.date)+'<small>'+(s.xml_id?link('fiscal_xml_entrada.php?id='+s.xml_id,'NF '+s.nf):'')+'</small>':'<small>vínculo salvo, sem compra</small>')+'</div></td>'
         +'<td class="num" data-label="Compras"><div>'+(s.purchases||0)+(s.stock_total?'<small>'+num(s.stock_total)+' '+esc(unit)+'</small>':'')+'</div></td></tr>';
     });
     h+='</tbody></table></div>';
     if(d.purchases.length){
-      h+='<div class="product-suppliers-sub">Histórico de compras (mais recentes primeiro)</div><div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th>Cód. no fornecedor</th><th class="num">Qtd. na nota</th><th class="num">Fator</th><th class="num">Qtd. estoque</th><th class="num">Valor unit. nota</th><th class="num">Custo completo / '+esc(unit)+'</th><th class="num">Total c/ impostos</th></tr></thead><tbody>';
+      h+='<div class="product-suppliers-sub next">Histórico de compras (mais recentes primeiro)</div><div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th>Cód. no fornecedor</th><th class="num">Qtd. na nota</th><th class="num">Fator</th><th class="num">Qtd. estoque</th><th class="num">Valor unit. nota</th><th class="num">Custo completo / '+esc(unit)+'</th><th class="num">Total c/ impostos</th></tr></thead><tbody>';
       d.purchases.forEach(p=>{
-        h+='<tr><td data-label="Data">'+dt(p.date)+'</td><td data-label="Nota">'+nf(p)+'</td>'
+        h+='<tr><td data-label="Data">'+dt(p.date)+'</td><td data-label="Nota">'+link('fiscal_xml_entrada.php?id='+p.xml_id,'NF '+p.nf)+'</td>'
           +'<td data-label="Fornecedor"><div>'+(p.supplier_code?'<b>'+esc(p.supplier_code)+'</b> · ':'')+esc(p.supplier_name)+'<small>'+esc(p.description)+'</small></div></td>'
           +'<td data-label="Cód. no fornecedor">'+esc(p.product_code||'—')+'</td>'
           +'<td class="num" data-label="Qtd. na nota">'+num(p.quantity)+' '+esc(p.unit)+'</td>'
           +'<td class="num" data-label="Fator">'+num(p.factor)+'</td>'
           +'<td class="num" data-label="Qtd. estoque">'+num(p.stock_quantity)+' '+esc(unit)+'</td>'
           +'<td class="num" data-label="Valor unit. nota">R$ '+brl(p.unit_value,2)+'</td>'
-          +'<td class="num" data-label="Custo completo"><b>R$ '+brl(p.cost,4).replace(/0{1,2}$/,'')+'</b></td>'
+          +'<td class="num" data-label="Custo completo"><b>'+money(p.cost)+'</b></td>'
           +'<td class="num" data-label="Total c/ impostos">R$ '+brl(p.total,2)+'</td></tr>';
       });
       h+='</tbody></table></div>';
     }
-    body.className='';body.innerHTML=h;
+    return h;
   }
-  function load(force){
-    if(loading||(loaded&&!force))return;
-    loading=true;body.className='product-suppliers-empty';body.textContent='Carregando compras…';
-    fetch(panel.dataset.suppliersUrl,{credentials:'same-origin',headers:{'Accept':'application/json'}})
-      .then(r=>r.json()).then(d=>{if(!d.ok)throw new Error(d.error||'Erro');loaded=true;render(d);})
-      .catch(e=>{body.className='product-suppliers-empty';body.textContent=e.message||'Não foi possível carregar as compras.';})
-      .finally(()=>{loading=false;});
+  function renderMovements(){
+    if(!movRows.length)return '<div class="product-suppliers-empty">Nenhuma movimentação de estoque deste produto ainda.</div>';
+    let h='<div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data/hora</th><th>Operação</th><th>Pessoa</th><th>Tipo</th><th class="num">Quantidade</th><th class="num">Custo / venda</th><th class="num">Saldo</th><th>Usuário</th></tr></thead><tbody>';
+    movRows.forEach(r=>{
+      const io=r.type==='entrada'?'in':'out';
+      h+='<tr><td data-label="Data/hora" style="white-space:nowrap">'+dtime(r.date)+'</td>'
+        +'<td data-label="Operação"><div><b>'+esc(r.operation)+'</b>'+(r.ref?'<small>'+link(r.link,r.ref)+'</small>':'')+(r.note&&!r.ref?'<small title="'+esc(r.note)+'">'+esc(r.note.length>70?r.note.slice(0,70)+'…':r.note)+'</small>':'')+'</div></td>'
+        +'<td data-label="Pessoa">'+esc(r.person||'—')+'</td>'
+        +'<td data-label="Tipo"><div><span class="product-mov-type '+io+'">'+(io==='in'?'Entrada':'Saída')+'</span>'+(r.adjust?'<small>ajuste</small>':'')+'</div></td>'
+        +'<td class="num product-mov-qty '+io+'" data-label="Quantidade">'+(r.qty>0?'+':'')+num(r.qty)+' '+esc(unit)+'</td>'
+        +'<td class="num" data-label="Custo / venda"><div>'+(r.value===null?'—':money(r.value)+'<small>'+esc(r.value_kind)+'</small>')+'</div></td>'
+        +'<td class="num" data-label="Saldo"><b>'+num(r.balance)+'</b></td>'
+        +'<td data-label="Usuário">'+esc(r.user||'—')+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+    if(movMore)h+='<div class="product-mov-more"><button class="btn" type="button" data-mov-more>Carregar mais</button></div>';
+    if(!movHasUser)h='<p class="product-info-note">O usuário de cada movimento passa a ser gravado depois que a atualização "Estoque - usuário da movimentação" for aplicada no Atualizador do Banco.</p>'+h;
+    return h;
   }
-  document.querySelectorAll('[data-load-suppliers]').forEach(el=>el.addEventListener('click',()=>load(el.tagName==='BUTTON')));
-  if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){load(false);io.disconnect();}});io.observe(panel);}
-  if(location.hash==='#fornecedoresProduto')load(false);
+  function fetchJson(url){return fetch(url,{credentials:'same-origin',headers:{'Accept':'application/json'}}).then(r=>r.json()).then(d=>{if(!d.ok)throw new Error(d.error||'Erro ao carregar.');return d;});}
+  function load(kind,force,append){
+    if(loading)return;
+    if(!force&&!append&&cache[kind]!==undefined){body.innerHTML=cache[kind];return;}
+    loading=true;
+    if(!append)body.innerHTML='<div class="product-suppliers-empty">Carregando…</div>';
+    const base=modal.dataset['url'+kind.charAt(0).toUpperCase()+kind.slice(1)];
+    const url=kind==='movimentacao'?base+'&offset='+(append?movRows.length:0):base;
+    fetchJson(url).then(d=>{
+      let html;
+      if(kind==='movimentacao'){movRows=append?movRows.concat(d.rows):d.rows;movMore=!!d.more;movHasUser=!!d.has_user;html=renderMovements();}
+      else html=renderSuppliers(d);
+      cache[kind]=html;
+      if(current===kind)body.innerHTML=html;
+    }).catch(e=>{body.innerHTML='<div class="product-suppliers-empty">'+esc(e.message)+'</div>';}).finally(()=>{loading=false;});
+  }
+  function open(kind){
+    current=kind;lastFocus=document.activeElement;
+    title.textContent=kinds[kind].title+(productName?' · '+productName:'');
+    sub.textContent=kinds[kind].sub;
+    modal.hidden=false;modal.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';
+    load(kind,false,false);
+    modal.querySelector('[data-info-close]').focus();
+  }
+  function close(){modal.hidden=true;modal.setAttribute('aria-hidden','true');document.body.style.overflow='';current='';if(lastFocus&&lastFocus.focus)lastFocus.focus();}
+  document.querySelectorAll('[data-product-info]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();open(a.dataset.productInfo);}));
+  modal.addEventListener('click',e=>{
+    if(e.target===modal||e.target.closest('[data-info-close]'))close();
+    else if(e.target.closest('[data-info-refresh]')&&current)load(current,true,false);
+    else if(e.target.closest('[data-mov-more]')){e.target.closest('[data-mov-more]').disabled=true;load('movimentacao',false,true);}
+  });
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)close();});
 })();
 </script>
 
