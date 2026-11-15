@@ -67,7 +67,8 @@ if (isset($_GET['fornecedores']) && $_SERVER['REQUEST_METHOD'] === 'GET') {
   require_once __DIR__ . '/../config/produto_fornecedores.php';
   header('Content-Type: application/json; charset=utf-8');
   try {
-    echo json_encode(['ok' => true] + produto_fornecedores_data($pdo, (int)$productCompanyId, $id), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $supOffset = max(0, (int)($_GET['offset'] ?? 0));
+    echo json_encode(['ok' => true] + produto_fornecedores_data($pdo, (int)$productCompanyId, $id, $supOffset > 0 ? 20 : 6, $supOffset), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   } catch (Throwable $e) {
     echo json_encode(['ok' => false, 'error' => 'Não foi possível carregar as compras deste produto.'], JSON_UNESCAPED_UNICODE);
   }
@@ -2702,10 +2703,10 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
     fornecedores:{title:'Fornecedores e compras',sub:'Custo completo por unidade de estoque: produto + IPI, ST e FCP-ST + frete, seguro e outras despesas − desconto.'},
     movimentacao:{title:'Movimentação de estoque',sub:'Vendas, entradas, devoluções, acertos e demais movimentos do período, do mais recente para o mais antigo.'}
   };
-  let current='',cache={},movRows=[],movMore=false,movHasUser=false,movFrom='',movTo='',loading=false,lastFocus=null;
+  let current='',cache={},movRows=[],movMore=false,movHasUser=false,movFrom='',movTo='',supData=null,supRows=[],supMore=false,loading=false,lastFocus=null;
 
   function renderSuppliers(d){
-    if(!d.suppliers.length&&!d.purchases.length)return '<div class="product-suppliers-empty">Nenhuma compra deste produto por entrada de NF-e ainda.</div>';
+    if(!d.suppliers.length&&!supRows.length)return '<div class="product-suppliers-empty">Nenhuma compra deste produto por entrada de NF-e ainda.</div>';
     let h='<div class="product-suppliers-sub">Fornecedores</div><div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Código</th><th>Fornecedor</th><th>Código do produto no fornecedor</th><th class="num">Fator</th><th>Unidade</th><th class="num">Último custo / '+esc(unit)+'</th><th>Última compra</th><th class="num">Compras</th></tr></thead><tbody>';
     d.suppliers.forEach(s=>{
       h+='<tr><td data-label="Código">'+(s.supplier_code?'<b>'+esc(s.supplier_code)+'</b>':'—')+'</td>'
@@ -2718,9 +2719,9 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
         +'<td class="num" data-label="Compras"><div>'+(s.purchases||0)+(s.stock_total?'<small>'+num(s.stock_total)+' '+esc(unit)+'</small>':'')+'</div></td></tr>';
     });
     h+='</tbody></table></div>';
-    if(d.purchases.length){
-      h+='<div class="product-suppliers-sub next">Histórico de compras (mais recentes primeiro)</div><div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th>Cód. no fornecedor</th><th class="num">Qtd. na nota</th><th class="num">Fator</th><th class="num">Qtd. estoque</th><th class="num">Valor unit. nota</th><th class="num">Custo completo / '+esc(unit)+'</th><th class="num">Total c/ impostos</th></tr></thead><tbody>';
-      d.purchases.forEach(p=>{
+    if(supRows.length){
+      h+='<div class="product-suppliers-sub next">Histórico de compras (mais recentes primeiro) · '+supRows.length+' de '+d.total+'</div><div class="product-suppliers-wrap"><table class="product-suppliers-table"><thead><tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th>Cód. no fornecedor</th><th class="num">Qtd. na nota</th><th class="num">Fator</th><th class="num">Qtd. estoque</th><th class="num">Valor unit. nota</th><th class="num">Custo completo / '+esc(unit)+'</th><th class="num">Total c/ impostos</th></tr></thead><tbody>';
+      supRows.forEach(p=>{
         h+='<tr><td data-label="Data">'+dt(p.date)+'</td><td data-label="Nota">'+link('fiscal_xml_entrada.php?id='+p.xml_id,'NF '+p.nf)+'</td>'
           +'<td data-label="Fornecedor"><div>'+(p.supplier_code?'<b>'+esc(p.supplier_code)+'</b> · ':'')+esc(p.supplier_name)+'<small>'+esc(p.description)+'</small></div></td>'
           +'<td data-label="Cód. no fornecedor">'+esc(p.product_code||'—')+'</td>'
@@ -2732,6 +2733,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
           +'<td class="num" data-label="Total c/ impostos">R$ '+brl(p.total,2)+'</td></tr>';
       });
       h+='</tbody></table></div>';
+      if(supMore)h+='<div class="product-mov-more"><button class="btn" type="button" data-sup-more>Carregar mais</button></div>';
     }
     return h;
   }
@@ -2766,11 +2768,11 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
     loading=true;
     if(!append)body.innerHTML=(kind==='movimentacao'?movFilter():'')+'<div class="product-suppliers-empty">Carregando…</div>';
     const base=modal.dataset['url'+kind.charAt(0).toUpperCase()+kind.slice(1)];
-    const url=kind==='movimentacao'?base+'&offset='+(append?movRows.length:0)+(movFrom?'&de='+encodeURIComponent(movFrom):'')+(movTo?'&ate='+encodeURIComponent(movTo):''):base;
+    const url=kind==='movimentacao'?base+'&offset='+(append?movRows.length:0)+(movFrom?'&de='+encodeURIComponent(movFrom):'')+(movTo?'&ate='+encodeURIComponent(movTo):''):base+'&offset='+(append?supRows.length:0);
     fetchJson(url).then(d=>{
       let html;
       if(kind==='movimentacao'){movRows=append?movRows.concat(d.rows):d.rows;movMore=!!d.more;movHasUser=!!d.has_user;movFrom=d.from||movFrom;movTo=d.to||movTo;html=renderMovements();}
-      else html=renderSuppliers(d);
+      else{if(!append)supData=d;supRows=append?supRows.concat(d.purchases):d.purchases;supMore=!!d.more;html=renderSuppliers(supData);}
       cache[kind]=html;
       if(current===kind)body.innerHTML=html;
     }).catch(e=>{body.innerHTML='<div class="product-suppliers-empty">'+esc(e.message)+'</div>';}).finally(()=>{loading=false;});
@@ -2789,6 +2791,7 @@ if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_gtin_csrf']
     if(e.target===modal||e.target.closest('[data-info-close]'))close();
     else if(e.target.closest('[data-info-refresh]')&&current)load(current,true,false);
     else if(e.target.closest('[data-mov-more]')){e.target.closest('[data-mov-more]').disabled=true;load('movimentacao',false,true);}
+    else if(e.target.closest('[data-sup-more]')){e.target.closest('[data-sup-more]').disabled=true;load('fornecedores',false,true);}
     else if(e.target.closest('[data-mov-90]')){movFrom='';movTo='';load('movimentacao',true,false);}
   });
   modal.addEventListener('submit',e=>{

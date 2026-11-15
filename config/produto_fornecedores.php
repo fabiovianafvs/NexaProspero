@@ -14,8 +14,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/fiscal_module.php';
 
 if (!function_exists('produto_fornecedores_data')) {
-  function produto_fornecedores_data(PDO $pdo, int $companyId, int $productId, int $limit = 60): array {
-    $out = ['suppliers' => [], 'purchases' => []];
+  /**
+   * Resumo por fornecedor (sobre as últimas 100 compras) e o histórico de compras
+   * paginado: $limit compras a partir de $offset (a tela abre com 6).
+   */
+  function produto_fornecedores_data(PDO $pdo, int $companyId, int $productId, int $limit = 6, int $offset = 0): array {
+    $out = ['suppliers' => [], 'purchases' => [], 'more' => false, 'total' => 0];
     if ($productId <= 0 || !fiscal_table_exists($pdo, 'fiscal_xml_items') || !fiscal_table_exists($pdo, 'fiscal_xml_imports')) return $out;
 
     $dateExpr = fiscal_column_exists($pdo, 'fiscal_xml_imports', 'entry_date') ? 'COALESCE(x.entry_date, x.issue_date)' : 'x.issue_date';
@@ -24,7 +28,7 @@ if (!function_exists('produto_fornecedores_data')) {
       INNER JOIN fiscal_xml_imports x ON x.company_id = i.company_id AND x.id = i.xml_import_id
       WHERE i.company_id = ? AND i.product_id = ? AND x.status = 'ENTRADA_GERADA'
       ORDER BY purchase_date DESC, x.id DESC, i.item_number ASC
-      LIMIT " . max(1, min(200, $limit)));
+      LIMIT 100");
     $st->execute([$companyId, $productId]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
@@ -123,6 +127,12 @@ if (!function_exists('produto_fornecedores_data')) {
         }
       }
     } catch (Throwable $e) {}
+
+    $out['total'] = count($out['purchases']);
+    $limit = max(1, min(100, $limit));
+    $offset = max(0, $offset);
+    $out['more'] = $out['total'] > $offset + $limit;
+    $out['purchases'] = array_slice($out['purchases'], $offset, $limit);
 
     foreach ($suppliers as $s) {
       $s['codes'] = array_keys($s['codes']);
