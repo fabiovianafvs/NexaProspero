@@ -5398,6 +5398,13 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
     if ($detailedFiscalSource && $detailedFiscalOrderNote !== '') {
       $infCplParts[] = 'Observação do pedido: ' . $detailedFiscalOrderNote;
     }
+    // Saída manual / devolução a fornecedor / devolução de cliente: o campo Observações
+    // da tela fica em fiscal_documents.notes e vai para as Informações Complementares.
+    $manualNoteSources = ['SAIDA_MANUAL', 'SAIDA_MANUAL_COMPRA', 'DEVOLUCAO_CLIENTE'];
+    $manualNote = trim(preg_replace('/\s+/u', ' ', (string)($doc['notes'] ?? '')) ?? '');
+    if ($manualNote !== '' && in_array(strtoupper((string)($doc['source_type'] ?? '')), $manualNoteSources, true)) {
+      $infCplParts[] = 'Observação: ' . $manualNote;
+    }
     if ((int)$ibptTotals['items'] > 0) {
       $sourceText = implode(', ', array_keys($ibptSources));
       if ($sourceText === '') $sourceText = 'IBPT';

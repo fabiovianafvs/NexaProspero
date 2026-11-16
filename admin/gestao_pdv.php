@@ -1888,10 +1888,10 @@ gestao_flash();
         return it.splitItems.map((sp, idx) => {
           const obs = (sp.obs === 'full' || idx === 0) ? itemObs : '';
           const qtd = Number(it.qty || 0) * Number(sp.qtyFactor || 1);
-          return `<input type="hidden" name="item_product_id[]" value="${Number(sp.id||it.id)}"><input type="hidden" name="item_qty[]" value="${qtd}"><input type="hidden" name="item_price[]" value="${it.price}"><textarea name="item_obs[]" style="display:none">${escapeHtml(obs)}</textarea>`;
+          return `<input type="hidden" name="item_product_id[]" value="${Number(sp.id||it.id)}"><input type="hidden" name="item_qty[]" value="${qtd}"><input type="hidden" name="item_price[]" value="${it.price}"><input type="hidden" name="item_list_price[]" value=""><textarea name="item_obs[]" style="display:none">${escapeHtml(obs)}</textarea>`;
         }).join('');
       }
-      return `<input type="hidden" name="item_product_id[]" value="${it.id}"><input type="hidden" name="item_qty[]" value="${it.qty}"><input type="hidden" name="item_price[]" value="${it.price}"><textarea name="item_obs[]" style="display:none">${escapeHtml(itemObs)}</textarea>`;
+      return `<input type="hidden" name="item_product_id[]" value="${it.id}"><input type="hidden" name="item_qty[]" value="${it.qty}"><input type="hidden" name="item_price[]" value="${it.price}"><input type="hidden" name="item_list_price[]" value="${Number(it.listPrice||0)>0?it.listPrice:''}"><textarea name="item_obs[]" style="display:none">${escapeHtml(itemObs)}</textarea>`;
     }).join('');
   }
   function renderCart(){
@@ -2789,7 +2789,7 @@ gestao_flash();
       const total = Number(it.total || 0);
       const unit = qty > 0 ? total / qty : Number(it.unit_price || 0);
       const key = 'orc_' + quote.id + '_' + it.id;
-      cart.set(key, {id:Number(it.current_product_id || it.produto_id), code:String(it.current_product_number||it.product_code_snapshot||it.current_product_legacy_code||it.current_product_id||it.produto_id||''), name:String(it.description_snapshot || it.current_product_name || 'Item'), qty:qty, price:unit, obs:String(it.notes || ''), details:'', splitItems:null, futureQty:Number(it.future_quantity||0)});
+      cart.set(key, {id:Number(it.current_product_id || it.produto_id), code:String(it.current_product_number||it.product_code_snapshot||it.current_product_legacy_code||it.current_product_id||it.produto_id||''), name:String(it.description_snapshot || it.current_product_name || 'Item'), qty:qty, price:unit, listPrice:Number(it.unit_price||0), obs:String(it.notes || ''), details:'', splitItems:null, futureQty:Number(it.future_quantity||0)});
     });
 
     if(Number(customer.id || 0) > 0){

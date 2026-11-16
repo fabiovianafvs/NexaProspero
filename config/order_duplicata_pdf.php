@@ -116,29 +116,26 @@ if (!function_exists('order_duplicata_pdf_data')) {
     }
     [$orderNotes, $itemNotes] = order_email_pdf_item_notes($items, $rawNotes);
 
+    require_once __DIR__ . '/order_duplicata_rows.php';
     $rows = [];
-    $gross = 0.0;
-    $itemDisc = 0.0;
+    $calcLines = [];
     foreach (array_values($items) as $idx => $it) {
       $pidItem = (int)($it['produto_id'] ?? 0);
       $qty = (float)($it['qtd'] ?? 0);
       $unit = order_email_pdf_unit_price($it);
-      $net = round((float)($it['total'] ?? ($qty * $unit)), 2);
-      $g = round($qty * $unit, 2);
-      if ($g < $net) $g = $net;
-      $disc = round($g - $net, 2);
+      $calcLines[] = ['qty' => $qty, 'unit' => $unit, 'total' => (float)($it['total'] ?? ($qty * $unit)), 'original' => $it['preco_original'] ?? null];
       $note = trim((string)($itemNotes[$idx] ?? ''));
       $rows[] = [
         'code' => (string)($products[$pidItem]['code'] ?? ($pidItem > 0 ? $pidItem : '')),
         'un' => (string)($products[$pidItem]['un'] ?? 'UN'),
         'desc' => (string)($it['nome'] ?? ('#' . $pidItem)) . ($note !== '' ? ' - ' . preg_replace('/\s+/u', ' ', $note) : ''),
-        'qty' => $qty, 'unit' => $unit, 'gross' => $g, 'disc' => $disc,
-        'pct' => $g > 0 ? round($disc / $g * 100, 2) : 0.0, 'net' => $net,
+        'qty' => $qty,
       ];
-      $gross += $g;
-      $itemDisc += $disc;
     }
     $orderDisc = order_email_pdf_first_number($order, ['desconto', 'discount', 'discount_value', 'valor_desconto']);
+    $calc = order_duplicata_rows_calc($calcLines, $orderDisc);
+    foreach ($rows as $k => $r) $rows[$k] = $r + $calc['rows'][$k];
+    $gross = $calc['gross'];
     $addition = order_email_pdf_first_number($order, ['acrescimo', 'addition', 'addition_value', 'valor_acrescimo']);
     $freight = order_email_pdf_first_number($order, ['frete', 'freight', 'freight_value']);
     if ($freight <= 0 && (float)($order['taxa_entrega'] ?? 0) > 0) $freight = (float)$order['taxa_entrega'];
@@ -196,7 +193,7 @@ if (!function_exists('order_duplicata_pdf_data')) {
       'number' => function_exists('company_sequence_display') ? (string)company_sequence_display($order, 'pedidos') : (string)(int)($order['id'] ?? 0),
       'date' => $ts ? date('d/m/Y', $ts) : '', 'time' => $ts ? date('H:i:s', $ts) : '',
       'company' => $c, 'customer' => $customer, 'rows' => $rows,
-      'gross' => $gross, 'discount' => round($itemDisc + $orderDisc, 2), 'addition' => $addition, 'freight' => $freight, 'total' => $total,
+      'gross' => $gross, 'discount' => $calc['discount'], 'addition' => $addition, 'freight' => $freight, 'total' => $total,
       'payments' => $payments, 'installments' => $installments, 'seller' => $seller, 'terms' => $terms,
       'obs' => trim((string)$orderNotes), 'logo' => $logo,
     ];

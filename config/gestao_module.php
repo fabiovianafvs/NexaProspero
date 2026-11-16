@@ -1604,6 +1604,9 @@ if (!function_exists('gestao_finalize_pdv_order')) {
     // Precisão unitária opcional. O PDV legado permanece com 2 casas; a O.S. pode
     // preservar valores unitários com até 6 casas sem alterar os demais fluxos.
     $priceDecimals = $post['item_price_decimals'] ?? [];
+    // Preço unitário original (antes do desconto do item), quando a tela informa
+    // (Pedido Detalhado, orçamento lido no PDV). Sem ele, usa o preço do cadastro.
+    $listPrices = $post['item_list_price'] ?? [];
     $items = [];
     $subtotal = 0.0;
     $productIds = array_values(array_unique(array_filter(array_map('intval', (array)$products), static fn(int $id): bool => $id > 0)));
@@ -1626,11 +1629,14 @@ if (!function_exists('gestao_finalize_pdv_order')) {
       if (!$prod) continue;
       $total = round($qtd * $price, 2);
       $subtotal += $total;
+      $listPriceIn = array_key_exists($i, (array)$listPrices) ? trim((string)($listPrices[$i] ?? '')) : '';
+      $originalPrice = $listPriceIn !== '' ? (float)finance_money_in($listPriceIn) : (float)($prod['preco'] ?? 0);
+      if ($originalPrice < $price) $originalPrice = $price; // preço acima da tabela não vira "desconto negativo"
       $stockEffect = array_key_exists($i, (array)$stockEffects) ? ((int)($stockEffects[$i] ?? 0) === 1 ? 1 : 0) : 1;
       $stockQty = array_key_exists($i, (array)$stockQtys)
         ? max(0.0, min($qtd, function_exists('gestao_quantity_in') ? gestao_quantity_in($stockQtys[$i] ?? $qtd, 4) : (float)($stockQtys[$i] ?? $qtd)))
         : $qtd;
-      $items[] = ['produto_id'=>$pid, 'nome'=>(string)($prod['nome'] ?? 'Item'), 'categoria'=>(string)($prod['categoria'] ?? 'SEM CATEGORIA'), 'custo'=>(float)($prod['custo'] ?? 0), 'custo_medio'=>(float)($prod['custo_medio'] ?? 0), 'qtd'=>$qtd, 'stock_qtd'=>$stockQty, 'price'=>$price, 'total'=>$total, 'obs'=>trim((string)($obs[$i] ?? '')), 'stock_effect'=>$stockEffect];
+      $items[] = ['produto_id'=>$pid, 'nome'=>(string)($prod['nome'] ?? 'Item'), 'categoria'=>(string)($prod['categoria'] ?? 'SEM CATEGORIA'), 'custo'=>(float)($prod['custo'] ?? 0), 'custo_medio'=>(float)($prod['custo_medio'] ?? 0), 'qtd'=>$qtd, 'stock_qtd'=>$stockQty, 'price'=>$price, 'original_price'=>$originalPrice, 'total'=>$total, 'obs'=>trim((string)($obs[$i] ?? '')), 'stock_effect'=>$stockEffect];
     }
     if (!$items) throw new RuntimeException('Inclua ao menos um produto no pedido.');
 
@@ -1884,12 +1890,14 @@ Ref.: " . $addressReference);
       $orderNumber = company_sequence_display($pedidoRowNumber, 'pedidos');
 
       $itemObsCol = gestao_pedido_item_obs_column($pdo);
+      // Coluna criada pela migração 20261116_pedido_itens_preco_original_v1 (sem ela, segue o legado).
+      $hasOriginalPrice = finance_column_exists($pdo, 'pedido_itens', 'preco_original');
       foreach ($items as $it) {
-        if ($itemObsCol) {
-          $pdo->prepare('INSERT INTO pedido_itens (company_id, pedido_id, produto_id, qtd, preco_unit, total, `' . str_replace('`', '``', $itemObsCol) . '`) VALUES (?, ?, ?, ?, ?, ?, ?)')->execute([$companyId, $orderId, $it['produto_id'], $it['qtd'], $it['price'], $it['total'], $it['obs']]);
-        } else {
-          $pdo->prepare('INSERT INTO pedido_itens (company_id, pedido_id, produto_id, qtd, preco_unit, total) VALUES (?, ?, ?, ?, ?, ?)')->execute([$companyId, $orderId, $it['produto_id'], $it['qtd'], $it['price'], $it['total']]);
-        }
+        $cols = ['company_id', 'pedido_id', 'produto_id', 'qtd', 'preco_unit', 'total'];
+        $vals = [$companyId, $orderId, $it['produto_id'], $it['qtd'], $it['price'], $it['total']];
+        if ($itemObsCol) { $cols[] = '`' . str_replace('`', '``', $itemObsCol) . '`'; $vals[] = $it['obs']; }
+        if ($hasOriginalPrice) { $cols[] = 'preco_original'; $vals[] = round((float)($it['original_price'] ?? $it['price']), 6); }
+        $pdo->prepare('INSERT INTO pedido_itens (' . implode(', ', $cols) . ') VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')')->execute($vals);
       }
 
       brain_profitability_recalculate_order($pdo, $companyId, $orderId, true, $orderStatus === 'finalizado' ? 'order.finalized' : 'order.created');

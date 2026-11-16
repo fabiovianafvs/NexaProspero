@@ -72,18 +72,16 @@ try {
   }
 } catch (Throwable $e) {}
 
-// Itens: desconto por item = (qtd x unitário) - total do item.
+// Itens: valor unitário original, desconto do item + rateio do desconto do final da venda
+// (config/order_duplicata_rows.php, mesma conta do PDF).
+require_once __DIR__ . '/../config/order_duplicata_rows.php';
 $dupRows = [];
-$dupGross = 0.0;
-$dupItemDiscount = 0.0;
+$dupCalcLines = [];
 foreach ($itens as $idx => $it) {
   $pid = (int)($it['produto_id'] ?? 0);
   $qty = (float)($it['qtd'] ?? 0);
   $unit = item_unit_price_admin($it);
-  $net = round((float)($it['total'] ?? ($qty * $unit)), 2);
-  $gross = round($qty * $unit, 2);
-  if ($gross < $net) $gross = $net;
-  $disc = round($gross - $net, 2);
+  $dupCalcLines[] = ['qty' => $qty, 'unit' => $unit, 'total' => (float)($it['total'] ?? ($qty * $unit)), 'original' => $it['preco_original'] ?? null];
   $note = '';
   if (!empty($itemObsCol)) $note = trim((string)($it[$itemObsCol] ?? ''));
   if ($note === '') $note = (string)($fallbackItemObsByRow[$idx] ?? '');
@@ -92,17 +90,17 @@ foreach ($itens as $idx => $it) {
     'code' => (string)($dupProducts[$pid]['code'] ?? ($pid > 0 ? $pid : '')),
     'un' => (string)($dupProducts[$pid]['un'] ?? 'UN'),
     'desc' => (string)($it['nome'] ?? ('#' . $pid)) . ($note !== '' ? ' - ' . preg_replace('/\s+/u', ' ', $note) : ''),
-    'qty' => $qty, 'unit' => $unit, 'gross' => $gross, 'disc' => $disc,
-    'pct' => $gross > 0 ? round($disc / $gross * 100, 2) : 0.0, 'net' => $net,
+    'qty' => $qty,
   ];
-  $dupGross += $gross;
-  $dupItemDiscount += $disc;
 }
 $dupOrderDiscount = pedido_dup_first_number($pedido, ['desconto','discount','discount_value','valor_desconto']);
+$dupCalc = order_duplicata_rows_calc($dupCalcLines, $dupOrderDiscount);
+foreach ($dupRows as $k => $r) $dupRows[$k] = $r + $dupCalc['rows'][$k];
+$dupGross = $dupCalc['gross'];
 $dupAddition = pedido_dup_first_number($pedido, ['acrescimo','addition','addition_value','valor_acrescimo']);
 $dupFreight = pedido_dup_first_number($pedido, ['frete','freight','freight_value']);
 if ($dupFreight <= 0 && $taxaEntrega > 0) $dupFreight = (float)$taxaEntrega;
-$dupDiscountTotal = round($dupItemDiscount + $dupOrderDiscount, 2);
+$dupDiscountTotal = $dupCalc['discount'];
 
 // Recebimento (formas de pagamento) e parcelamento (Contas a Receber do pedido).
 $dupPayments = [];

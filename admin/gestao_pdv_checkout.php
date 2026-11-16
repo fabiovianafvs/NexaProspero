@@ -3004,11 +3004,11 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
         return it.splitItems.map((sp, idx) => {
           const obs = (sp.obs === 'full' || idx === 0) ? itemObs : '';
           const qtd = Number(it.qty || 0) * Number(sp.qtyFactor || 1);
-          return `<input type="hidden" name="item_product_id[]" value="${Number(sp.id||it.id)}"><input type="hidden" name="item_qty[]" value="${qtd}"><input type="hidden" name="item_price[]" value="${it.price}"><input type="hidden" name="item_stock_effect[]" value="1"><input type="hidden" name="item_price_decimals[]" value="${priceDecimals}"><textarea name="item_obs[]" style="display:none">${escapeHtml(obs)}</textarea>`;
+          return `<input type="hidden" name="item_product_id[]" value="${Number(sp.id||it.id)}"><input type="hidden" name="item_qty[]" value="${qtd}"><input type="hidden" name="item_price[]" value="${it.price}"><input type="hidden" name="item_list_price[]" value=""><input type="hidden" name="item_stock_effect[]" value="1"><input type="hidden" name="item_price_decimals[]" value="${priceDecimals}"><textarea name="item_obs[]" style="display:none">${escapeHtml(obs)}</textarea>`;
         }).join('');
       }
       const stockEffect = Number(it.stockEffect ?? 1) === 1 ? 1 : 0;
-      return `<input type="hidden" name="item_product_id[]" value="${it.id}"><input type="hidden" name="item_qty[]" value="${it.qty}"><input type="hidden" name="item_price[]" value="${it.price}"><input type="hidden" name="item_stock_effect[]" value="${stockEffect}"><input type="hidden" name="item_price_decimals[]" value="${priceDecimals}"><textarea name="item_obs[]" style="display:none">${escapeHtml(itemObs)}</textarea>`;
+      return `<input type="hidden" name="item_product_id[]" value="${it.id}"><input type="hidden" name="item_qty[]" value="${it.qty}"><input type="hidden" name="item_price[]" value="${it.price}"><input type="hidden" name="item_list_price[]" value="${Number(it.listPrice||0)>0?it.listPrice:''}"><input type="hidden" name="item_stock_effect[]" value="${stockEffect}"><input type="hidden" name="item_price_decimals[]" value="${priceDecimals}"><textarea name="item_obs[]" style="display:none">${escapeHtml(itemObs)}</textarea>`;
     }).join('');
     syncCheckoutSourceHidden();
   }
@@ -4303,7 +4303,7 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
           if(duplicate) return;
           const qty=Math.max(0.0001,Number(it.quantity||0)); const total=Number(it.total||0); const unit=qty>0?total/qty:Number(it.unit_price||0);
           const key='orc_'+sourceId+'_'+sourceItemId;
-          cart.set(key,{id:Number(it.current_product_id||it.produto_id),code:String(it.current_product_number||it.product_code_snapshot||it.current_product_legacy_code||it.current_product_id||it.produto_id||''),unit:String(it.unidade_snapshot||'UN'),name:String(it.description_snapshot||it.current_product_name||'Item'),qty,price:unit,obs:String(it.notes||''),details:'Orçamento #'+String(quote.quote_number||quote.id),splitItems:null,sourceType:'orcamento',sourceId,sourceItemId,futureQty:Number(it.future_quantity||0)});
+          cart.set(key,{id:Number(it.current_product_id||it.produto_id),code:String(it.current_product_number||it.product_code_snapshot||it.current_product_legacy_code||it.current_product_id||it.produto_id||''),unit:String(it.unidade_snapshot||'UN'),name:String(it.description_snapshot||it.current_product_name||'Item'),qty,price:unit,listPrice:Number(it.unit_price||0),obs:String(it.notes||''),details:'Orçamento #'+String(quote.quote_number||quote.id),splitItems:null,sourceType:'orcamento',sourceId,sourceItemId,futureQty:Number(it.future_quantity||0)});
           checkoutLastCartKey=key; checkoutSelectedCartKey=key; added++; quoteAdded++;
         });
         if(quoteAdded>0) adjustmentDatasets.push(data);
@@ -4767,7 +4767,7 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
       const total = Number(it.total || 0);
       const unit = qty > 0 ? total / qty : Number(it.unit_price || 0);
       const key = 'orc_' + quote.id + '_' + it.id;
-      cart.set(key, {id:Number(it.current_product_id || it.produto_id), code:String(it.current_product_number||it.product_code_snapshot||it.current_product_legacy_code||it.current_product_id||it.produto_id||''), name:String(it.description_snapshot || it.current_product_name || 'Item'), qty:qty, price:unit, obs:String(it.notes || ''), details:'', splitItems:null});
+      cart.set(key, {id:Number(it.current_product_id || it.produto_id), code:String(it.current_product_number||it.product_code_snapshot||it.current_product_legacy_code||it.current_product_id||it.produto_id||''), name:String(it.description_snapshot || it.current_product_name || 'Item'), qty:qty, price:unit, listPrice:Number(it.unit_price||0), obs:String(it.notes || ''), details:'', splitItems:null});
     });
     checkoutCartScrollToEnd = true;
 

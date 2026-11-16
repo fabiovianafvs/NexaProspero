@@ -640,6 +640,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'cce9c73b931192500bad788da282650cbcee8ad9d11f22e89dcd6667684b9ac3',
         'order' => 202611150100,
       ],
+      [
+        'id' => '20261116_pedido_itens_preco_original_v1',
+        'module' => 'pedido_item_preco_original',
+        'version' => 202611160100,
+        'label' => 'Pedidos - preço original do item',
+        'description' => 'Guarda o preço unitário original de cada item vendido (antes do desconto), para a Duplicata mostrar valor unitário, total sem desconto, percentual e valor do desconto e total com desconto.',
+        'file' => __DIR__ . '/../db/20261116_pedido_itens_preco_original_v1.sql',
+        'sha256' => '1653b3f8c3ac4867ade7480e6d3b3931977eba756e24ff34cc9a69d04e2a42a6',
+        'order' => 202611160100,
+      ],
     ];
   }
 }
