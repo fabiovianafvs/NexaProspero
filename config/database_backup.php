@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** V11.45 - Backup geral do banco pelo painel, exclusivo para platform_admin. */
+/** V11.45 - Backup Geral (banco inteiro) pelo painel, exclusivo para platform_admin. Backup só de uma empresa: config/company_backup.php. */
 
 if (!function_exists('nexa_db_backup_h')) {
   function nexa_db_backup_h($value): string { return htmlspecialchars((string)$value,ENT_QUOTES,'UTF-8'); }
@@ -47,7 +47,7 @@ if (!function_exists('nexa_db_backup_create')) {
 
     $db=nexa_db_backup_config();$database=(string)$db['name'];
     try{$actual=(string)($pdo->query('SELECT DATABASE()')->fetchColumn()?:'');if($actual!=='')$database=$actual;}catch(Throwable $ignored){}
-    $safeDb=preg_replace('/[^a-zA-Z0-9_.-]+/','_',basename($database))?:'database';$stamp=date('Ymd_His');$rand=bin2hex(random_bytes(3));$base=$safeDb.'_'.$stamp.'_'.$rand;
+    $safeDb=preg_replace('/[^a-zA-Z0-9_.-]+/','_',basename($database))?:'database';$base='backup_geral_'.$safeDb.'_'.date('Y-m-d_H-i-s');
     $out=$root.'/'.$base.'.sql.gz';$metaFile=$root.'/'.$base.'.json';$errFile=$root.'/'.$base.'.stderr.log';$cnf=$root.'/.'.$base.'.cnf';
     $proc=null;$pipes=[];$gz=null;$bytes=0;$exit=-1;
     try{

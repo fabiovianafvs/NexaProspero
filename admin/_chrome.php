@@ -408,6 +408,7 @@ function admin_topbar(string $title, string $active=''): void {
       'configuracoes_caixa' => ['Configurações de caixa', 'configuracoes_caixa.php'],
       'configuracoes_desempenho' => ['Desempenho e períodos', 'configuracoes_desempenho.php'],
       'ia_configuracoes' => ['Agentes de IA', 'ia_configuracoes.php'],
+      'backup_empresa' => ['Backup da Empresa', 'backup_empresa.php'],
     ]],
     'suporte'    => ['Suporte','https://wa.me/5531985732002?text=Gostaria%20de%20suporte%20para%20o%20Nexa%20Pr%C3%B3spero.'],
     'importacao' => ['Importação','importacao.php'],
@@ -663,10 +664,10 @@ function admin_topbar(string $title, string $active=''): void {
   if (function_exists('auth_role') && auth_role() === 'platform_admin') {
     if (isset($links['params'][2]) && is_array($links['params'][2])) {
       $links['params'][2]['atualizador_banco'] = ['Atualizador do Banco', 'atualizador_banco.php'];
-      $links['params'][2]['backup_banco'] = ['Backup do Banco', 'backup_banco.php'];
+      $links['params'][2]['backup_banco'] = ['Backup Geral', 'backup_banco.php'];
     } else {
       $links['atualizador_banco'] = ['Atualizador do Banco', 'atualizador_banco.php'];
-      $links['backup_banco'] = ['Backup do Banco', 'backup_banco.php'];
+      $links['backup_banco'] = ['Backup Geral', 'backup_banco.php'];
     }
   }
 

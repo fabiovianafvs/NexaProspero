@@ -197,6 +197,7 @@ if (!function_exists('access_permissions_catalog')) {
       // Configurações gerais
       'configuracoes' => ['label' => 'Configurações gerais', 'group' => 'Configurações', 'module' => '*', 'pages' => ['parametros.php'], 'nav' => ['params']],
       'ia_configuracoes' => ['label' => 'Agentes de IA', 'group' => 'Configurações', 'module' => 'ia_agentes', 'pages' => ['ia_configuracoes.php'], 'nav' => ['ia_configuracoes']],
+      'backup_empresa' => ['label' => 'Backup da Empresa', 'group' => 'Configurações', 'module' => 'backup_empresa', 'pages' => ['backup_empresa.php'], 'nav' => ['backup_empresa']],
 
       // Funções sem item de menu próprio
       'financeiro_baixar_receber' => ['label' => 'Baixar contas a receber', 'group' => 'Funções financeiras', 'module' => 'financeiro'],

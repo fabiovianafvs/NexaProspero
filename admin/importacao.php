@@ -142,7 +142,7 @@ admin_topbar('Central - Importações', 'importacao');
       <p class="import-muted">A Central de Importação reúne produtos, clientes e dados financeiros. Escolha abaixo a operação desejada; cada importação possui suas próprias validações, prévia e controles antes de gravar os dados.</p>
     </section>
     <?php if (function_exists('auth_role') && auth_role() === 'platform_admin'): ?>
-      <div class="import-msg warn" style="margin-bottom:16px"><strong>Antes de uma migração:</strong> gere e baixe um backup completo do banco. <a href="backup_banco.php" style="font-weight:900;color:inherit">Abrir Backup do Banco</a>.</div>
+      <div class="import-msg warn" style="margin-bottom:16px"><strong>Antes de uma migração:</strong> gere e baixe um backup completo do banco. <a href="backup_banco.php" style="font-weight:900;color:inherit">Abrir Backup Geral</a>.</div>
     <?php endif; ?>
     <div class="import-grid">
       <section class="import-card source-card">
