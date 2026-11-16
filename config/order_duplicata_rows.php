@@ -51,3 +51,28 @@ if (!function_exists('order_duplicata_rows_calc')) {
     return ['rows' => $rows, 'gross' => round($grossSum, 2), 'discount' => round($discSum, 2)];
   }
 }
+
+if (!function_exists('order_duplicata_order_amount')) {
+  // Valor do pedido por nome de coluna (o PDV/Pedido grava discount_amount/addition_amount;
+  // bases antigas usam desconto/acrescimo). Primeira coluna existente e numérica.
+  function order_duplicata_order_amount(array $order, array $keys): float {
+    foreach ($keys as $k) {
+      if (array_key_exists($k, $order) && is_numeric($order[$k]) && (float)$order[$k] != 0.0) return (float)$order[$k];
+    }
+    return 0.0;
+  }
+}
+
+if (!function_exists('order_duplicata_order_discount')) {
+  // Desconto do final da venda. Sem coluna preenchida, calcula pela diferença:
+  // itens + acréscimo + frete - total do pedido.
+  function order_duplicata_order_discount(array $order, array $lines, float $addition, float $freight, float $total): float {
+    $discount = order_duplicata_order_amount($order, ['discount_amount', 'desconto', 'discount', 'discount_value', 'valor_desconto']);
+    if ($discount > 0) return round($discount, 2);
+    if ($total <= 0) return 0.0;
+    $itemsNet = 0.0;
+    foreach ($lines as $l) $itemsNet += round((float)($l['total'] ?? 0), 2);
+    $diff = round($itemsNet + $addition + $freight - $total, 2);
+    return $diff > 0.009 ? $diff : 0.0;
+  }
+}

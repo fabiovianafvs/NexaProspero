@@ -132,14 +132,14 @@ if (!function_exists('order_duplicata_pdf_data')) {
         'qty' => $qty,
       ];
     }
-    $orderDisc = order_email_pdf_first_number($order, ['desconto', 'discount', 'discount_value', 'valor_desconto']);
+    $addition = order_duplicata_order_amount($order, ['addition_amount', 'acrescimo', 'addition', 'addition_value', 'valor_acrescimo']);
+    $freight = order_duplicata_order_amount($order, ['frete', 'freight', 'freight_value', 'freight_amount']);
+    if ($freight <= 0 && (float)($order['taxa_entrega'] ?? 0) > 0) $freight = (float)$order['taxa_entrega'];
+    $total = (float)($order['total'] ?? 0);
+    $orderDisc = order_duplicata_order_discount($order, $calcLines, $addition, $freight, $total);
     $calc = order_duplicata_rows_calc($calcLines, $orderDisc);
     foreach ($rows as $k => $r) $rows[$k] = $r + $calc['rows'][$k];
     $gross = $calc['gross'];
-    $addition = order_email_pdf_first_number($order, ['acrescimo', 'addition', 'addition_value', 'valor_acrescimo']);
-    $freight = order_email_pdf_first_number($order, ['frete', 'freight', 'freight_value']);
-    if ($freight <= 0 && (float)($order['taxa_entrega'] ?? 0) > 0) $freight = (float)$order['taxa_entrega'];
-    $total = (float)($order['total'] ?? 0);
 
     // Recebimento e parcelamento (Contas a Receber do pedido).
     $payments = [];
@@ -291,10 +291,27 @@ if (!function_exists('order_duplicata_pdf_build')) {
     $pdf->SetXY($X, $y); $pdf->Cell($half, $barH, $tx(' Empresa:'), 0, 0, 'L', true);
     $pdf->SetXY($X + $half, $y); $pdf->Cell($half, $barH, $tx(' Cliente:'), 0, 0, 'L', true);
     $yy = $y + $barH + .8;
-    foreach ($leftLines as [$t, $st]) { $pdf->SetFont('Times', $st, 8.2); $pdf->SetXY($X + 1.5, $yy); $pdf->Cell($half - 3, $lh, $tx($fit($t, $half - 3)), 0, 0, 'L'); $yy += $lh; }
-    $kv = function (float $x, float $yy, float $w, string $k, string $v, float $kw = 15.0) use ($pdf, $tx, $fit): void {
+    // Texto longo (endereço, nome): diminui a fonte até caber (mínimo 5,5pt); só corta se ainda não couber.
+    // Se nem em 6pt couber, quebra em duas linhas de 5,5pt na mesma altura (só corta o que passar disso).
+    $shrink = function (string $t, float $w, string $st) use ($pdf, $tx, $fit, $wrap): array {
+      for ($size = 8.2; $size >= 6.0; $size -= 0.2) {
+        $pdf->SetFont('Times', $st, $size);
+        if ($pdf->GetStringWidth($tx($t)) <= $w) return [$t];
+      }
+      $pdf->SetFont('Times', $st, 5.5);
+      $lines = $wrap($t, $w);
+      if (count($lines) > 2) { $lines = [$lines[0], $fit(implode(' ', array_slice($lines, 1)), $w)]; }
+      return $lines;
+    };
+    $put = function (float $x, float $yy, float $w, float $h, array $lines) use ($pdf, $tx): void {
+      if (count($lines) <= 1) { $pdf->SetXY($x, $yy); $pdf->Cell($w, $h, $tx((string)($lines[0] ?? '')), 0, 0, 'L'); return; }
+      $pdf->SetXY($x, $yy - .15); $pdf->Cell($w, $h / 2, $tx((string)$lines[0]), 0, 0, 'L');
+      $pdf->SetXY($x, $yy + $h / 2 - .15); $pdf->Cell($w, $h / 2, $tx((string)$lines[1]), 0, 0, 'L');
+    };
+    foreach ($leftLines as [$t, $st]) { $put($X + 1.5, $yy, $half - 3, $lh, $shrink((string)$t, $half - 3, (string)$st)); $yy += $lh; }
+    $kv = function (float $x, float $yy, float $w, string $k, string $v, float $kw = 15.0) use ($pdf, $tx, $shrink, $put): void {
       $pdf->SetFont('Times', 'B', 8.2); $pdf->SetXY($x, $yy); $pdf->Cell($kw, 3.7, $tx($k), 0, 0, 'L');
-      $pdf->SetFont('Times', '', 8.2); $pdf->Cell($w - $kw, 3.7, $tx($fit($v, $w - $kw)), 0, 0, 'L');
+      $put($x + $kw, $yy, $w - $kw, 3.7, $shrink($v, $w - $kw, ''));
     };
     $rx = $X + $half + 1.5; $rw = $half - 3; $yy = $y + $barH + .8;
     $kv($rx, $yy, $rw, 'Cliente:', $up($cu['name'])); $yy += $lh;

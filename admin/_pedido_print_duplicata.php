@@ -93,13 +93,13 @@ foreach ($itens as $idx => $it) {
     'qty' => $qty,
   ];
 }
-$dupOrderDiscount = pedido_dup_first_number($pedido, ['desconto','discount','discount_value','valor_desconto']);
+$dupAddition = order_duplicata_order_amount($pedido, ['addition_amount','acrescimo','addition','addition_value','valor_acrescimo']);
+$dupFreight = order_duplicata_order_amount($pedido, ['frete','freight','freight_value','freight_amount']);
+if ($dupFreight <= 0 && $taxaEntrega > 0) $dupFreight = (float)$taxaEntrega;
+$dupOrderDiscount = order_duplicata_order_discount($pedido, $dupCalcLines, $dupAddition, $dupFreight, (float)$totalGeral);
 $dupCalc = order_duplicata_rows_calc($dupCalcLines, $dupOrderDiscount);
 foreach ($dupRows as $k => $r) $dupRows[$k] = $r + $dupCalc['rows'][$k];
 $dupGross = $dupCalc['gross'];
-$dupAddition = pedido_dup_first_number($pedido, ['acrescimo','addition','addition_value','valor_acrescimo']);
-$dupFreight = pedido_dup_first_number($pedido, ['frete','freight','freight_value']);
-if ($dupFreight <= 0 && $taxaEntrega > 0) $dupFreight = (float)$taxaEntrega;
 $dupDiscountTotal = $dupCalc['discount'];
 
 // Recebimento (formas de pagamento) e parcelamento (Contas a Receber do pedido).
@@ -183,7 +183,7 @@ table{border-collapse:collapse;width:100%}
 .meta small{display:block;font-size:6.5pt}
 .meta b{font-size:11pt}
 .warning{font-family:"Times New Roman",Times,serif;font-size:12.5pt;font-weight:700;text-align:center;border:1px solid #000;border-top:0;padding:.6mm}
-.parties{border:1px solid #000;border-top:0}
+.parties{border:1px solid #000;border-top:0;table-layout:fixed}
 .parties>tbody>tr>td{width:50%;vertical-align:top;padding:0}
 .parties>tbody>tr>td+td{border-left:1px solid #000}
 .bar{background:#bfbfbf;font-weight:700;padding:.3mm 1.5mm;font-family:"Times New Roman",Times,serif;font-size:8.5pt}
@@ -326,6 +326,23 @@ table{border-collapse:collapse;width:100%}
 </main>
 <?php if ($autoPrint): ?><script>window.addEventListener('load',function(){setTimeout(function(){try{window.print();}catch(e){}},250);});</script><?php endif; ?>
 <script>
+// Endereço/nome longos: diminui a fonte do campo até caber no quadro (mínimo 6,5pt);
+// se ainda não couber, quebra em duas linhas em vez de cortar o texto.
+(function(){
+  function fitParty(){
+    document.querySelectorAll('.party .row span, .party>div:not(.row)').forEach(function(el){
+      el.style.fontSize='';el.style.whiteSpace='';el.style.lineHeight='';
+      var size=parseFloat(getComputedStyle(el).fontSize)||11, min=8.7; // 8,7px ≈ 6,5pt
+      var over=function(){return el.scrollWidth>el.clientWidth;}, shrunk=false;
+      while(over() && size>min){size-=0.25;el.style.fontSize=size+'px';shrunk=true;}
+      if(shrunk && !over() && size-0.25>=min){size-=0.25;el.style.fontSize=size+'px';} // folga p/ arredondamento
+      if(over()){el.style.whiteSpace='normal';el.style.lineHeight='1.05';}
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fitParty);else fitParty();
+  window.addEventListener('beforeprint',fitParty);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitParty);
+})();
 function nexaPrintBack(url){try{if(window.opener||window.history.length<=1){window.close();}}catch(e){}setTimeout(function(){window.location.href=url;},250);}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();nexaPrintBack(<?= json_encode($returnTo, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>);}});
 </script>
