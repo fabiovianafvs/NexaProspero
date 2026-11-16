@@ -31,12 +31,13 @@
     upload:'<path d="M12 15.7V4.2m-4 4 4-4 4 4M4.5 17.5v2h15v-2"/>',
     gear:'<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2m0 13v2m8.5-8.5h-2m-13 0h-2m14.6 6.1-1.4-1.4M6.7 6.7 5.3 5.3m12.8 0-1.4 1.4M6.7 17.3l-1.4 1.4"/>',
     logout:'<path d="M10 4.5H6.7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10M15 8l4 4-4 4m4-4H9.5"/>',
-    dot:'<circle cx="12" cy="12" r="5"/>'
+    dot:'<circle cx="12" cy="12" r="5"/>',
+    clock:'<circle cx="12" cy="12" r="8.3"/><path d="M12 7.3V12l3.2 2.1"/>'
   };
   const mainByHref = [
     [/dashboard\.php/, 'home'],[/brain\.php/,'brain'],[/pedido/,'clip'],[/produto/,'box'],
     [/financeiro_pessoas|clientes/,'users'],[/exportacao/,'upload'],[/api\.php/,'api'],
-    [/whatsapp/,'message'],[/orcamento/,'clip'],[/crm_atendimento/,'message'],
+    [/whatsapp/,'message'],[/orcamento/,'clip'],[/crm_atendimento/,'message'],[/ponto_/,'clock'],
     [/delivery_|entrega|romaneio/,'truck'],[/contrato/,'file'],[/compras/,'shopping'],
     [/os_monitor|os_mobile|ordem_servico/,'tools'],[/producao/,'building'],[/gestao/,'cart'],
     [/financeiro/,'wallet'],[/fiscal_radar|fiscal_entrada|importar_xml/,'download'],

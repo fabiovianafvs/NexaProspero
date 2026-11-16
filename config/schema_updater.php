@@ -660,6 +660,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '655980f38944b445a041a08b98adf7bf2a1a961fac9796a05e3794c133ad6ce3',
         'order' => 202611160200,
       ],
+      [
+        'id' => '20261116_ponto_fundacao_v1',
+        'module' => 'ponto_eletronico',
+        'version' => 202611160300,
+        'label' => 'Ponto Eletrônico - V1 Fundação',
+        'description' => 'Cria as tabelas de cadastro do Nexa Ponto (estabelecimentos, departamentos, cargos, colaboradores, jornadas, escalas, feriados, locais de trabalho e auditoria). Não altera nenhuma tabela existente.',
+        'file' => __DIR__ . '/../db/20261116_ponto_fundacao_v1.sql',
+        'sha256' => 'bd8cae518272514f1a3ca76c0e685136127506c3540af816ccdef3d2308baac0',
+        'order' => 202611160300,
+      ],
     ];
   }
 }
