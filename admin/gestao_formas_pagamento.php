@@ -421,7 +421,7 @@ $creSettings = function_exists('finance_settings') ? finance_settings($pdo, $com
       </label>
       <label><input type="checkbox" name="generate_receivable" value="1" <?= !empty($edit['generate_receivable'])?'checked':'' ?>> Gera conta a receber</label>
       <label id="autoRegisterBoletoRow"><input type="checkbox" name="auto_register_boleto" value="1" <?= !empty($edit['auto_register_boleto'])?'checked':'' ?>> Registra boleto automaticamente<div class="mg-muted" style="margin:5px 0 0 24px;font-weight:400">Ao finalizar uma venda ou gerar contratos em lote, registra automaticamente o boleto na API bancária configurada. Atualmente aplicado ao Itaú/API.</div></label>
-      <label><input type="checkbox" name="allow_installments" value="1" <?= !empty($edit['allow_installments'])?'checked':'' ?>> Permite parcelamento no PDV/Comanda</label>
+      <label><input type="checkbox" name="allow_installments" value="1" <?= !empty($edit['allow_installments'])?'checked':'' ?>> Permite parcelamento (orçamento, pedidos, PDV e comanda)</label>
       <label>Parcelas padrão<input type="number" min="1" max="120" name="default_installments" value="<?= gestao_h($edit['default_installments'] ?? '1') ?>"></label>
       <label>Primeiro vencimento em dias<input type="number" min="0" max="365" name="first_due_days" value="<?= gestao_h($edit['first_due_days'] ?? '30') ?>"></label>
       <label><input type="checkbox" name="keep_due_day" value="1" <?= ($edit ? !empty($edit['keep_due_day']) : true)?'checked':'' ?>> Manter o dia do vencimento nas próximas parcelas</label>

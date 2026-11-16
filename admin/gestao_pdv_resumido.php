@@ -1960,7 +1960,8 @@ gestao_flash();
     countInput.disabled = p.allowInstallments != 1;
     const defaultCount = Math.max(1, Number(p.defaultInstallments || 1));
     if(!countInput.value || Number(countInput.value) < 1) countInput.value = String(p.allowInstallments == 1 ? defaultCount : 1);
-    const desiredCount = p.allowInstallments == 1 ? Math.max(1, Math.min(120, Number(countInput.value || defaultCount))) : 1;
+    // Parcelas já salvas (orçamento lido) são mantidas mesmo sem "Permite parcelamento".
+    const desiredCount = Math.max(1, Math.min(120, Number(countInput.value || (p.allowInstallments == 1 ? defaultCount : 1))));
     const existing = rowsBox.querySelectorAll('.pdv-installment-row').length;
     const amountKey = fmtInput(amount);
     if(!force && existing === desiredCount && rowsBox.querySelectorAll('input').length && box.dataset.amount === amountKey) return;
