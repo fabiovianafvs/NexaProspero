@@ -21,6 +21,7 @@ require_once __DIR__ . '/config_store.php';
 require_once __DIR__ . '/whatsapp_service.php';
 require_once __DIR__ . '/whatsapp_engine.php';
 require_once __DIR__ . '/whatsapp_bot_flows.php';
+require_once __DIR__ . '/whatsapp_painel.php';
 
 const WHATSAPP_BOT_SESSION_MINUTES = 30;
 const WHATSAPP_BOT_DOC_ATTEMPTS_PER_HOUR = 5;
@@ -857,8 +858,13 @@ if (!function_exists('whatsapp_chat_update')) {
       $params[] = $v;
     }
     if (!$sets) return;
+    // Painel do Atendimento: guarda a situação anterior para registrar fila/aceite/finalização.
+    $track = function_exists('whatsapp_painel_transition')
+      && (array_key_exists('status', $fields) || array_key_exists('user_id', $fields) || array_key_exists('department_id', $fields));
+    $old = $track ? whatsapp_painel_session_state($pdo, $companyId, $chatId) : null;
     $params[] = $companyId; $params[] = $chatId;
     $pdo->prepare('UPDATE whatsapp_bot_sessions SET ' . implode(', ', $sets) . ' WHERE company_id=? AND id=?')->execute($params);
+    if ($old) whatsapp_painel_transition($pdo, $companyId, $chatId, $old, $fields);
   }
 }
 
@@ -892,6 +898,7 @@ if (!function_exists('whatsapp_chat_log')) {
       throw $e;
     }
     $id = (int)$pdo->lastInsertId();
+    if (function_exists('whatsapp_painel_message')) whatsapp_painel_message($pdo, $companyId, (int)$chat['id'], $sender, $now);
     if ($sender !== 'sistema') {
       $preview = trim($body) !== '' ? $body : whatsapp_chat_type_label((string)($opt['type'] ?? 'text'));
       if (($opt['type'] ?? '') === 'contact') {
@@ -1865,6 +1872,10 @@ if (!function_exists('whatsapp_bot_step')) {
       return 'opção inválida';
     }
     $msg = trim((string)($item['message'] ?? ''));
+    // Painel do Atendimento: assunto escolhido (só a opção final; submenu é caminho).
+    if ((string)$item['action'] !== 'submenu' && function_exists('whatsapp_painel_topic')) {
+      whatsapp_painel_topic($pdo, $companyId, $chatId, 'menu', whatsapp_painel_node_path($pdo, $companyId, $item), (int)$item['id']);
+    }
     if ((string)$item['action'] === 'submenu') {
       $save(['state' => 'MENU', 'data' => ['node' => (int)$item['id']]]);
       whatsapp_bot_show_menu($pdo, $companyId, $ctx, $cfg, (int)$item['id'], false);

@@ -374,6 +374,7 @@ if (!function_exists('whatsapp_att_accept')) {
       WHERE company_id=? AND id=? AND (status<>'ATENDIMENTO' OR user_id IS NULL OR user_id=? OR ?=1)");
     $st->execute([$userId, $now, $companyId, $chatId, $userId, $supervisor ? 1 : 0]);
     if ($st->rowCount() === 0) throw new RuntimeException('Esta conversa já foi aceita por outro atendente.');
+    if (function_exists('whatsapp_painel_transition')) whatsapp_painel_transition($pdo, $companyId, $chatId, $chat, ['status' => 'ATENDIMENTO', 'user_id' => $userId], $now);
     $name = whatsapp_bot_user_name($pdo, $companyId, $userId) ?: 'Atendente';
     $previous = (int)$chat['user_id'] > 0 && (int)$chat['user_id'] !== $userId ? whatsapp_bot_user_name($pdo, $companyId, (int)$chat['user_id']) : '';
     whatsapp_att_system($pdo, $companyId, $chat, $previous !== '' ? $name . ' assumiu o atendimento (estava com ' . $previous . ').' : $name . ' aceitou o atendimento.', $userId);

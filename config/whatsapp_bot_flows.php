@@ -241,7 +241,9 @@ if (!function_exists('whatsapp_bot_answers_summary')) {
 
 if (!function_exists('whatsapp_bot_flow_start')) {
   function whatsapp_bot_flow_start(PDO $pdo, int $companyId, array $ctx, array $cfg, array $chat, int $flowId): string {
-    whatsapp_chat_log($pdo, $companyId, $chat, 'OUT', 'sistema', 'Fluxo iniciado: ' . ((whatsapp_bot_flow($pdo, $companyId, $flowId)['name'] ?? '') ?: ('#' . $flowId)) . '.');
+    $flowName = (string)((whatsapp_bot_flow($pdo, $companyId, $flowId)['name'] ?? '') ?: ('#' . $flowId));
+    whatsapp_chat_log($pdo, $companyId, $chat, 'OUT', 'sistema', 'Fluxo iniciado: ' . $flowName . '.');
+    if (function_exists('whatsapp_painel_topic')) whatsapp_painel_topic($pdo, $companyId, (int)$chat['id'], 'flow', $flowName, $flowId);
     return whatsapp_bot_flow_run($pdo, $companyId, $ctx, $cfg, $chat, $flowId, 0, whatsapp_bot_chat_answers($chat));
   }
 }

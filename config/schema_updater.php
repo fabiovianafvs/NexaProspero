@@ -650,6 +650,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '1653b3f8c3ac4867ade7480e6d3b3931977eba756e24ff34cc9a69d04e2a42a6',
         'order' => 202611160100,
       ],
+      [
+        'id' => '20261116_whatsapp_painel_v1',
+        'module' => 'whatsapp_painel',
+        'version' => 202611160200,
+        'label' => 'WhatsApp - Painel do Atendimento',
+        'description' => 'Cria o histórico de atendimentos do WhatsApp (setor, atendente, espera, duração, transferências) e dos assuntos escolhidos no robô, usados pelo Painel do Atendimento.',
+        'file' => __DIR__ . '/../db/20261116_whatsapp_painel_v1.sql',
+        'sha256' => '655980f38944b445a041a08b98adf7bf2a1a961fac9796a05e3794c133ad6ce3',
+        'order' => 202611160200,
+      ],
     ];
   }
 }
