@@ -17,6 +17,7 @@ unset($_SESSION['db_backup_flash_ok'], $_SESSION['db_backup_flash_err']);
 try {
   if (isset($_GET['download'])) {
     $file = nexa_db_backup_resolve_file((string)$_GET['download']);
+    while (ob_get_level() > 0) ob_end_clean(); // arquivo grande: envia direto, sem guardar na memória
     header('Content-Type: application/gzip');
     header('Content-Disposition: attachment; filename="' . basename($file) . '"');
     header('Content-Length: ' . (string)filesize($file));

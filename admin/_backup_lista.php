@@ -51,7 +51,7 @@ $bkpSize = static function (int $bytes): string {
           <td><span class="bkp-file"><?= $bkpH($file) ?></span></td>
           <td class="c-size"><?= $bkpSize((int)($b['compressed_bytes'] ?? 0)) ?></td>
           <td class="c-act"><div class="bkp-act">
-            <a class="bkp-a dl" href="<?= $bkpH($bkpPage) ?>?download=<?= rawurlencode($file) ?>">Download</a>
+            <a class="bkp-a dl" data-no-processing download href="<?= $bkpH($bkpPage) ?>?download=<?= rawurlencode($file) ?>">Download</a>
             <form method="post" onsubmit="return confirm('Excluir definitivamente o backup <?= $bkpH($file) ?>?');"><input type="hidden" name="csrf" value="<?= $bkpH($csrf) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="file" value="<?= $bkpH($file) ?>"><button class="bkp-a del" type="submit">Excluir</button></form>
           </div></td>
         </tr>

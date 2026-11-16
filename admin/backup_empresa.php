@@ -35,6 +35,7 @@ try {
 try {
   if (isset($_GET['download'])) {
     $file = company_backup_resolve($cid, (string)$_GET['download']);
+    while (ob_get_level() > 0) ob_end_clean(); // arquivo grande: envia direto, sem guardar na memória
     header('Content-Type: application/gzip');
     header('Content-Disposition: attachment; filename="' . basename($file) . '"');
     header('Content-Length: ' . (string)filesize($file));
