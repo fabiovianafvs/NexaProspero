@@ -157,6 +157,9 @@ if (!function_exists('ponto_config_defaults')) {
       // CPF de quem responde pelos cadastros do ponto (vai nos registros de empresa/empregado do AFD).
       'responsavel_cpf' => '',
       'afd_layout' => '', 'aej_layout' => '',
+      // Acesso ao Nexa ligado ao ponto (V8). Desligado por padrão.
+      'acesso_modo' => 'DESLIGADO', 'acesso_exigir_marcacao' => 1, 'acesso_bloquear_saida' => 0,
+      'acesso_antes_min' => 15, 'acesso_depois_min' => 15, 'acesso_admins' => 0,
     ];
   }
 }
@@ -226,7 +229,19 @@ if (!function_exists('ponto_config_save')) {
       if ($rc !== '' && !ponto_cpf_valid($rc)) throw new RuntimeException('CPF do responsável pelo ponto inválido.');
       $new['responsavel_cpf'] = $rc;
     }
+    if (isset($in['acesso_modo'])) {
+      $modo = (string)$in['acesso_modo'];
+      if (!in_array($modo, ['DESLIGADO', 'AVISAR', 'BLOQUEAR'], true)) throw new RuntimeException('Modo de acesso ao Nexa inválido.');
+      $new['acesso_modo'] = $modo;
+      foreach (['acesso_exigir_marcacao', 'acesso_bloquear_saida', 'acesso_admins'] as $k) $new[$k] = empty($in[$k]) ? 0 : 1;
+      foreach (['acesso_antes_min', 'acesso_depois_min'] as $k) {
+        $v = (int)($in[$k] ?? 15);
+        if ($v < 0 || $v > 240) throw new RuntimeException('Tolerância do acesso ao Nexa: de 0 a 240 minutos.');
+        $new[$k] = $v;
+      }
+    }
     config_store_set($pdo, $companyId, 'ponto', $new);
+    if (session_status() === PHP_SESSION_ACTIVE) unset($_SESSION['nexa_ponto_acesso']);
     ponto_audit($pdo, $companyId, 'alterar', 'configuracoes', null, array_diff_assoc($old, $new), array_diff_assoc($new, $old));
     return $new;
   }
@@ -1095,6 +1110,7 @@ if (!function_exists('ponto_colaborador_save')) {
     foreach (['controla_ponto', 'permite_ponto_mobile', 'permite_ponto_externo'] as $k) $d[$k] = empty($in[$k]) ? 0 : 1;
     // Banco de horas (V5): só quando o formulário traz o campo e a coluna já existe.
     if (isset($in['banco_horas_form']) && ponto_has_column($pdo, 'ponto_colaboradores', 'banco_horas')) $d['banco_horas'] = empty($in['banco_horas']) ? 0 : 1;
+    if (isset($in['acesso_livre_form']) && ponto_has_column($pdo, 'ponto_colaboradores', 'acesso_livre')) $d['acesso_livre'] = empty($in['acesso_livre']) ? 0 : 1;
     // Usuário do Nexa (opcional): precisa ser desta empresa e não estar ligado a outro colaborador.
     $uid = (int)($in['usuario_id'] ?? 0);
     if ($uid > 0 && !isset(ponto_company_users($pdo, $companyId)[$uid])) throw new RuntimeException('Usuário do Nexa não encontrado nesta empresa.');

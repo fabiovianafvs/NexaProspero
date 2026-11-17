@@ -60,6 +60,21 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
     </div>
     <p class="pt-hint">CLT, art. 59: banco de horas por acordo individual escrito compensa em até 6 meses; por acordo ou convenção coletiva, em até 12. Horas não compensadas no prazo são pagas como extra. Confira estas regras com o contador e a convenção da categoria.</p>
   </section>
+  <?php if (function_exists('ponto_v8_ready') && ponto_v8_ready($pdo)): $am = (string)($cfg['acesso_modo'] ?? 'DESLIGADO'); ?>
+  <section class="pt-card">
+    <h2>Acesso ao Nexa pelo ponto</h2>
+    <p class="pt-sub">Liga o uso do Nexa (PDV, pedidos, cadastros...) à jornada de quem tem usuário ligado a um colaborador do ponto. Quem não está ligado a um colaborador não é afetado.</p>
+    <div class="pt-grid">
+      <label class="f s2">Quando o funcionário usar o Nexa fora da jornada<select name="acesso_modo"><?php foreach (PONTO_ACESSO_MODOS as $v => $lb): ?><option value="<?= ponto_h($v) ?>" <?= $am === $v ? 'selected' : '' ?>><?= ponto_h($lb) ?></option><?php endforeach; ?></select></label>
+      <label class="f">Pode entrar antes do início (minutos)<input type="number" name="acesso_antes_min" min="0" max="240" value="<?= (int)($cfg['acesso_antes_min'] ?? 15) ?>"></label>
+      <label class="f">Pode ficar depois do fim (minutos)<input type="number" name="acesso_depois_min" min="0" max="240" value="<?= (int)($cfg['acesso_depois_min'] ?? 15) ?>"></label>
+      <label class="ck s2"><input type="checkbox" name="acesso_exigir_marcacao" value="1" <?= $ck('acesso_exigir_marcacao') ?>> Exigir que o ponto de entrada esteja registrado</label>
+      <label class="ck s2"><input type="checkbox" name="acesso_bloquear_saida" value="1" <?= $ck('acesso_bloquear_saida') ?>> Depois de registrar a saída (intervalo ou fim do dia), não usar o Nexa até registrar a volta</label>
+      <label class="ck s2"><input type="checkbox" name="acesso_admins" value="1" <?= $ck('acesso_admins') ?>> Aplicar também aos administradores da empresa (se estiverem ligados a um colaborador)</label>
+    </div>
+    <p class="pt-hint">No modo "Bloquear", fora da jornada o Nexa mostra uma tela onde o funcionário bate o ponto ou pede liberação; o gestor libera em Ponto &gt; Acesso ao Nexa. Colaborador marcado como "Acesso ao Nexa sem restrição de horário" no cadastro não é bloqueado. Colaborador sem jornada cadastrada só precisa ter batido o ponto. A verificação é refeita a cada minuto de uso.</p>
+  </section>
+  <?php endif; ?>
   <section class="pt-card">
     <h2>Dados do programa de ponto (REP-P)</h2>
     <p class="pt-sub">Esses dados aparecem nos arquivos legais e comprovantes. Campo em branco usa o padrão da plataforma (mostrado em cinza), definido pelo desenvolvedor no servidor.</p>

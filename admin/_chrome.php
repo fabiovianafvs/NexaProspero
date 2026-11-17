@@ -276,6 +276,7 @@ function admin_topbar(string $title, string $active=''): void {
       'ponto_banco_horas' => ['Banco de Horas', 'ponto_banco_horas.php'],
       'ponto_fechamento' => ['Fechamento do Mês', 'ponto_fechamento.php'],
       'ponto_arquivos' => ['Arquivos Legais (AFD/AEJ)', 'ponto_arquivos.php'],
+      'ponto_acesso' => ['Acesso ao Nexa', 'ponto_acesso.php'],
       'ponto_colaboradores' => ['Colaboradores', 'ponto_colaboradores.php'],
       'ponto_departamentos' => ['Departamentos', 'ponto_departamentos.php'],
       'ponto_cargos' => ['Cargos/Funções', 'ponto_cargos.php'],

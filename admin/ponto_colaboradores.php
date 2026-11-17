@@ -169,6 +169,7 @@ ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada co
         <label class="ck s3"><input type="checkbox" name="permite_ponto_mobile" value="1"> Pode bater o ponto pelo celular</label>
         <label class="ck s3"><input type="checkbox" name="permite_ponto_externo" value="1"> Pode bater o ponto fora dos locais de trabalho (serviço externo)</label>
         <?php if (ponto_has_column($pdo, 'ponto_colaboradores', 'banco_horas')): ?><input type="hidden" name="banco_horas_form" value="1"><label class="ck s3"><input type="checkbox" name="banco_horas" value="1"> Participa do banco de horas (quando a empresa usa banco de horas)</label><?php endif; ?>
+        <?php if (ponto_has_column($pdo, 'ponto_colaboradores', 'acesso_livre')): ?><input type="hidden" name="acesso_livre_form" value="1"><label class="ck s3"><input type="checkbox" name="acesso_livre" value="1"> Acesso ao Nexa sem restrição de horário (quando a empresa liga o controle de acesso pelo ponto)</label><?php endif; ?>
         <label class="f s2">Usuário do Nexa (opcional)<?= $sel('usuario_id', $users, 'Sem usuário') ?></label>
         <label class="f">Código interno<input type="text" name="codigo_interno" maxlength="30"></label>
         <label class="f">Cartão RFID <span class="pt-hint" id="pcRfidNow"></span><input type="text" name="rfid" maxlength="40" autocomplete="off" placeholder="Aproxime o cartão do leitor"></label>

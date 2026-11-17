@@ -16,6 +16,7 @@ if (!function_exists('ponto_menu_items')) {
       'ponto_banco_horas' => ['Banco de Horas', 'ponto_banco_horas.php'],
       'ponto_fechamento' => ['Fechamento', 'ponto_fechamento.php'],
       'ponto_arquivos' => ['Arquivos Legais', 'ponto_arquivos.php'],
+      'ponto_acesso' => ['Acesso ao Nexa', 'ponto_acesso.php'],
       'ponto_colaboradores' => ['Colaboradores', 'ponto_colaboradores.php'],
       'ponto_departamentos' => ['Departamentos', 'ponto_departamentos.php'],
       'ponto_cargos' => ['Cargos/Funções', 'ponto_cargos.php'],

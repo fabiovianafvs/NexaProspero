@@ -207,6 +207,7 @@ if (!function_exists('access_permissions_catalog')) {
       'ponto_banco_horas' => ['label' => 'Banco de horas (saldos e lançamentos)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_banco_horas.php'], 'nav' => ['ponto_banco_horas']],
       'ponto_fechamento' => ['label' => 'Fechamento do mês (fechar e baixar planilha)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_fechamento.php'], 'nav' => ['ponto_fechamento']],
       'ponto_arquivos' => ['label' => 'Arquivos legais do ponto (AFD e AEJ)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_arquivos.php'], 'nav' => ['ponto_arquivos']],
+      'ponto_acesso' => ['label' => 'Acesso ao Nexa pelo ponto (liberar e acompanhar)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_acesso.php'], 'nav' => ['ponto_acesso']],
       'ponto_espelho' => ['label' => 'Espelho de ponto de todos os colaboradores', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_espelho.php'], 'nav' => []],
       'ponto_fechamento_reabrir' => ['label' => 'Reabrir mês fechado do ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => [], 'nav' => []],
       'ponto_tipos_ocorrencia' => ['label' => 'Tipos de ocorrência', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_tipos_ocorrencia.php'], 'nav' => ['ponto_tipos_ocorrencia']],
@@ -514,7 +515,7 @@ if (!function_exists('access_admin_nav_allowed')) {
 
     $parentPermissions = [
       'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila','whatsapp_atendimento','whatsapp_painel','whatsapp_chatbot'],
-      'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_tratamento','ponto_ocorrencias','ponto_banco_horas','ponto_fechamento','ponto_arquivos','ponto_tipos_ocorrencia','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
+      'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_tratamento','ponto_ocorrencias','ponto_banco_horas','ponto_fechamento','ponto_arquivos','ponto_acesso','ponto_tipos_ocorrencia','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
       'orcamento' => ['orcamentos','orcamento_novo'],
       'contratos' => ['contratos','contratos_gerar'],
       'compras' => ['compras_assistente','compras_listas','compras_cotacoes','compras_pedidos','compras_painel','compras_alertas','compras_fornecedores_avaliacao','compras_fornecedores_ranking','compras_fornecedores_ranking_config','compras_historico_precos'],

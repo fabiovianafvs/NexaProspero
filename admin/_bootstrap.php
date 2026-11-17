@@ -25,6 +25,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($pdo) && $pdo instanc
 $page = basename($_SERVER['PHP_SELF'] ?? '');
 $pageLower = strtolower($page);
 
+// Nexa Ponto V8: acesso ao Nexa ligado ao ponto (só quando a empresa liga em Ponto > Configurações).
+// Decisão guardada na sessão por 1 minuto; qualquer falha libera o acesso.
+if (isset($pdo) && $pdo instanceof PDO && is_file(__DIR__ . '/../config/ponto_acesso.php')) {
+  require_once __DIR__ . '/../config/ponto_acesso.php';
+  ponto_acesso_guard($pdo, (int)COMPANY_ID, $pageLower);
+}
+
 // Utilitarios: ativacao fiscal sensivel, exclusivamente pela empresa do login.
 // Nao permitir perfil comum ou empresa selecionada pelo F11.
 if ($pageLower === 'utilitarios_regularizacao_nfe.php' || $pageLower === 'utilitarios_financeiro_sem_banco.php') {

@@ -710,6 +710,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'e6705f65b15ed5023c6815846dfe03d0588ae3eea02adb5cbbd11cdce72f300a',
         'order' => 202611170400,
       ],
+      [
+        'id' => '20261117_ponto_acesso_v8',
+        'module' => 'ponto_eletronico',
+        'version' => 202611170500,
+        'label' => 'Ponto Eletrônico - V8 Acesso ao Nexa',
+        'description' => 'Cria as liberações de acesso e o registro de uso do Nexa fora da jornada, e a opção "acesso sem restrição de horário" no colaborador. Nada muda até a empresa ligar a regra em Ponto > Configurações. Aplicar depois da V2.',
+        'file' => __DIR__ . '/../db/20261117_ponto_acesso_v8.sql',
+        'sha256' => 'd0af2ffa991edd51316841dac81c1235d6e027cc2ddd5a1b35d1df30800b0052',
+        'order' => 202611170500,
+      ],
     ];
   }
 }
