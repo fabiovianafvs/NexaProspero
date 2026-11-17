@@ -82,6 +82,7 @@ $hist = ponto_fechamentos_list($pdo, $cid, 24);
   <?php if (count($estabs) > 1): ?><label class="f grow">Estabelecimento<select name="e" onchange="this.form.submit()"><?php foreach ($estabs as $k => $v): ?><option value="<?= (int)$k ?>" <?= (int)$k === $estabId ? 'selected' : '' ?>><?= ponto_h($v) ?></option><?php endforeach; ?></select></label><?php else: ?><input type="hidden" name="e" value="<?= $estabId ?>"><?php endif; ?>
   <label class="f">Mês<input type="month" name="c" value="<?= ponto_h($comp) ?>" onchange="this.form.submit()"></label>
   <a class="pt-btn" href="ponto_fechamento.php?<?= ponto_h(http_build_query(['c' => $comp, 'e' => $estabId, 'csv' => 1])) ?>" data-no-processing download><?= $fechado ? 'Baixar planilha (Excel)' : 'Baixar prévia (Excel)' ?></a>
+  <?php if (ponto_can($pdo, 'ponto_espelho')): ?><a class="pt-btn" href="ponto_espelho.php?<?= ponto_h(http_build_query(['c' => $comp, 'e' => $estabId])) ?>" target="_blank" rel="noopener">Espelhos de ponto</a><?php endif; ?>
 </form>
 
 <section class="pt-card" style="margin-bottom:12px">

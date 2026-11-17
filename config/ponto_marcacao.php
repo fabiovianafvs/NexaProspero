@@ -338,6 +338,12 @@ if (!function_exists('ponto_marcar')) {
       $st = $pdo->prepare('SELECT ultimo_nsr, ultimo_hash FROM ponto_arp_nsr WHERE company_id = ? AND estabelecimento_id = ? FOR UPDATE');
       $st->execute([$companyId, (int)$estab['id']]);
       $seq = $st->fetch(PDO::FETCH_ASSOC);
+      // V6: empregador e empregado registrados no REP (AFD tipos 2 e 5) antes da 1ª marcação.
+      if (function_exists('ponto_arp_prepara_marcacao') && ponto_v6_ready($pdo)) {
+        ponto_arp_prepara_marcacao($pdo, $companyId, $estab, $col);
+        $st->execute([$companyId, (int)$estab['id']]);
+        $seq = $st->fetch(PDO::FETCH_ASSOC);
+      }
       $nsr = (int)$seq['ultimo_nsr'] + 1;
       $prevHash = $seq['ultimo_hash'] ? (string)$seq['ultimo_hash'] : null;
       // Hora oficial: lida depois do bloqueio, para a ordem do NSR acompanhar a do horário.
@@ -388,22 +394,37 @@ if (!function_exists('ponto_arp_verificar')) {
   function ponto_arp_verificar(PDO $pdo, int $companyId, int $estabId): array {
     $st = $pdo->prepare('SELECT nsr, cpf, data_hora, fuso, data_hora_gravacao, fuso_gravacao, coletor_codigo, offline, hash_anterior, hash FROM ponto_arp_marcacoes WHERE company_id = ? AND estabelecimento_id = ? ORDER BY nsr');
     $st->execute([$companyId, $estabId]);
-    $prev = null; $esperado = 1; $n = 0;
+    $regs = [];
     while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+      if (isset($regs[(int)$r['nsr']])) return ['ok' => false, 'total' => count($regs), 'erro' => 'NSR ' . (int)$r['nsr'] . ' repetido.', 'nsr' => (int)$r['nsr']];
+      $regs[(int)$r['nsr']] = $r;
+    }
+    // V6: registros de empresa/empregado (tipos 2 e 5) usam a mesma numeração.
+    if (function_exists('ponto_v6_ready') && ponto_v6_ready($pdo)) {
+      $se = $pdo->prepare('SELECT nsr FROM ponto_arp_eventos WHERE company_id = ? AND estabelecimento_id = ?');
+      $se->execute([$companyId, $estabId]);
+      foreach ($se->fetchAll(PDO::FETCH_COLUMN) as $nsrEv) {
+        if (isset($regs[(int)$nsrEv])) return ['ok' => false, 'total' => count($regs), 'erro' => 'NSR ' . (int)$nsrEv . ' repetido.', 'nsr' => (int)$nsrEv];
+        $regs[(int)$nsrEv] = null;
+      }
+    }
+    ksort($regs);
+    $prev = null; $esperado = 1; $n = 0;
+    foreach ($regs as $nsr => $r) {
       $n++;
-      $nsr = (int)$r['nsr'];
       if ($nsr !== $esperado) return ['ok' => false, 'total' => $n, 'erro' => 'Falta o NSR ' . $esperado . ' (encontrado ' . $nsr . ').', 'nsr' => $nsr];
+      $esperado++;
+      if ($r === null) continue;
       if ((string)($r['hash_anterior'] ?? '') !== (string)($prev ?? '')) return ['ok' => false, 'total' => $n, 'erro' => 'NSR ' . $nsr . ': encadeamento com o registro anterior não confere.', 'nsr' => $nsr];
       $calc = ponto_afd_hash($nsr, ponto_afd_dh((string)$r['data_hora'], (string)$r['fuso']), (string)$r['cpf'], ponto_afd_dh((string)$r['data_hora_gravacao'], (string)$r['fuso_gravacao']), (string)$r['coletor_codigo'], (int)$r['offline'], $prev);
       if (!hash_equals($calc, (string)$r['hash'])) return ['ok' => false, 'total' => $n, 'erro' => 'NSR ' . $nsr . ': os dados não conferem com o código hash (registro alterado).', 'nsr' => $nsr];
       $prev = (string)$r['hash'];
-      $esperado++;
     }
     $st = $pdo->prepare('SELECT ultimo_nsr, ultimo_hash FROM ponto_arp_nsr WHERE company_id = ? AND estabelecimento_id = ?');
     $st->execute([$companyId, $estabId]);
     $seq = $st->fetch(PDO::FETCH_ASSOC);
     if ($seq && ((int)$seq['ultimo_nsr'] !== $esperado - 1 || (string)($seq['ultimo_hash'] ?? '') !== (string)($prev ?? ''))) {
-      return ['ok' => false, 'total' => $n, 'erro' => 'O último NSR registrado (' . (int)$seq['ultimo_nsr'] . ') não confere com as marcações gravadas (' . ($esperado - 1) . ').', 'nsr' => null];
+      return ['ok' => false, 'total' => $n, 'erro' => 'O último NSR registrado (' . (int)$seq['ultimo_nsr'] . ') não confere com os registros gravados (' . ($esperado - 1) . ').', 'nsr' => null];
     }
     return ['ok' => true, 'total' => $n, 'erro' => null, 'nsr' => null];
   }
@@ -751,3 +772,6 @@ if (!function_exists('ponto_geofence_label')) {
     return $map[$g] ?? [$g, 'n'];
   }
 }
+
+// V6: registros cadastrais do REP, AFD, AEJ e Espelho de Ponto.
+require_once __DIR__ . '/ponto_afd.php';

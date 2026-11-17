@@ -8,6 +8,7 @@ require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_ponto.php';
 
+require_once __DIR__ . '/../config/ponto_marcacao.php'; // ganchos do REP-P (registro do empregador no AFD)
 $ent = ponto_entity((string)$PONTO_ENTITY, $pdo);
 $key = (string)$ent['key'];
 $cid = ponto_guard($pdo, (string)$ent['perm']);

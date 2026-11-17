@@ -63,6 +63,8 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
       <label class="f">Versão do programa<input type="text" name="rep_p_versao" maxlength="20" value="<?= ponto_h($cfg['rep_p_versao']) ?>"></label>
       <label class="f">Desenvolvedor<input type="text" name="rep_p_desenvolvedor" maxlength="150" value="<?= ponto_h($cfg['rep_p_desenvolvedor']) ?>"></label>
       <label class="f">CNPJ do desenvolvedor<input type="text" name="rep_p_cnpj_desenvolvedor" inputmode="numeric" maxlength="18" value="<?= ponto_h(ponto_fmt_doc((string)$cfg['rep_p_cnpj_desenvolvedor'])) ?>"></label>
+      <label class="f">E-mail do desenvolvedor<input type="email" name="rep_p_email_desenvolvedor" maxlength="50" value="<?= ponto_h((string)($cfg['rep_p_email_desenvolvedor'] ?? '')) ?>"></label>
+      <label class="f">CPF do responsável pelos cadastros do ponto<input type="text" name="responsavel_cpf" inputmode="numeric" maxlength="14" value="<?= ponto_h(ponto_fmt_doc((string)($cfg['responsavel_cpf'] ?? ''))) ?>" placeholder="Vai no AFD quando empregador ou empregado é incluído/alterado"></label>
     </div>
   </section>
   <div style="display:flex;justify-content:flex-end"><button class="pt-btn pri" type="submit">Salvar configurações</button></div>

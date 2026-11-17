@@ -153,7 +153,9 @@ if (!function_exists('ponto_config_defaults')) {
       'bh_ativo' => 0, 'bh_validade_meses' => 6, 'bh_fator_100' => 1, 'bh_debitar_faltas' => 1,
       'extra_percentual' => 50, 'extra_folga_percentual' => 100, 'extra_folga_100' => 1,
       // Dados do REP-P (preencher só depois do registro no INPI).
-      'rep_p_registro_inpi' => '', 'rep_p_versao' => '', 'rep_p_desenvolvedor' => '', 'rep_p_cnpj_desenvolvedor' => '',
+      'rep_p_registro_inpi' => '', 'rep_p_versao' => '', 'rep_p_desenvolvedor' => '', 'rep_p_cnpj_desenvolvedor' => '', 'rep_p_email_desenvolvedor' => '',
+      // CPF de quem responde pelos cadastros do ponto (vai nos registros de empresa/empregado do AFD).
+      'responsavel_cpf' => '',
       'afd_layout' => '', 'aej_layout' => '',
     ];
   }
@@ -214,6 +216,16 @@ if (!function_exists('ponto_config_save')) {
     $cnpjDev = ponto_digits($in['rep_p_cnpj_desenvolvedor'] ?? '');
     if ($cnpjDev !== '' && !ponto_cnpj_valid($cnpjDev)) throw new RuntimeException('CNPJ do desenvolvedor inválido.');
     $new['rep_p_cnpj_desenvolvedor'] = $cnpjDev;
+    if (isset($in['rep_p_email_desenvolvedor'])) {
+      $em = trim((string)$in['rep_p_email_desenvolvedor']);
+      if ($em !== '' && (!filter_var($em, FILTER_VALIDATE_EMAIL) || strlen($em) > 50)) throw new RuntimeException('E-mail do desenvolvedor inválido (até 50 caracteres).');
+      $new['rep_p_email_desenvolvedor'] = $em;
+    }
+    if (isset($in['responsavel_cpf'])) {
+      $rc = ponto_digits($in['responsavel_cpf']);
+      if ($rc !== '' && !ponto_cpf_valid($rc)) throw new RuntimeException('CPF do responsável pelo ponto inválido.');
+      $new['responsavel_cpf'] = $rc;
+    }
     config_store_set($pdo, $companyId, 'ponto', $new);
     ponto_audit($pdo, $companyId, 'alterar', 'configuracoes', null, array_diff_assoc($old, $new), array_diff_assoc($new, $old));
     return $new;
@@ -505,6 +517,8 @@ if (!function_exists('ponto_entity_save')) {
       $sets = implode(', ', array_map(static fn($c) => '`' . $c . '` = ?', array_keys($changes)));
       $pdo->prepare('UPDATE ' . $e['table'] . ' SET ' . $sets . ' WHERE company_id = ? AND id = ?')->execute(array_merge(array_values($changes), [$companyId, $id]));
       ponto_audit($pdo, $companyId, 'alterar', $key, $id, array_intersect_key($old, $changes), $changes);
+      // REP-P (V6): alteração do empregador fica registrada no ARP (registro tipo 2 do AFD).
+      if ($key === 'estabelecimentos' && function_exists('ponto_arp_empresa_registrar')) ponto_arp_empresa_registrar($pdo, $companyId, $id);
       return $id;
     }
     $cols = array_keys($data);
@@ -1107,6 +1121,8 @@ if (!function_exists('ponto_colaborador_save')) {
       $sets = implode(', ', array_map(static fn($c) => $c . ' = ?', array_keys($changes)));
       $pdo->prepare('UPDATE ponto_colaboradores SET ' . $sets . ' WHERE company_id = ? AND id = ?')->execute(array_merge(array_values($changes), [$companyId, $id]));
       ponto_audit($pdo, $companyId, 'alterar', 'colaboradores', $id, array_intersect_key($old, $changes), $changes, $id);
+      // REP-P (V6): inclusão/alteração/exclusão do empregado no ARP (registro tipo 5 do AFD).
+      if (function_exists('ponto_arp_colaborador_alterado')) ponto_arp_colaborador_alterado($pdo, $companyId, $old, ponto_colaborador_get($pdo, $companyId, $id));
       return $id;
     }
     $cols = array_keys($d);
@@ -1114,6 +1130,7 @@ if (!function_exists('ponto_colaborador_save')) {
       ->execute(array_merge([$companyId], array_values($d)));
     $newId = (int)$pdo->lastInsertId();
     ponto_audit($pdo, $companyId, 'criar', 'colaboradores', $newId, null, array_filter($d, static fn($v) => $v !== null && $v !== ''), $newId);
+    if (function_exists('ponto_arp_colaborador_alterado')) ponto_arp_colaborador_alterado($pdo, $companyId, null, ponto_colaborador_get($pdo, $companyId, $newId));
     return $newId;
   }
 }

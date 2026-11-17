@@ -700,6 +700,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '042c46ab52e8f61471f565372475d508a295c3d2b58b2250147a6b3d9764d905',
         'order' => 202611170300,
       ],
+      [
+        'id' => '20261117_ponto_afd_aej_v6',
+        'module' => 'ponto_eletronico',
+        'version' => 202611170400,
+        'label' => 'Ponto Eletrônico - V6 Arquivos legais (AFD/AEJ)',
+        'description' => 'Cria o registro, no REP-P, da inclusão/alteração do empregador e da inclusão/alteração/exclusão de empregados (exigidos pela Portaria 671 para o AFD). Aplicar depois da V2. Não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261117_ponto_afd_aej_v6.sql',
+        'sha256' => 'e6705f65b15ed5023c6815846dfe03d0588ae3eea02adb5cbbd11cdce72f300a',
+        'order' => 202611170400,
+      ],
     ];
   }
 }

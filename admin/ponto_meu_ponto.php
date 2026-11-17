@@ -143,7 +143,7 @@ $hoje = date('Y-m-d');
       <div><span>Saldo</span><b style="color:<?= $tot['saldo'] < 0 ? '#b91c1c' : '#15803d' ?>"><?= $h(ponto_hm($tot['saldo'], false)) ?></b></div>
     </div>
     <?php if ($bhSaldo !== null): ?><div class="pa-msg <?= $bhSaldo < 0 ? 'warn' : 'ok' ?>" style="margin:10px 0 0">Banco de horas (meses já fechados): <b><?= $h(ponto_hm($bhSaldo, false)) ?></b></div><?php endif; ?>
-    <p class="pa-hint" style="margin:8px 0 0"><?= ponto_v5_ready($pdo) && ponto_competencia_fechada($pdo, $cid, (int)$col['id'], $de) ? 'Mês fechado pelo responsável.' : 'Valores provisórios até o fechamento do mês pelo responsável.' ?></p>
+    <p class="pa-hint" style="margin:8px 0 0"><?= ponto_v5_ready($pdo) && ponto_competencia_fechada($pdo, $cid, (int)$col['id'], $de) ? 'Mês fechado pelo responsável.' : 'Valores provisórios até o fechamento do mês pelo responsável.' ?><?php if (is_file(__DIR__ . '/ponto_meu_espelho.php')): ?> · <a href="ponto_meu_espelho.php?c=<?= $h($comp) ?>">Espelho de ponto do mês</a><?php endif; ?></p>
     <div style="margin-top:8px">
       <?php foreach (array_reverse($dias, true) as $d => $r):
         if (in_array($r['situacao'], ['FUTURO', 'FORA_CONTRATO', 'ANTES_INICIO'], true)) continue;
