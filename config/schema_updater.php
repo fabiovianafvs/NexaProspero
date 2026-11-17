@@ -690,6 +690,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'b1a5e5551f7be9158ba24b25e285308f073d378be2900ffeb954a3bcf3124243',
         'order' => 202611170200,
       ],
+      [
+        'id' => '20261117_ponto_banco_fechamento_v5',
+        'module' => 'ponto_eletronico',
+        'version' => 202611170300,
+        'label' => 'Ponto Eletrônico - V5 Banco de horas e fechamento',
+        'description' => 'Cria o fechamento do mês (com os totais de cada colaborador), o extrato do banco de horas e as opções "participa do banco de horas" (colaborador) e "folga paga com o banco" (tipo de ocorrência). Aplicar depois da V4. Não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261117_ponto_banco_fechamento_v5.sql',
+        'sha256' => '042c46ab52e8f61471f565372475d508a295c3d2b58b2250147a6b3d9764d905',
+        'order' => 202611170300,
+      ],
     ];
   }
 }

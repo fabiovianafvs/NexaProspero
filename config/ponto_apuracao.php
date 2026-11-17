@@ -41,6 +41,43 @@ if (!function_exists('ponto_v4_ready')) {
   }
 }
 
+if (!function_exists('ponto_v5_ready')) {
+  function ponto_v5_ready(PDO $pdo): bool {
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+      $st = $pdo->query("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('ponto_fechamentos','ponto_fechamento_itens','ponto_bh_movimentos'))
+        + (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'ponto_tipos_ocorrencia' AND column_name = 'compensa_banco')");
+      return $ready = ((int)$st->fetchColumn() === 4);
+    } catch (Throwable $e) {
+      return $ready = false;
+    }
+  }
+}
+
+if (!function_exists('ponto_competencia_fechada')) {
+  /** O mês do dia $date está fechado para o estabelecimento do colaborador? */
+  function ponto_competencia_fechada(PDO $pdo, int $companyId, int $colId, string $date): bool {
+    if (!ponto_v5_ready($pdo)) return false;
+    $st = $pdo->prepare("SELECT COUNT(*) FROM ponto_fechamentos f JOIN ponto_colaboradores c ON c.company_id = f.company_id AND c.estabelecimento_id = f.estabelecimento_id
+      WHERE f.company_id = ? AND c.id = ? AND f.competencia = ? AND f.status = 'FECHADO'");
+    $st->execute([$companyId, $colId, substr($date, 0, 7)]);
+    return (int)$st->fetchColumn() > 0;
+  }
+}
+
+if (!function_exists('ponto_assert_competencia_aberta')) {
+  /** Barra alterações (tratamento, ocorrências, banco de horas) em mês já fechado. */
+  function ponto_assert_competencia_aberta(PDO $pdo, int $companyId, int $colId, string $de, ?string $ate = null): void {
+    $ate = $ate ?: $de;
+    for ($m = substr($de, 0, 7); $m <= substr($ate, 0, 7); $m = date('Y-m', strtotime($m . '-01 +1 month'))) {
+      if (ponto_competencia_fechada($pdo, $companyId, $colId, $m . '-01')) {
+        throw new RuntimeException('O mês ' . substr($m, 5, 2) . '/' . substr($m, 0, 4) . ' já está fechado. Para alterar, reabra em Ponto Eletrônico > Fechamento (com o motivo).');
+      }
+    }
+  }
+}
+
 if (!function_exists('ponto_hm')) {
   /** Minutos em "8h48" / "-0h15"; 0 => "—" quando $dash. */
   function ponto_hm(int $min, bool $dash = true): string {
@@ -75,6 +112,9 @@ if (!function_exists('ponto_tipos_ocorrencia_seed')) {
     if ((int)$st->fetchColumn() > 0) return;
     $ins = $pdo->prepare('INSERT INTO ponto_tipos_ocorrencia (company_id, descricao, abona, exige_documento, visivel_colaborador) VALUES (?,?,?,?,?)');
     foreach (ponto_tipos_ocorrencia_padrao() as [$d, $a, $e, $v]) $ins->execute([$companyId, $d, $a, $e, $v]);
+    if (ponto_has_column($pdo, 'ponto_tipos_ocorrencia', 'compensa_banco')) {
+      $pdo->prepare("UPDATE ponto_tipos_ocorrencia SET compensa_banco = 1 WHERE company_id = ? AND descricao = 'Folga compensatória'")->execute([$companyId]);
+    }
   }
 }
 
@@ -188,6 +228,7 @@ if (!function_exists('ponto_ocorrencia_save')) {
     $desc = trim(preg_replace('/\s+/u', ' ', (string)($in['descricao'] ?? '')) ?? '');
     if (mb_strlen($desc) > 500) throw new RuntimeException('Descrição: máximo de 500 caracteres.');
     if ($peloColaborador && $desc === '') throw new RuntimeException('Explique o motivo na descrição.');
+    ponto_assert_competencia_aberta($pdo, $companyId, (int)$col['id'], $ini, $fim);
     $doc = [null, null, null];
     if ($file && !empty($file['tmp'])) $doc = ponto_doc_save($companyId, (string)$file['tmp'], (string)($file['name'] ?? 'documento'));
     if ((int)$tipo['exige_documento'] && $doc[0] === null) throw new RuntimeException('Este tipo de ocorrência exige o documento (ex.: atestado). Anexe o arquivo.');
@@ -216,6 +257,7 @@ if (!function_exists('ponto_ocorrencia_decidir')) {
     if ($acao !== 'cancelar' && $oc['status'] !== 'PENDENTE') throw new RuntimeException('Esta ocorrência já foi decidida.');
     if ($acao === 'cancelar' && !in_array($oc['status'], ['PENDENTE', 'APROVADA'], true)) throw new RuntimeException('Esta ocorrência não pode ser cancelada.');
     if ($acao !== 'aprovar' && mb_strlen($motivo) < 3) throw new RuntimeException('Informe o motivo.');
+    if ($acao !== 'rejeitar') ponto_assert_competencia_aberta($pdo, $companyId, (int)$oc['colaborador_id'], (string)$oc['data_inicio'], (string)$oc['data_fim']);
     $uid = function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : 0;
     $pdo->prepare('UPDATE ponto_ocorrencias SET status = ?, decidido_por = ?, decidido_em = ?, motivo_decisao = ? WHERE company_id = ? AND id = ?')
       ->execute([$novo, $uid ?: null, date('Y-m-d H:i:s'), mb_substr($motivo, 0, 300) ?: null, $companyId, $id]);
@@ -267,6 +309,7 @@ if (!function_exists('ponto_tratamento_save')) {
     if ($data === '') throw new RuntimeException('Informe o dia.');
     $motivo = trim(preg_replace('/\s+/u', ' ', (string)($in['motivo'] ?? '')) ?? '');
     if (mb_strlen($motivo) < 5) throw new RuntimeException('Explique o motivo (mínimo de 5 letras). Ele fica registrado no histórico.');
+    ponto_assert_competencia_aberta($pdo, $companyId, (int)$col['id'], $data);
     $tipoOc = (int)($in['tipo_ocorrencia_id'] ?? 0);
     if ($tipoOc && !isset(ponto_tipos_ocorrencia($pdo, $companyId)[$tipoOc])) $tipoOc = 0;
     $intencao = isset(PONTO_INTENCOES[(string)($in['intencao'] ?? '')]) ? (string)$in['intencao'] : null;
@@ -327,6 +370,7 @@ if (!function_exists('ponto_tratamento_decidir')) {
     if ($acao === 'cancelar' && !in_array($t['status'], ['ATIVO', 'PENDENTE'], true)) throw new RuntimeException('Este tratamento não pode ser cancelado.');
     $motivo = trim($motivo);
     if ($acao !== 'aprovar' && mb_strlen($motivo) < 3) throw new RuntimeException('Informe o motivo.');
+    if ($acao !== 'rejeitar') ponto_assert_competencia_aberta($pdo, $companyId, (int)$t['colaborador_id'], (string)$t['data']);
     $uid = function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : 0;
     $pdo->prepare('UPDATE ponto_tratamentos SET status = ?, decidido_por = ?, decidido_em = ?, motivo_decisao = ? WHERE company_id = ? AND id = ?')
       ->execute([$novo, $uid ?: null, date('Y-m-d H:i:s'), mb_substr($motivo, 0, 300) ?: null, $companyId, $id]);
@@ -493,7 +537,8 @@ if (!function_exists('ponto_jornada_tolerancias')) {
 if (!function_exists('ponto_ocorrencias_periodo')) {
   /** Ocorrências APROVADAS que tocam o período, por dia: [Y-m-d => [linhas]]. */
   function ponto_ocorrencias_periodo(PDO $pdo, int $companyId, int $colId, string $de, string $ate): array {
-    $st = $pdo->prepare("SELECT o.*, t.descricao AS tipo, t.abona FROM ponto_ocorrencias o JOIN ponto_tipos_ocorrencia t ON t.company_id = o.company_id AND t.id = o.tipo_ocorrencia_id
+    $comp = ponto_v5_ready($pdo) ? 't.compensa_banco' : '0 AS compensa_banco';
+    $st = $pdo->prepare("SELECT o.*, t.descricao AS tipo, t.abona, $comp FROM ponto_ocorrencias o JOIN ponto_tipos_ocorrencia t ON t.company_id = o.company_id AND t.id = o.tipo_ocorrencia_id
       WHERE o.company_id = ? AND o.colaborador_id = ? AND o.status = 'APROVADA' AND o.data_inicio <= ? AND o.data_fim >= ?");
     $st->execute([$companyId, $colId, $ate, $de]);
     $out = [];
@@ -528,7 +573,7 @@ if (!function_exists('ponto_apurar_dia')) {
     $cfg = ponto_config($pdo, $companyId);
     $p = ponto_previsto_cache($pdo, $companyId, $col, $date);
     $r = ['data' => $date, 'situacao' => 'NORMAL', 'previstos' => (int)$p['minutos'], 'trabalhados' => 0, 'intervalo' => 0, 'atraso' => 0, 'saida_antecipada' => 0,
-      'falta' => 0, 'extra' => 0, 'noturnos' => 0, 'abonados' => 0, 'qtd' => 0, 'inconsistente' => 0, 'alertas' => [], 'marcacoes' => [], 'pares' => [],
+      'falta' => 0, 'extra' => 0, 'noturnos' => 0, 'abonados' => 0, 'compensados' => 0, 'qtd' => 0, 'inconsistente' => 0, 'alertas' => [], 'marcacoes' => [], 'pares' => [],
       'previsto' => $p, 'ocorrencias' => array_map(static fn($o) => ['id' => (int)$o['id'], 'tipo' => $o['tipo'], 'abona' => (int)$o['abona'], 'horas' => $o['hora_inicio'] ? substr((string)$o['hora_inicio'], 0, 5) . '–' . substr((string)$o['hora_fim'], 0, 5) : null], $ocorrencias),
       'primeira' => null, 'ultima' => null];
     if ($date < (string)$col['data_admissao'] || (!empty($col['data_demissao']) && $date > (string)$col['data_demissao'])) {
@@ -622,6 +667,7 @@ if (!function_exists('ponto_apurar_abono')) {
         $deb = $aberto ? max($r['falta'], $r['previstos'] - $r['trabalhados'], 0) : $r['falta'];
         if ($deb > 0 || $aberto) {
           $r['abonados'] += $deb; $r['falta'] = 0; $r['atraso'] = 0; $r['saida_antecipada'] = 0;
+          if (!empty($o['compensa_banco'])) $r['compensados'] += $deb;
           if ($aberto) { $r['situacao'] = 'ABONADO'; $r['inconsistente'] = 0; $r['alertas'] = []; }
         }
         continue;
@@ -629,6 +675,7 @@ if (!function_exists('ponto_apurar_abono')) {
       $min = intdiv(strtotime('2000-01-01 ' . $o['hora_fim']) - strtotime('2000-01-01 ' . $o['hora_inicio']), 60);
       $ab = min($min, $r['falta']);
       $r['abonados'] += $ab; $r['falta'] -= $ab;
+      if (!empty($o['compensa_banco'])) $r['compensados'] += $ab;
       if ($r['situacao'] === 'FALTA' && $r['falta'] === 0) { $r['situacao'] = 'ABONADO'; $r['inconsistente'] = 0; }
     }
   }

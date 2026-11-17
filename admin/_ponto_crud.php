@@ -8,7 +8,7 @@ require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_ponto.php';
 
-$ent = ponto_entity((string)$PONTO_ENTITY);
+$ent = ponto_entity((string)$PONTO_ENTITY, $pdo);
 $key = (string)$ent['key'];
 $cid = ponto_guard($pdo, (string)$ent['perm']);
 if ($key === 'tipos_ocorrencia') {

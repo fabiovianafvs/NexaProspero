@@ -137,7 +137,8 @@ $intLabel = static fn($i) => PONTO_INTENCOES[(string)$i] ?? '';
     </table>
     <?php endif; ?>
   </section>
-<?php else: $c = $cols[$colId]; ?>
+<?php else: $c = $cols[$colId]; $mesFechado = ponto_competencia_fechada($pdo, $cid, $colId, $de); ?>
+  <?php if ($mesFechado): ?><div class="pt-msg warn"><?= ponto_h($compLabel) ?> está fechado: nenhuma alteração é aceita. Para corrigir, reabra o mês em <a href="ponto_fechamento.php?c=<?= ponto_h($comp) ?>&e=<?= (int)$c['estabelecimento_id'] ?>">Fechamento</a> (com o motivo).</div><?php endif; ?>
   <div class="ptt-k">
     <div><span>Previsto</span><b><?= ponto_h(ponto_hm($tot['previstos'], false)) ?></b></div>
     <div><span>Trabalhado</span><b><?= ponto_h(ponto_hm($tot['trabalhados'], false)) ?></b></div>
@@ -172,7 +173,7 @@ $intLabel = static fn($i) => PONTO_INTENCOES[(string)$i] ?? '';
             <?php foreach ($r['ocorrencias'] as $o): ?><span class="ptt-oc"><?= ponto_h($o['tipo'] . ($o['horas'] ? ' ' . $o['horas'] : '') . ($o['abona'] ? ' (abona)' : '')) ?></span><?php endforeach; ?>
             <?php if ($r['abonados']): ?><span class="ptt-oc">abonado <?= ponto_h(ponto_hm($r['abonados'])) ?></span><?php endif; ?>
           </td>
-          <td class="act"><?php if (!in_array($r['situacao'], ['FUTURO', 'FORA_CONTRATO'], true)): ?><button class="pt-btn sm" type="button" onclick="pttDia('<?= $d ?>')">Tratar</button><?php endif; ?></td>
+          <td class="act"><?php if (!$mesFechado && !in_array($r['situacao'], ['FUTURO', 'FORA_CONTRATO'], true)): ?><button class="pt-btn sm" type="button" onclick="pttDia('<?= $d ?>')">Tratar</button><?php endif; ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>

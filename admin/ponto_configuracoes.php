@@ -43,6 +43,19 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
     <p class="pt-hint">CLT, art. 58, § 1º: atrasos e saídas de até 5 minutos por marcação (a tolerância de cada jornada), somando no máximo 10 minutos no dia, não viram atraso nem hora extra. Passou disso, conta tudo.</p>
   </section>
   <section class="pt-card">
+    <h2>Horas extras e banco de horas</h2>
+    <div class="pt-grid">
+      <label class="f">Hora extra em dia útil (%)<input type="number" name="extra_percentual" min="50" max="300" value="<?= (int)($cfg['extra_percentual'] ?? 50) ?>"></label>
+      <label class="f">Hora extra em feriado/folga (%)<input type="number" name="extra_folga_percentual" min="50" max="300" value="<?= (int)($cfg['extra_folga_percentual'] ?? 100) ?>"></label>
+      <label class="ck s2"><input type="checkbox" name="extra_folga_100" value="1" <?= !empty($cfg['extra_folga_100']) ? 'checked' : '' ?>> Trabalho no dia de folga (descanso semanal) conta como hora extra de feriado/folga</label>
+      <label class="ck s2"><input type="checkbox" name="bh_ativo" value="1" <?= !empty($cfg['bh_ativo']) ? 'checked' : '' ?>> Usar banco de horas (as horas extras vão para o banco em vez de serem pagas)</label>
+      <label class="f">Validade do banco (meses)<input type="number" name="bh_validade_meses" min="1" max="12" value="<?= (int)($cfg['bh_validade_meses'] ?? 6) ?>"></label>
+      <label class="f">Hora em feriado/folga vale no banco<select name="bh_fator_100"><option value="1">1 hora</option><option value="2" <?= (int)($cfg['bh_fator_100'] ?? 1) === 2 ? 'selected' : '' ?>>2 horas (em dobro)</option></select></label>
+      <label class="ck s2"><input type="checkbox" name="bh_debitar_faltas" value="1" <?= !empty($cfg['bh_debitar_faltas']) ? 'checked' : '' ?>> Atrasos e faltas não abonados descontam do banco (desmarcado: vão para desconto na folha)</label>
+    </div>
+    <p class="pt-hint">CLT, art. 59: banco de horas por acordo individual escrito compensa em até 6 meses; por acordo ou convenção coletiva, em até 12. Horas não compensadas no prazo são pagas como extra. Confira estas regras com o contador e a convenção da categoria.</p>
+  </section>
+  <section class="pt-card">
     <h2>Dados do programa de ponto (REP-P)</h2>
     <p class="pt-sub">Preencha somente depois do registro do programa no INPI. Esses dados aparecerão nos arquivos legais e comprovantes.</p>
     <div class="pt-grid">

@@ -96,6 +96,18 @@ $v4 = $v2 && ponto_v4_ready($pdo);
 if ($v4) {
   $pp = ponto_solicitacoes_pendentes($pdo, $cid);
   $nPed = count($pp['inclusoes']) + count($pp['ocorrencias']);
+  if (ponto_v5_ready($pdo) && ponto_can($pdo, 'ponto_fechamento') && (int)date('j') >= 3) {
+    $mesAnt = date('Y-m', strtotime(date('Y-m-01') . ' -1 month'));
+    if (ponto_competencia($mesAnt)[1] >= ponto_inicio_controle($pdo, $cid)) {
+      $abertos = [];
+      foreach (ponto_options($pdo, $cid, 'estabelecimentos') as $eid => $enome) {
+        $st = $pdo->prepare("SELECT status FROM ponto_fechamentos WHERE company_id = ? AND estabelecimento_id = ? AND competencia = ?");
+        $st->execute([$cid, (int)$eid, $mesAnt]);
+        if ($st->fetchColumn() !== 'FECHADO') $abertos[] = $enome;
+      }
+      if ($abertos) echo '<div class="pt-msg warn">O mês ' . ponto_h(substr($mesAnt, 5, 2) . '/' . substr($mesAnt, 0, 4)) . ' ainda não foi fechado' . (count($abertos) > 1 ? ' (' . ponto_h(implode(', ', $abertos)) . ')' : '') . '. <a href="ponto_fechamento.php?c=' . ponto_h($mesAnt) . '">Fechar o mês →</a></div>';
+    }
+  }
   if ($nPed && ponto_can($pdo, 'ponto_ocorrencias')) echo '<div class="pt-msg warn">' . $nPed . ' pedido(s) do Meu Ponto aguardando aprovação. <a href="ponto_ocorrencias.php">Ver pedidos →</a></div>';
 }
 ?>

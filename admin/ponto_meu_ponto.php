@@ -65,7 +65,7 @@ unset($_SESSION['mp_flash']);
 $companyName = trim((string)($company['fantasy_name'] ?? '')) ?: (string)($company['name'] ?? 'Nexa Próspero');
 $erro = !$ready ? 'O Meu Ponto ainda não foi instalado (Atualizador do Banco: "Ponto Eletrônico - V4 Tratamento e apuração").'
   : (!$col ? 'Seu usuário ainda não está ligado a um colaborador do ponto. Peça ao responsável para escolher o seu usuário no cadastro do colaborador.' : null);
-$dias = []; $tot = null; $pedT = []; $pedO = []; $tipos = [];
+$dias = []; $tot = null; $pedT = []; $pedO = []; $tipos = []; $bhSaldo = null; $mesFechado = false;
 if (!$erro) {
   $dias = ponto_apurar_periodo($pdo, $cid, (int)$col['id'], $de, $ate);
   $tot = ponto_apuracao_totais($dias);
@@ -74,6 +74,11 @@ if (!$erro) {
   $pedT = $st->fetchAll(PDO::FETCH_ASSOC);
   $pedO = ponto_ocorrencias_list($pdo, $cid, ['colaborador_id' => (int)$col['id'], 'de' => date('Y-m-d', strtotime('-90 days'))], 50);
   $tipos = ponto_tipos_ocorrencia($pdo, $cid, true, true);
+  if (ponto_v5_ready($pdo) && !empty(ponto_config($pdo, $cid)['bh_ativo']) && (int)($col['banco_horas'] ?? 1)) {
+    require_once __DIR__ . '/../config/ponto_fechamento.php';
+    $bhSaldo = ponto_bh_saldo($pdo, $cid, (int)$col['id']);
+    $mesFechado = ponto_competencia_fechada($pdo, $cid, (int)$col['id'], $de);
+  }
 }
 $wd = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 $stLabel = ['PENDENTE' => ['Aguardando', 'y'], 'ATIVO' => ['Aprovado', 'g'], 'APROVADA' => ['Aprovada', 'g'], 'REJEITADO' => ['Rejeitado', 'r'], 'REJEITADA' => ['Rejeitada', 'r'], 'CANCELADO' => ['Cancelado', 'n'], 'CANCELADA' => ['Cancelada', 'n']];
@@ -137,7 +142,8 @@ $hoje = date('Y-m-d');
       <div><span>Débito</span><b style="color:#b91c1c"><?= $h(ponto_hm($tot['falta'], false)) ?></b></div>
       <div><span>Saldo</span><b style="color:<?= $tot['saldo'] < 0 ? '#b91c1c' : '#15803d' ?>"><?= $h(ponto_hm($tot['saldo'], false)) ?></b></div>
     </div>
-    <p class="pa-hint" style="margin:8px 0 0">Valores provisórios até o fechamento do mês pelo responsável.</p>
+    <?php if ($bhSaldo !== null): ?><div class="pa-msg <?= $bhSaldo < 0 ? 'warn' : 'ok' ?>" style="margin:10px 0 0">Banco de horas (meses já fechados): <b><?= $h(ponto_hm($bhSaldo, false)) ?></b></div><?php endif; ?>
+    <p class="pa-hint" style="margin:8px 0 0"><?= ponto_v5_ready($pdo) && ponto_competencia_fechada($pdo, $cid, (int)$col['id'], $de) ? 'Mês fechado pelo responsável.' : 'Valores provisórios até o fechamento do mês pelo responsável.' ?></p>
     <div style="margin-top:8px">
       <?php foreach (array_reverse($dias, true) as $d => $r):
         if (in_array($r['situacao'], ['FUTURO', 'FORA_CONTRATO', 'ANTES_INICIO'], true)) continue;

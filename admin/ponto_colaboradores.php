@@ -168,6 +168,7 @@ ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada co
         <label class="ck s3"><input type="checkbox" name="controla_ponto" value="1"> Controla ponto (tem a jornada registrada)</label>
         <label class="ck s3"><input type="checkbox" name="permite_ponto_mobile" value="1"> Pode bater o ponto pelo celular</label>
         <label class="ck s3"><input type="checkbox" name="permite_ponto_externo" value="1"> Pode bater o ponto fora dos locais de trabalho (serviço externo)</label>
+        <?php if (ponto_has_column($pdo, 'ponto_colaboradores', 'banco_horas')): ?><input type="hidden" name="banco_horas_form" value="1"><label class="ck s3"><input type="checkbox" name="banco_horas" value="1"> Participa do banco de horas (quando a empresa usa banco de horas)</label><?php endif; ?>
         <label class="f s2">Usuário do Nexa (opcional)<?= $sel('usuario_id', $users, 'Sem usuário') ?></label>
         <label class="f">Código interno<input type="text" name="codigo_interno" maxlength="30"></label>
         <label class="f">Cartão RFID <span class="pt-hint" id="pcRfidNow"></span><input type="text" name="rfid" maxlength="40" autocomplete="off" placeholder="Aproxime o cartão do leitor"></label>
@@ -239,7 +240,7 @@ ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada co
   dlg.querySelector('.pt-mtabs').addEventListener('click',e=>{const b=e.target.closest('button[data-pane]');if(!b)return;e.stopPropagation();if(b.hasAttribute('data-needs-id')&&!cur){document.getElementById('pcSaveHint').textContent='Salve o cadastro primeiro.';return;}tab(b.dataset.pane);},true);
   function fill(r){
     form.querySelectorAll('[name]').forEach(el=>{if(['csrf','action'].includes(el.name))return;const v=r[el.name];
-      if(el.type==='checkbox'){el.checked=v===undefined?(el.name==='controla_ponto'):String(v)==='1';return;}
+      if(el.type==='checkbox'){el.checked=v===undefined?(el.name==='controla_ponto'||el.name==='banco_horas'):String(v)==='1';return;}
       if(el.name==='rfid'||el.name==='pin'){el.value='';return;}
       if(el.name==='cpf'){el.value=r.cpf_fmt||'';return;}
       el.value=v===undefined||v===null?(el.name==='id'?0:(el.name==='status'?'ATIVO':'')):(el.type==='date'?String(v).slice(0,10):String(v));});

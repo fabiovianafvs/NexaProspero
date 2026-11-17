@@ -123,6 +123,21 @@ if (!function_exists('ponto_fmt_doc')) {
 /* Configuração e auditoria                                                   */
 /* ------------------------------------------------------------------------- */
 
+if (!function_exists('ponto_has_column')) {
+  function ponto_has_column(PDO $pdo, string $table, string $column): bool {
+    static $c = [];
+    $k = $table . '.' . $column;
+    if (isset($c[$k])) return $c[$k];
+    try {
+      $st = $pdo->prepare('SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?');
+      $st->execute([$table, $column]);
+      return $c[$k] = (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) {
+      return $c[$k] = false;
+    }
+  }
+}
+
 if (!function_exists('ponto_config_defaults')) {
   function ponto_config_defaults(): array {
     return [
@@ -134,6 +149,9 @@ if (!function_exists('ponto_config_defaults')) {
       'tolerancia_diaria' => 10,
       // Início do controle de ponto no Nexa (antes disso não há falta). Vazio = 1ª marcação.
       'inicio_controle' => '',
+      // Banco de horas e fechamento (V5). Regras dependem do acordo/convenção da empresa.
+      'bh_ativo' => 0, 'bh_validade_meses' => 6, 'bh_fator_100' => 1, 'bh_debitar_faltas' => 1,
+      'extra_percentual' => 50, 'extra_folga_percentual' => 100, 'extra_folga_100' => 1,
       // Dados do REP-P (preencher só depois do registro no INPI).
       'rep_p_registro_inpi' => '', 'rep_p_versao' => '', 'rep_p_desenvolvedor' => '', 'rep_p_cnpj_desenvolvedor' => '',
       'afd_layout' => '', 'aej_layout' => '',
@@ -176,6 +194,18 @@ if (!function_exists('ponto_config_save')) {
       $tol = (int)$in['tolerancia_diaria'];
       if ($tol < 0 || $tol > 10) throw new RuntimeException('Tolerância diária: de 0 a 10 minutos (limite da CLT, art. 58, § 1º).');
       $new['tolerancia_diaria'] = $tol;
+    }
+    if (isset($in['extra_percentual'])) {
+      foreach (['bh_ativo', 'bh_debitar_faltas', 'extra_folga_100'] as $k) $new[$k] = empty($in[$k]) ? 0 : 1;
+      $val = (int)($in['bh_validade_meses'] ?? 6);
+      if ($val < 1 || $val > 12) throw new RuntimeException('Validade do banco de horas: de 1 a 12 meses (CLT, art. 59: até 6 meses por acordo individual; até 12 por acordo ou convenção coletiva).');
+      $new['bh_validade_meses'] = $val;
+      $new['bh_fator_100'] = (int)($in['bh_fator_100'] ?? 1) === 2 ? 2 : 1;
+      foreach (['extra_percentual' => 50, 'extra_folga_percentual' => 100] as $k => $min) {
+        $v = (int)($in[$k] ?? $min);
+        if ($v < 50 || $v > 300) throw new RuntimeException('Percentual de hora extra: de 50% a 300% (a CLT exige no mínimo 50%).');
+        $new[$k] = $v;
+      }
     }
     if (isset($in['inicio_controle'])) $new['inicio_controle'] = trim((string)$in['inicio_controle']) === '' ? '' : ponto_date_in($in['inicio_controle'], 'Início do controle de ponto');
     $new['rep_p_registro_inpi'] = mb_substr(trim((string)($in['rep_p_registro_inpi'] ?? '')), 0, 40);
@@ -311,20 +341,33 @@ if (!function_exists('ponto_entities')) {
         'fields' => [
           'descricao' => ['label' => 'Descrição', 'type' => 'text', 'max' => 80, 'required' => true, 'unique' => true, 'span' => 2],
           'abona' => ['label' => 'Abona (não desconta as horas)', 'type' => 'bool'],
+          'compensa_banco' => ['label' => 'Folga paga com o banco de horas (desconta do banco)', 'type' => 'bool', 'needs_column' => true],
           'exige_documento' => ['label' => 'Exige documento anexo (ex.: atestado)', 'type' => 'bool'],
           'visivel_colaborador' => ['label' => 'O colaborador pode escolher no Meu Ponto', 'type' => 'bool', 'default' => 1],
         ],
-        'list' => ['descricao', 'abona', 'exige_documento', 'visivel_colaborador'], 'search' => ['descricao'], 'order' => 'descricao',
+        'list' => ['descricao', 'abona', 'compensa_banco', 'exige_documento', 'visivel_colaborador'], 'search' => ['descricao'], 'order' => 'descricao',
       ],
     ];
   }
 }
 
 if (!function_exists('ponto_entity')) {
-  function ponto_entity(string $key): array {
+  function ponto_entity(string $key, ?PDO $pdo = null): array {
     $all = ponto_entities();
     if (!isset($all[$key])) throw new RuntimeException('Cadastro inválido.');
-    return $all[$key] + ['key' => $key];
+    $e = $all[$key] + ['key' => $key];
+    // Campos de versões novas ('needs_column'): só aparecem depois da migração aplicada.
+    if ($pdo) {
+      foreach ($e['fields'] as $col => $f) {
+        if (!empty($f['needs_column']) && !ponto_has_column($pdo, (string)$e['table'], (string)$col)) {
+          unset($e['fields'][$col]);
+          $e['list'] = array_values(array_diff($e['list'], [$col]));
+        }
+      }
+    } else {
+      foreach ($e['fields'] as $col => $f) if (!empty($f['needs_column'])) { unset($e['fields'][$col]); $e['list'] = array_values(array_diff($e['list'], [$col])); }
+    }
+    return $e;
   }
 }
 
@@ -396,7 +439,7 @@ if (!function_exists('ponto_entity_list')) {
 if (!function_exists('ponto_entity_save')) {
   /** Cria/altera um cadastro simples. Retorna o id. */
   function ponto_entity_save(PDO $pdo, int $companyId, string $key, array $in): int {
-    $e = ponto_entity($key);
+    $e = ponto_entity($key, $pdo);
     $id = (int)($in['id'] ?? 0);
     $old = $id > 0 ? ponto_entity_get($pdo, $companyId, $key, $id) : null;
     if ($id > 0 && !$old) throw new RuntimeException($e['label'] . ' não encontrado.');
@@ -1036,6 +1079,8 @@ if (!function_exists('ponto_colaborador_save')) {
     $d['telefone'] = $tel ?: null;
     $d['codigo_interno'] = $txt($in['codigo_interno'] ?? '', 30, 'Código interno');
     foreach (['controla_ponto', 'permite_ponto_mobile', 'permite_ponto_externo'] as $k) $d[$k] = empty($in[$k]) ? 0 : 1;
+    // Banco de horas (V5): só quando o formulário traz o campo e a coluna já existe.
+    if (isset($in['banco_horas_form']) && ponto_has_column($pdo, 'ponto_colaboradores', 'banco_horas')) $d['banco_horas'] = empty($in['banco_horas']) ? 0 : 1;
     // Usuário do Nexa (opcional): precisa ser desta empresa e não estar ligado a outro colaborador.
     $uid = (int)($in['usuario_id'] ?? 0);
     if ($uid > 0 && !isset(ponto_company_users($pdo, $companyId)[$uid])) throw new RuntimeException('Usuário do Nexa não encontrado nesta empresa.');
