@@ -49,14 +49,14 @@ function ponto_terminal_page(string $companyName, string $body, string $script =
 <link rel="manifest" href="/ponto_manifest.php?m=terminal">
 <link rel="apple-touch-icon" href="/assets/ponto/apple-touch-icon.png">
 <link rel="icon" href="/assets/ponto/icon-192.png">
-<link rel="stylesheet" href="/assets/ponto/ponto-app.css?v=1">
+<link rel="stylesheet" href="/assets/ponto/ponto-app.css?v=2">
 </head>
 <body>
 <div class="tm">
 <header class="pa-top"><div><b>Terminal de Ponto</b><small><?= ponto_h($companyName) ?></small></div><span class="sp"></span><span id="tmDev" style="font-size:12px;opacity:.85"></span></header>
 <?= $body ?>
 </div>
-<script src="/assets/ponto/ponto-app.js?v=1"></script>
+<script src="/assets/ponto/ponto-app.js?v=2"></script>
 <?= $script ?>
 </body>
 </html>
@@ -196,5 +196,5 @@ ob_start(); ?>
 $body = (string)ob_get_clean();
 $labels = json_encode(PONTO_INTENCOES, JSON_UNESCAPED_UNICODE);
 $script = '<script>window.TM=' . json_encode(['ft' => ponto_coletor_form_token($pdo, $cid, $coletor), 'tz' => $tz, 'now' => $nowMs(), 'rfid' => $rfid, 'pin' => $pin, 'dev' => (string)$coletor['descricao']], JSON_UNESCAPED_UNICODE) . ';window.TM.labels=' . $labels . ';</script>'
-  . '<script src="/assets/ponto/ponto-terminal.js?v=1"></script>';
+  . '<script src="/assets/ponto/ponto-terminal.js?v=2"></script>';
 ponto_terminal_page($companyName, $body, $script);

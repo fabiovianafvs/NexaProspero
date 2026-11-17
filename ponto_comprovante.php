@@ -38,7 +38,7 @@ $url = ponto_base_url() . ponto_comprovante_url($pdo, $cid, $m);
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Comprovante de Registro de Ponto · NSR <?= (int)$m['nsr'] ?></title>
-<link rel="stylesheet" href="/assets/ponto/ponto-app.css?v=1">
+<link rel="stylesheet" href="/assets/ponto/ponto-app.css?v=2">
 <style>
 .cp{max-width:620px;margin:16px auto;padding:0 12px}
 .cp h1{font-size:19px;margin:0 0 4px;color:#0b1f5b;text-align:center}

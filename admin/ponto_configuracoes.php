@@ -36,6 +36,13 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
     <p class="pt-hint">A marcação feita fora do local nunca é bloqueada nem alterada: ela é registrada e fica sinalizada para conferência.</p>
   </section>
   <section class="pt-card">
+    <h2>Apuração das horas</h2>
+    <div class="pt-grid"><label class="f">Tolerância diária (minutos)<input type="number" name="tolerancia_diaria" min="0" max="10" value="<?= (int)($cfg['tolerancia_diaria'] ?? 10) ?>"></label>
+      <label class="f">Início do controle de ponto no Nexa<input type="date" name="inicio_controle" value="<?= ponto_h((string)($cfg['inicio_controle'] ?? '')) ?>"></label></div>
+    <p class="pt-hint">Antes do início não há falta (o ponto ainda não era usado). Em branco, vale o dia da primeira marcação registrada.</p>
+    <p class="pt-hint">CLT, art. 58, § 1º: atrasos e saídas de até 5 minutos por marcação (a tolerância de cada jornada), somando no máximo 10 minutos no dia, não viram atraso nem hora extra. Passou disso, conta tudo.</p>
+  </section>
+  <section class="pt-card">
     <h2>Dados do programa de ponto (REP-P)</h2>
     <p class="pt-sub">Preencha somente depois do registro do programa no INPI. Esses dados aparecerão nos arquivos legais e comprovantes.</p>
     <div class="pt-grid">

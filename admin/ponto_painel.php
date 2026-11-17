@@ -12,6 +12,7 @@ $hoje = date('Y-m-d');
 $dia = ponto_date_safe($_GET['dia'] ?? '', $hoje);
 
 require_once __DIR__ . '/../config/ponto_marcacao.php';
+require_once __DIR__ . '/../config/ponto_apuracao.php';
 $v2 = ponto_v2_ready($pdo);
 ponto_start($pdo, 'ponto_painel', 'Painel do Ponto', $v2 ? 'Presença do dia pelas marcações de ponto e pela escala/jornada de cada colaborador. Atualize a página para ver os registros mais recentes.' : 'Resumo do cadastro e quem deveria trabalhar no dia.', $v2 ? '<a class="pt-btn ok" href="ponto_bater.php">Bater meu ponto</a>' : '');
 
@@ -90,6 +91,14 @@ foreach ($prev as $x) if ($x['p']['feriado']) { $feriadoDia = $x['p']['feriado']
 .pp-marks+.h{margin-left:10px}.pp-p .h{margin-left:auto;text-align:right;font-size:12.5px;font-weight:800;color:#0b1f5b;white-space:nowrap}
 @media(max-width:900px){.pp-two{grid-template-columns:1fr}}
 </style>
+<?php
+$v4 = $v2 && ponto_v4_ready($pdo);
+if ($v4) {
+  $pp = ponto_solicitacoes_pendentes($pdo, $cid);
+  $nPed = count($pp['inclusoes']) + count($pp['ocorrencias']);
+  if ($nPed && ponto_can($pdo, 'ponto_ocorrencias')) echo '<div class="pt-msg warn">' . $nPed . ' pedido(s) do Meu Ponto aguardando aprovação. <a href="ponto_ocorrencias.php">Ver pedidos →</a></div>';
+}
+?>
 <?php if ($v2): ?>
 <div class="pp-kpis">
   <div class="pp-kpi"><span>Trabalhando agora</span><b style="color:#15803d"><?= $presCount['TRABALHANDO'] ?></b></div>

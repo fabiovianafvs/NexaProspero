@@ -130,6 +130,10 @@ if (!function_exists('ponto_config_defaults')) {
       // Coleta (usadas pela tela Bater Ponto, na próxima versão).
       'permitir_web' => 1, 'permitir_mobile' => 0, 'permitir_rfid' => 0,
       'exigir_localizacao' => 0, 'alertar_fora_area' => 1,
+      // Apuração (V4): tolerância diária máxima (CLT art. 58, § 1º = 10 minutos).
+      'tolerancia_diaria' => 10,
+      // Início do controle de ponto no Nexa (antes disso não há falta). Vazio = 1ª marcação.
+      'inicio_controle' => '',
       // Dados do REP-P (preencher só depois do registro no INPI).
       'rep_p_registro_inpi' => '', 'rep_p_versao' => '', 'rep_p_desenvolvedor' => '', 'rep_p_cnpj_desenvolvedor' => '',
       'afd_layout' => '', 'aej_layout' => '',
@@ -168,6 +172,12 @@ if (!function_exists('ponto_config_save')) {
     $tz = (string)($in['timezone'] ?? $old['timezone']);
     if (!isset(ponto_timezones()[$tz])) throw new RuntimeException('Fuso horário inválido.');
     $new['timezone'] = $tz;
+    if (isset($in['tolerancia_diaria'])) {
+      $tol = (int)$in['tolerancia_diaria'];
+      if ($tol < 0 || $tol > 10) throw new RuntimeException('Tolerância diária: de 0 a 10 minutos (limite da CLT, art. 58, § 1º).');
+      $new['tolerancia_diaria'] = $tol;
+    }
+    if (isset($in['inicio_controle'])) $new['inicio_controle'] = trim((string)$in['inicio_controle']) === '' ? '' : ponto_date_in($in['inicio_controle'], 'Início do controle de ponto');
     $new['rep_p_registro_inpi'] = mb_substr(trim((string)($in['rep_p_registro_inpi'] ?? '')), 0, 40);
     $new['rep_p_versao'] = mb_substr(trim((string)($in['rep_p_versao'] ?? '')), 0, 20);
     $new['rep_p_desenvolvedor'] = mb_substr(trim((string)($in['rep_p_desenvolvedor'] ?? '')), 0, 150);
@@ -294,6 +304,17 @@ if (!function_exists('ponto_entities')) {
           'alertar_fora_area' => ['label' => 'Sinalizar ponto batido fora do raio', 'type' => 'bool', 'default' => 1],
         ],
         'list' => ['descricao', 'raio_metros', 'estabelecimento_id'], 'search' => ['descricao', 'endereco'], 'order' => 'descricao',
+      ],
+      'tipos_ocorrencia' => [
+        'table' => 'ponto_tipos_ocorrencia', 'label' => 'Tipo de ocorrência', 'plural' => 'Tipos de Ocorrência', 'perm' => 'ponto_tipos_ocorrencia', 'page' => 'ponto_tipos_ocorrencia.php',
+        'hint' => 'Motivos usados nas justificativas e no tratamento do ponto. "Abona" = a ausência justificada por este motivo não vira débito de horas (ex.: atestado, treinamento).',
+        'fields' => [
+          'descricao' => ['label' => 'Descrição', 'type' => 'text', 'max' => 80, 'required' => true, 'unique' => true, 'span' => 2],
+          'abona' => ['label' => 'Abona (não desconta as horas)', 'type' => 'bool'],
+          'exige_documento' => ['label' => 'Exige documento anexo (ex.: atestado)', 'type' => 'bool'],
+          'visivel_colaborador' => ['label' => 'O colaborador pode escolher no Meu Ponto', 'type' => 'bool', 'default' => 1],
+        ],
+        'list' => ['descricao', 'abona', 'exige_documento', 'visivel_colaborador'], 'search' => ['descricao'], 'order' => 'descricao',
       ],
     ];
   }

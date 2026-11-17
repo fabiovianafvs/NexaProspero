@@ -11,6 +11,8 @@ if (!function_exists('ponto_menu_items')) {
     return [
       'ponto_painel' => ['Painel do Ponto', 'ponto_painel.php'],
       'ponto_marcacoes' => ['Marcações', 'ponto_marcacoes.php'],
+      'ponto_tratamento' => ['Tratamento', 'ponto_tratamento.php'],
+      'ponto_ocorrencias' => ['Ocorrências', 'ponto_ocorrencias.php'],
       'ponto_colaboradores' => ['Colaboradores', 'ponto_colaboradores.php'],
       'ponto_departamentos' => ['Departamentos', 'ponto_departamentos.php'],
       'ponto_cargos' => ['Cargos/Funções', 'ponto_cargos.php'],
@@ -19,6 +21,7 @@ if (!function_exists('ponto_menu_items')) {
       'ponto_escalas' => ['Escalas', 'ponto_escalas.php'],
       'ponto_locais' => ['Locais de Trabalho', 'ponto_locais.php'],
       'ponto_feriados' => ['Feriados', 'ponto_feriados.php'],
+      'ponto_tipos_ocorrencia' => ['Tipos de Ocorrência', 'ponto_tipos_ocorrencia.php'],
       'ponto_coletores' => ['Aparelhos', 'ponto_coletores.php'],
       'ponto_auditoria' => ['Auditoria', 'ponto_auditoria.php'],
       'ponto_configuracoes' => ['Configurações', 'ponto_configuracoes.php'],
@@ -159,6 +162,17 @@ if (!function_exists('ponto_require_v2')) {
     require_once __DIR__ . '/../config/ponto_marcacao.php';
     if (ponto_v2_ready($pdo)) return;
     echo '<div class="pt-msg warn">A marcação de ponto ainda não foi instalada no banco. O administrador da plataforma precisa aplicar a atualização "Ponto Eletrônico - V2 Marcação de ponto" no Atualizador do Banco.</div>';
+    ponto_end();
+    exit;
+  }
+}
+
+if (!function_exists('ponto_require_v4')) {
+  /** Telas do tratamento/apuração (V4): avisa e encerra a página se a migração V4 não foi aplicada. */
+  function ponto_require_v4(PDO $pdo): void {
+    require_once __DIR__ . '/../config/ponto_apuracao.php';
+    if (ponto_v4_ready($pdo)) return;
+    echo '<div class="pt-msg warn">O tratamento do ponto ainda não foi instalado no banco. O administrador da plataforma precisa aplicar a atualização "Ponto Eletrônico - V4 Tratamento e apuração" no Atualizador do Banco.</div>';
     ponto_end();
     exit;
   }

@@ -200,7 +200,11 @@ if (!function_exists('access_permissions_catalog')) {
       'ia_configuracoes' => ['label' => 'Agentes de IA', 'group' => 'Configurações', 'module' => 'ia_agentes', 'pages' => ['ia_configuracoes.php'], 'nav' => ['ia_configuracoes']],
       'backup_empresa' => ['label' => 'Backup da Empresa', 'group' => 'Configurações', 'module' => 'backup_empresa', 'pages' => ['backup_empresa.php'], 'nav' => ['backup_empresa']],
       'ponto_painel' => ['label' => 'Painel do Ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_painel.php', 'ponto_colaborador_foto.php'], 'nav' => ['ponto_painel']],
-      'ponto_marcar' => ['label' => 'Bater o próprio ponto (menu)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => [], 'nav' => ['ponto_bater']],
+      'ponto_marcar' => ['label' => 'Bater o próprio ponto (menu)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => [], 'nav' => ['ponto_bater', 'ponto_meu_ponto']],
+      'ponto_tratamento' => ['label' => 'Tratamento do ponto (apuração e correções)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_tratamento.php'], 'nav' => ['ponto_tratamento']],
+      'ponto_ocorrencias' => ['label' => 'Ocorrências e justificativas', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_ocorrencias.php'], 'nav' => ['ponto_ocorrencias']],
+      'ponto_ocorrencias_aprovar' => ['label' => 'Aprovar pedidos do ponto (Meu Ponto)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => [], 'nav' => []],
+      'ponto_tipos_ocorrencia' => ['label' => 'Tipos de ocorrência', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_tipos_ocorrencia.php'], 'nav' => ['ponto_tipos_ocorrencia']],
       'ponto_marcacoes' => ['label' => 'Marcações de ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_marcacoes.php'], 'nav' => ['ponto_marcacoes']],
       'ponto_colaboradores' => ['label' => 'Colaboradores', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_colaboradores.php', 'ponto_colaborador_foto.php'], 'nav' => ['ponto_colaboradores']],
       'ponto_departamentos' => ['label' => 'Departamentos', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_departamentos.php'], 'nav' => ['ponto_departamentos']],
@@ -505,7 +509,7 @@ if (!function_exists('access_admin_nav_allowed')) {
 
     $parentPermissions = [
       'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila','whatsapp_atendimento','whatsapp_painel','whatsapp_chatbot'],
-      'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
+      'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_tratamento','ponto_ocorrencias','ponto_tipos_ocorrencia','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
       'orcamento' => ['orcamentos','orcamento_novo'],
       'contratos' => ['contratos','contratos_gerar'],
       'compras' => ['compras_assistente','compras_listas','compras_cotacoes','compras_pedidos','compras_painel','compras_alertas','compras_fornecedores_avaliacao','compras_fornecedores_ranking','compras_fornecedores_ranking_config','compras_historico_precos'],

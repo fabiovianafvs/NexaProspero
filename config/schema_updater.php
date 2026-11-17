@@ -680,6 +680,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '5de8c16bbbbd18759da415f66dbaead149bd1f50a7e1abf613378bd25b486eaf',
         'order' => 202611170100,
       ],
+      [
+        'id' => '20261117_ponto_tratamento_v4',
+        'module' => 'ponto_eletronico',
+        'version' => 202611170200,
+        'label' => 'Ponto Eletrônico - V4 Tratamento e apuração',
+        'description' => 'Cria as tabelas do tratamento do ponto (inclusão/desconsideração de marcações com motivo, sem alterar o registro original), ocorrências e justificativas com anexo, tipos de ocorrência e a apuração diária das horas. Aplicar depois da V2. Não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261117_ponto_tratamento_v4.sql',
+        'sha256' => 'b1a5e5551f7be9158ba24b25e285308f073d378be2900ffeb954a3bcf3124243',
+        'order' => 202611170200,
+      ],
     ];
   }
 }

@@ -82,12 +82,13 @@ $h = 'ponto_h';
 <link rel="manifest" href="/ponto_manifest.php?m=pessoal">
 <link rel="apple-touch-icon" href="/assets/ponto/apple-touch-icon.png">
 <link rel="icon" href="/assets/ponto/icon-192.png">
-<link rel="stylesheet" href="/assets/ponto/ponto-app.css?v=1">
+<link rel="stylesheet" href="/assets/ponto/ponto-app.css?v=2">
 </head>
 <body>
 <header class="pa-top">
   <div><b>Bater Ponto</b><small><?= $h($companyName) ?></small></div>
   <span class="sp"></span>
+  <?php if ($col && is_file(__DIR__ . '/ponto_meu_ponto.php')): ?><a href="ponto_meu_ponto.php" style="margin-right:6px">Meu Ponto</a><?php endif; ?>
   <a href="index.php">Voltar ao sistema</a>
 </header>
 <main class="pa-wrap">
@@ -165,7 +166,7 @@ $h = 'ponto_h';
   </div>
 </div>
 
-<script src="/assets/ponto/ponto-app.js?v=1"></script>
+<script src="/assets/ponto/ponto-app.js?v=2"></script>
 <script>
 (function(){
   var P = window.NexaPonto;

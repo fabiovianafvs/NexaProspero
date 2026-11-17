@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Cadastro simples do Ponto (lista + modal). Quem inclui define $PONTO_ENTITY antes do require.
 // Usado por: ponto_departamentos.php, ponto_cargos.php, ponto_estabelecimentos.php,
-// ponto_feriados.php e ponto_locais.php (este com mapa OpenStreetMap/Leaflet).
+// ponto_feriados.php, ponto_locais.php (este com mapa OpenStreetMap/Leaflet) e ponto_tipos_ocorrencia.php.
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_ponto.php';
@@ -11,6 +11,12 @@ require_once __DIR__ . '/_ponto.php';
 $ent = ponto_entity((string)$PONTO_ENTITY);
 $key = (string)$ent['key'];
 $cid = ponto_guard($pdo, (string)$ent['perm']);
+if ($key === 'tipos_ocorrencia') {
+  // Tabela da V4 (tratamento): avisa se a migração não foi aplicada; cria os tipos padrão na 1ª vez.
+  require_once __DIR__ . '/../config/ponto_apuracao.php';
+  if (!ponto_v4_ready($pdo)) { ponto_start($pdo, (string)$ent['perm'], (string)$ent['plural']); ponto_require_v4($pdo); }
+  ponto_tipos_ocorrencia_seed($pdo, $cid);
+}
 $page = (string)$ent['page'];
 $q = trim((string)($_GET['q'] ?? ''));
 $status = in_array((string)($_GET['s'] ?? ''), ['ativos', 'inativos', 'todos'], true) ? (string)$_GET['s'] : 'ativos';
