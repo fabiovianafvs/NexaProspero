@@ -160,7 +160,8 @@ if (!function_exists('ponto_end')) {
 (function(){
   window.ptOpen=function(id){const d=document.getElementById(id);if(!d)return;if(!d.open)d.showModal();const f=d.querySelector('[autofocus],input:not([type=hidden]):not([disabled]),select');if(f)setTimeout(()=>f.focus(),30);};
   window.ptClose=function(el){const d=el.closest?el.closest('dialog'):document.getElementById(el);if(d)d.close();};
-  document.querySelectorAll('dialog.pt-modal').forEach(d=>d.addEventListener('click',e=>{if(e.target===d)d.close();}));
+  // A janela não fecha ao clicar no fundo: arrastar o mouse de um campo até fora dela
+  // contava como clique no fundo e apagava o que foi digitado. Fecha pelo X, Cancelar ou Esc.
   // Abas dentro dos modais.
   document.addEventListener('click',e=>{const b=e.target.closest('.pt-mtabs button[data-pane]');if(!b)return;const box=b.closest('dialog,.pt-card');box.querySelectorAll('.pt-mtabs button').forEach(x=>x.classList.toggle('on',x===b));box.querySelectorAll('.pt-pane').forEach(p=>p.classList.toggle('on',p.id===b.dataset.pane));});
   // F8: vai para a pesquisa da tela (padrão do Nexa).

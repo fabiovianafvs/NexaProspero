@@ -165,9 +165,39 @@ if ($isMap) echo '<link rel="stylesheet" href="../assets/vendor/leaflet/leaflet.
       if(el.name==='latitude'||el.name==='longitude')el.value=v===''?'':String(Number(v));
     });
   }
-  window.ptNew=function(){fill({});document.getElementById('ptFormTitle').textContent='Cadastrar '+label.toLowerCase();ptOpen('ptForm');window.ptMapSync&&setTimeout(ptMapSync,60);};
-  window.ptEdit=function(id){fill(rows[id]||{});document.getElementById('ptFormTitle').textContent='Editar '+label.toLowerCase();ptOpen('ptForm');window.ptMapSync&&setTimeout(ptMapSync,60);};
+  window.ptNew=function(){fill({});window.ptLookupReset&&ptLookupReset();document.getElementById('ptFormTitle').textContent='Cadastrar '+label.toLowerCase();ptOpen('ptForm');window.ptMapSync&&setTimeout(ptMapSync,60);};
+  window.ptEdit=function(id){fill(rows[id]||{});window.ptLookupReset&&ptLookupReset();document.getElementById('ptFormTitle').textContent='Editar '+label.toLowerCase();ptOpen('ptForm');window.ptMapSync&&setTimeout(ptMapSync,60);};
   window.ptFillCompany=function(){Object.entries(company).forEach(([k,v])=>{const el=form.querySelector('[name="'+k+'"]');if(el&&v)el.value=v;});};
+  // Estabelecimento: CNPJ e CEP buscam os dados sozinhos (mesma consulta do cadastro de clientes).
+  const doc=form.querySelector('[name=documento]'), cep=form.querySelector('[name=cep]'), tipo=form.querySelector('[name=tipo_documento]');
+  if(doc&&cep){
+    const status=document.createElement('p');status.className='pt-hint';status.style.margin='6px 0 0';doc.closest('label').after(status);
+    const put=(name,val,force)=>{const el=form.querySelector('[name="'+name+'"]');if(el&&val&&(force||!el.value.trim()))el.value=val;};
+    let lastDoc='', lastCep='';
+    doc.addEventListener('input',()=>{const d=doc.value.replace(/\D/g,'');if(tipo.value==='CNPJ'&&d.length===14&&d!==lastDoc)lookupCnpj(d);});
+    doc.addEventListener('blur',()=>{const d=doc.value.replace(/\D/g,'');if(tipo.value==='CNPJ'&&d.length===14&&d!==lastDoc)lookupCnpj(d);});
+    function lookupCnpj(d){
+      lastDoc=d;status.textContent='Consultando o CNPJ...';
+      fetch('pessoa_cnpj_lookup.php?cnpj='+d,{credentials:'same-origin'}).then(r=>r.json()).then(j=>{
+        if(!j.ok){status.textContent=j.error||'CNPJ não encontrado. Preencha os dados manualmente.';return;}
+        const x=j.data, novo=form.querySelector('[name=id]').value==='0';
+        put('razao_social',x.razao_social,novo);put('nome_fantasia',x.nome_fantasia,novo);
+        put('cep',x.cep,novo);put('endereco',x.logradouro,novo);put('numero',x.numero,novo);put('complemento',x.complemento,novo);
+        put('bairro',x.bairro,novo);put('cidade',x.municipio,novo);put('uf',x.uf,novo);
+        lastCep=(x.cep||'');
+        status.textContent='Dados da Receita carregados'+(x.situacao_cadastral?' (situação: '+x.situacao_cadastral+')':'')+'. Confira antes de salvar.';
+      }).catch(()=>{status.textContent='Não foi possível consultar o CNPJ agora. Preencha os dados manualmente.';});
+    }
+    const cepGo=()=>{const d=cep.value.replace(/\D/g,'');if(d.length!==8||d===lastCep)return;lastCep=d;status.textContent='Consultando o CEP...';
+      fetch('pessoa_cep_lookup.php?cep='+d,{credentials:'same-origin'}).then(r=>r.json()).then(j=>{
+        if(!j.ok){status.textContent=j.error||'CEP não encontrado.';return;}
+        const x=j.data;put('endereco',x.logradouro,true);put('bairro',x.bairro,true);put('cidade',x.cidade,true);put('uf',x.uf,true);if(x.complemento)put('complemento',x.complemento,false);
+        status.textContent='Endereço do CEP carregado. Falta o número.';const n=form.querySelector('[name=numero]');if(n&&!n.value)n.focus();
+      }).catch(()=>{status.textContent='Não foi possível consultar o CEP agora.';});};
+    cep.addEventListener('input',()=>{if(cep.value.replace(/\D/g,'').length===8)cepGo();});
+    cep.addEventListener('blur',cepGo);
+    window.ptLookupReset=function(){lastDoc=doc.value.replace(/\D/g,'');lastCep=cep.value.replace(/\D/g,'');status.textContent='';};
+  }
 })();
 <?php if ($isMap): ?>
 (function(){
