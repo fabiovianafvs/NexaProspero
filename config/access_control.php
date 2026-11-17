@@ -200,6 +200,8 @@ if (!function_exists('access_permissions_catalog')) {
       'ia_configuracoes' => ['label' => 'Agentes de IA', 'group' => 'Configurações', 'module' => 'ia_agentes', 'pages' => ['ia_configuracoes.php'], 'nav' => ['ia_configuracoes']],
       'backup_empresa' => ['label' => 'Backup da Empresa', 'group' => 'Configurações', 'module' => 'backup_empresa', 'pages' => ['backup_empresa.php'], 'nav' => ['backup_empresa']],
       'ponto_painel' => ['label' => 'Painel do Ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_painel.php', 'ponto_colaborador_foto.php'], 'nav' => ['ponto_painel']],
+      'ponto_marcar' => ['label' => 'Bater o próprio ponto (menu)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => [], 'nav' => ['ponto_bater']],
+      'ponto_marcacoes' => ['label' => 'Marcações de ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_marcacoes.php'], 'nav' => ['ponto_marcacoes']],
       'ponto_colaboradores' => ['label' => 'Colaboradores', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_colaboradores.php', 'ponto_colaborador_foto.php'], 'nav' => ['ponto_colaboradores']],
       'ponto_departamentos' => ['label' => 'Departamentos', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_departamentos.php'], 'nav' => ['ponto_departamentos']],
       'ponto_cargos' => ['label' => 'Cargos/Funções', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_cargos.php'], 'nav' => ['ponto_cargos']],
@@ -208,6 +210,7 @@ if (!function_exists('access_permissions_catalog')) {
       'ponto_escalas' => ['label' => 'Escalas', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_escalas.php'], 'nav' => ['ponto_escalas']],
       'ponto_locais' => ['label' => 'Locais de Trabalho', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_locais.php'], 'nav' => ['ponto_locais']],
       'ponto_feriados' => ['label' => 'Feriados', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_feriados.php'], 'nav' => ['ponto_feriados']],
+      'ponto_coletores' => ['label' => 'Aparelhos de ponto (terminais)', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_coletores.php'], 'nav' => ['ponto_coletores']],
       'ponto_auditoria' => ['label' => 'Auditoria do Ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_auditoria.php'], 'nav' => ['ponto_auditoria']],
       'ponto_configuracoes' => ['label' => 'Configurações do Ponto', 'group' => 'Ponto Eletrônico', 'module' => 'ponto_eletronico', 'pages' => ['ponto_configuracoes.php'], 'nav' => ['ponto_configuracoes']],
 
@@ -502,7 +505,7 @@ if (!function_exists('access_admin_nav_allowed')) {
 
     $parentPermissions = [
       'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila','whatsapp_atendimento','whatsapp_painel','whatsapp_chatbot'],
-      'ponto' => ['ponto_painel','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
+      'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
       'orcamento' => ['orcamentos','orcamento_novo'],
       'contratos' => ['contratos','contratos_gerar'],
       'compras' => ['compras_assistente','compras_listas','compras_cotacoes','compras_pedidos','compras_painel','compras_alertas','compras_fornecedores_avaliacao','compras_fornecedores_ranking','compras_fornecedores_ranking_config','compras_historico_precos'],

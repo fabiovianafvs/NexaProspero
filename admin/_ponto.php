@@ -10,6 +10,7 @@ if (!function_exists('ponto_menu_items')) {
   function ponto_menu_items(): array {
     return [
       'ponto_painel' => ['Painel do Ponto', 'ponto_painel.php'],
+      'ponto_marcacoes' => ['Marcações', 'ponto_marcacoes.php'],
       'ponto_colaboradores' => ['Colaboradores', 'ponto_colaboradores.php'],
       'ponto_departamentos' => ['Departamentos', 'ponto_departamentos.php'],
       'ponto_cargos' => ['Cargos/Funções', 'ponto_cargos.php'],
@@ -18,6 +19,7 @@ if (!function_exists('ponto_menu_items')) {
       'ponto_escalas' => ['Escalas', 'ponto_escalas.php'],
       'ponto_locais' => ['Locais de Trabalho', 'ponto_locais.php'],
       'ponto_feriados' => ['Feriados', 'ponto_feriados.php'],
+      'ponto_coletores' => ['Aparelhos', 'ponto_coletores.php'],
       'ponto_auditoria' => ['Auditoria', 'ponto_auditoria.php'],
       'ponto_configuracoes' => ['Configurações', 'ponto_configuracoes.php'],
     ];
@@ -148,6 +150,17 @@ dialog.pt-modal::backdrop{background:rgba(15,23,42,.55)}
     }
     $f = ponto_flash_take();
     if ($f) echo '<div class="pt-msg ' . ($f[0] === 'ok' ? 'ok' : 'err') . '">' . ponto_h($f[1]) . '</div>';
+  }
+}
+
+if (!function_exists('ponto_require_v2')) {
+  /** Telas da marcação (V2): avisa e encerra a página se a migração V2 não foi aplicada. */
+  function ponto_require_v2(PDO $pdo): void {
+    require_once __DIR__ . '/../config/ponto_marcacao.php';
+    if (ponto_v2_ready($pdo)) return;
+    echo '<div class="pt-msg warn">A marcação de ponto ainda não foi instalada no banco. O administrador da plataforma precisa aplicar a atualização "Ponto Eletrônico - V2 Marcação de ponto" no Atualizador do Banco.</div>';
+    ponto_end();
+    exit;
   }
 }
 

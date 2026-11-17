@@ -25,12 +25,12 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
   </section>
   <section class="pt-card">
     <h2>Registro do ponto</h2>
-    <p class="pt-sub">Estas regras passam a valer quando a tela "Bater Ponto" for liberada (próxima versão). Já pode deixar configurado.</p>
+    <p class="pt-sub">Valem para a tela "Bater Ponto" (o colaborador com o login dele). No terminal da empresa (Aparelhos) a identificação é por matrícula + PIN ou cartão.</p>
     <div style="display:grid;gap:10px">
       <label class="ck"><input type="checkbox" name="permitir_web" value="1" <?= $ck('permitir_web') ?>> Permitir bater o ponto pelo computador (navegador)</label>
       <label class="ck"><input type="checkbox" name="permitir_mobile" value="1" <?= $ck('permitir_mobile') ?>> Permitir bater o ponto pelo celular (só para colaboradores liberados no cadastro)</label>
       <label class="ck"><input type="checkbox" name="permitir_rfid" value="1" <?= $ck('permitir_rfid') ?>> Permitir identificação por cartão RFID</label>
-      <label class="ck"><input type="checkbox" name="exigir_localizacao" value="1" <?= $ck('exigir_localizacao') ?>> Pedir a localização do aparelho em todas as marcações</label>
+      <label class="ck"><input type="checkbox" name="exigir_localizacao" value="1" <?= $ck('exigir_localizacao') ?>> Exigir a localização do celular/computador para bater o ponto (sem localização, o registro não é feito)</label>
       <label class="ck"><input type="checkbox" name="alertar_fora_area" value="1" <?= $ck('alertar_fora_area') ?>> Sinalizar marcações feitas fora do raio do local de trabalho</label>
     </div>
     <p class="pt-hint">A marcação feita fora do local nunca é bloqueada nem alterada: ela é registrada e fica sinalizada para conferência.</p>

@@ -670,6 +670,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'bd8cae518272514f1a3ca76c0e685136127506c3540af816ccdef3d2308baac0',
         'order' => 202611160300,
       ],
+      [
+        'id' => '20261117_ponto_marcacao_v2',
+        'module' => 'ponto_eletronico',
+        'version' => 202611170100,
+        'label' => 'Ponto Eletrônico - V2 Marcação de ponto',
+        'description' => 'Cria as tabelas da marcação de ponto (registros de ponto com NSR e código hash, aparelhos coletores e conferência do relógio) e o PIN do colaborador. Aplicar depois da V1 Fundação. Não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261117_ponto_marcacao_v2.sql',
+        'sha256' => '5de8c16bbbbd18759da415f66dbaead149bd1f50a7e1abf613378bd25b486eaf',
+        'order' => 202611170100,
+      ],
     ];
   }
 }

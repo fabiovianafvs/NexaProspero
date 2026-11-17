@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // Ponto Eletrônico > Auditoria: quem alterou o quê nos cadastros e configurações do Ponto.
-// Só leitura. (Não é o registro legal das marcações, que virá nas próximas versões.)
+// Só leitura. (Não é o registro legal das marcações: esse fica em Marcações, com NSR e hash.)
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_ponto.php';

@@ -6,6 +6,7 @@ declare(strict_types=1);
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_ponto.php';
+require_once __DIR__ . '/../config/ponto_marcacao.php';
 
 $cid = ponto_guard($pdo, 'ponto_colaboradores');
 $f = [
@@ -39,7 +40,13 @@ ponto_post_handle($back, function () use ($pdo, $cid, $withOpen) {
   $action = (string)($_POST['action'] ?? '');
   if ($action === 'save') {
     $isNew = (int)($_POST['id'] ?? 0) === 0;
+    // PIN do terminal (V2): confere antes de gravar o cadastro; grava só o hash.
+    $pinV2 = ponto_v2_ready($pdo);
+    $pin = trim((string)($_POST['pin'] ?? ''));
+    if ($pinV2 && $pin !== '' && empty($_POST['pin_remover'])) ponto_pin_validate($pin);
     $id = ponto_colaborador_save($pdo, $cid, $_POST);
+    if ($pinV2 && !empty($_POST['pin_remover'])) ponto_pin_set($pdo, $cid, $id, '');
+    elseif ($pinV2 && $pin !== '') ponto_pin_set($pdo, $cid, $id, $pin);
     // Cadastro novo: reabre na aba Foto para já tirar/enviar a foto.
     return $isNew ? ['Colaborador cadastrado. Agora você pode incluir a foto.', $withOpen($id, 'foto')] : 'Cadastro alterado.';
   }
@@ -63,13 +70,14 @@ $statusBadge = ['ATIVO' => '<span class="pt-badge g">Ativo</span>', 'AFASTADO' =
 $byId = [];
 foreach ($rows as $r) {
   $r['cpf_fmt'] = ponto_fmt_doc((string)$r['cpf']);
-  unset($r['rfid_hash'], $r['foto_path']);
+  $r['pin_set'] = !empty($r['pin_hash']) ? 1 : 0;
+  unset($r['rfid_hash'], $r['foto_path'], $r['pin_hash']);
   $byId[(int)$r['id']] = $r;
 }
 $openId = (int)($_GET['abrir'] ?? 0);
 if ($openId && !isset($byId[$openId])) {
   $one = ponto_colaborador_get($pdo, $cid, $openId);
-  if ($one) { $one['cpf_fmt'] = ponto_fmt_doc((string)$one['cpf']); unset($one['rfid_hash'], $one['foto_path']); $byId[$openId] = $one; }
+  if ($one) { $one['cpf_fmt'] = ponto_fmt_doc((string)$one['cpf']); $one['pin_set'] = !empty($one['pin_hash']) ? 1 : 0; unset($one['rfid_hash'], $one['foto_path'], $one['pin_hash']); $byId[$openId] = $one; }
 }
 $sel = static function (string $name, array $options, string $empty = '—'): string {
   $h = '<select name="' . ponto_h($name) . '"><option value="">' . ponto_h($empty) . '</option>';
@@ -77,7 +85,7 @@ $sel = static function (string $name, array $options, string $empty = '—'): st
   return $h . '</select>';
 };
 
-ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada controlada. O colaborador não precisa ter usuário no Nexa; quando tiver, ligue o usuário para ele usar o "Meu Ponto" nas próximas versões.', '<button class="pt-btn pri" type="button" onclick="pcNew()">+ Cadastrar</button>');
+ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada controlada. O colaborador não precisa ter usuário no Nexa; quando tiver, ligue o usuário para ele bater o próprio ponto em "Bater Ponto" (celular ou computador).', '<button class="pt-btn pri" type="button" onclick="pcNew()">+ Cadastrar</button>');
 ?>
 <style>
 .pc-ph{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#e2e8f0;display:inline-grid;place-items:center;font-weight:900;color:#475569;font-size:14px;vertical-align:middle;flex:none}
@@ -164,7 +172,13 @@ ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada co
         <label class="f">Código interno<input type="text" name="codigo_interno" maxlength="30"></label>
         <label class="f">Cartão RFID <span class="pt-hint" id="pcRfidNow"></span><input type="text" name="rfid" maxlength="40" autocomplete="off" placeholder="Aproxime o cartão do leitor"></label>
       </div>
-      <p class="pt-hint">O número do cartão não fica gravado: o sistema guarda só um código de conferência e os 4 últimos dígitos. Deixe em branco para manter; digite <b>-</b> para remover o cartão.</p></div>
+      <?php if (ponto_v2_ready($pdo)): ?>
+      <div class="pt-grid" style="margin-top:10px">
+        <label class="f">PIN do terminal <span class="pt-hint" id="pcPinNow"></span><input type="password" name="pin" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="4 a 6 números"></label>
+        <label class="ck" style="align-self:end;min-height:40px!important"><input type="checkbox" name="pin_remover" value="1"> Remover o PIN</label>
+      </div>
+      <?php endif; ?>
+      <p class="pt-hint">O número do cartão não fica gravado: o sistema guarda só um código de conferência e os 4 últimos dígitos. Deixe em branco para manter; digite <b>-</b> para remover o cartão. O PIN (usado no terminal com a matrícula ou o CPF) também fica só em código: ninguém consegue ver o PIN depois; para trocar, digite um novo. Deixe em branco para manter.</p></div>
     </form>
     <div class="pt-pane" id="pcFoto">
       <div class="pc-photo">
@@ -226,10 +240,11 @@ ponto_start($pdo, 'ponto_colaboradores', 'Colaboradores', 'Quem tem a jornada co
   function fill(r){
     form.querySelectorAll('[name]').forEach(el=>{if(['csrf','action'].includes(el.name))return;const v=r[el.name];
       if(el.type==='checkbox'){el.checked=v===undefined?(el.name==='controla_ponto'):String(v)==='1';return;}
-      if(el.name==='rfid'){el.value='';return;}
+      if(el.name==='rfid'||el.name==='pin'){el.value='';return;}
       if(el.name==='cpf'){el.value=r.cpf_fmt||'';return;}
       el.value=v===undefined||v===null?(el.name==='id'?0:(el.name==='status'?'ATIVO':'')):(el.type==='date'?String(v).slice(0,10):String(v));});
     document.getElementById('pcRfidNow').textContent=r.rfid_final?'(cadastrado: final '+r.rfid_final+')':'';
+    const pinNow=document.getElementById('pcPinNow');if(pinNow)pinNow.textContent=String(r.pin_set)==='1'?'(cadastrado)':'(sem PIN)';
     document.getElementById('pcEscForm').querySelector('[name=id]').value=r.id||0;
     photo(r);
   }

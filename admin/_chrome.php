@@ -267,7 +267,9 @@ function admin_topbar(string $title, string $active=''): void {
       'orcamento_novo' => ['Novo Orçamento', 'orcamento_editar.php'],
     ]],
     'ponto' => ['Ponto Eletrônico','ponto_painel.php', [
+      'ponto_bater' => ['Bater Ponto', 'ponto_bater.php'],
       'ponto_painel' => ['Painel do Ponto', 'ponto_painel.php'],
+      'ponto_marcacoes' => ['Marcações', 'ponto_marcacoes.php'],
       'ponto_colaboradores' => ['Colaboradores', 'ponto_colaboradores.php'],
       'ponto_departamentos' => ['Departamentos', 'ponto_departamentos.php'],
       'ponto_cargos' => ['Cargos/Funções', 'ponto_cargos.php'],
@@ -276,6 +278,7 @@ function admin_topbar(string $title, string $active=''): void {
       'ponto_escalas' => ['Escalas', 'ponto_escalas.php'],
       'ponto_locais' => ['Locais de Trabalho', 'ponto_locais.php'],
       'ponto_feriados' => ['Feriados', 'ponto_feriados.php'],
+      'ponto_coletores' => ['Aparelhos (terminais)', 'ponto_coletores.php'],
       'ponto_auditoria' => ['Auditoria', 'ponto_auditoria.php'],
       'ponto_configuracoes' => ['Configurações', 'ponto_configuracoes.php'],
     ]],
