@@ -28,9 +28,29 @@ $doc = (string)($e['documento'] ?? '');
 $docLabel = ((string)($e['tipo_documento'] ?? 'CNPJ')) === 'CPF' ? 'CPF' : 'CNPJ';
 $extra = array_filter(['CAEPF' => (string)($e['caepf'] ?? ''), 'CNO' => (string)($e['cno'] ?? '')]);
 $local = $d['local'] && trim((string)($d['local']['endereco'] ?? '')) !== '' ? (string)$d['local']['endereco'] : $d['endereco_estabelecimento'];
+if (function_exists('ponto_config_rep')) $cfg = ponto_config_rep($pdo, $cid);
 $inpi = trim((string)($cfg['rep_p_registro_inpi'] ?? ''));
 $dh = DateTime::createFromFormat('Y-m-d H:i:s', (string)$m['data_hora']);
 $url = ponto_base_url() . ponto_comprovante_url($pdo, $cid, $m);
+$devCert = null;
+if (function_exists('ponto_cert_desenvolvedor')) { try { $devCert = ponto_cert_desenvolvedor(); } catch (Throwable $ex) { $devCert = null; } }
+// V7: o mesmo comprovante em PDF, assinado digitalmente (PAdES, ICP-Brasil) pelo desenvolvedor.
+if (isset($_GET['pdf']) && function_exists('ponto_comprovante_pdf')) {
+  try {
+    [$pdf] = ponto_comprovante_pdf($pdo, $cid, $d, $url);
+  } catch (Throwable $ex) {
+    http_response_code(500);
+    echo '<!doctype html><meta charset="utf-8"><p style="font-family:system-ui;padding:24px">Não foi possível gerar o PDF agora. Use "Imprimir / salvar PDF".</p>';
+    exit;
+  }
+  while (ob_get_level() > 0) ob_end_clean();
+  header('Content-Type: application/pdf');
+  header('Content-Disposition: attachment; filename="Comprovante_Ponto_NSR_' . str_pad((string)$m['nsr'], 9, '0', STR_PAD_LEFT) . '.pdf"');
+  header('Content-Length: ' . strlen($pdf));
+  echo $pdf;
+  exit;
+}
+$pdfUrl = '?' . http_build_query(array_filter(['company' => (string)($_GET['company'] ?? ''), 't' => (string)($_GET['t'] ?? ''), 'pdf' => '1']));
 ?><!doctype html>
 <html lang="pt-BR">
 <head>
@@ -69,10 +89,14 @@ $url = ponto_base_url() . ponto_comprovante_url($pdo, $cid, $m);
       <tr><th>Data e horário</th><td><?= $h($dh ? $dh->format('d/m/Y H:i') : '') ?> (UTC<?= $h(substr((string)$m['fuso'], 0, 3) . ':' . substr((string)$m['fuso'], 3)) ?>)</td></tr>
       <tr><th>Registro do programa (INPI)</th><td><?= $h($inpi !== '' ? $inpi : 'Em registro') ?></td></tr>
       <tr><th>Código hash (SHA-256)</th><td class="hash"><?= $h($m['hash']) ?></td></tr>
+      <tr><th>Assinatura eletrônica</th><td><?= $devCert ? 'No PDF assinado digitalmente (ICP-Brasil) por ' . $h($devCert['titular']) : 'Assinatura digital ainda não configurada' ?></td></tr>
     </table>
     <?php $qr = ponto_qr_svg($url, 3); if ($qr !== ''): ?><div class="qr"><?= $qr ?></div><?php endif; ?>
     <p class="pa-hint" style="text-align:center">Registro gravado pelo Nexa Ponto. Este registro não pode ser alterado nem apagado.</p>
-    <div class="pa-row pa-noprint"><button type="button" class="pa-btn pri" onclick="window.print()">Imprimir / salvar PDF</button></div>
+    <div class="pa-row pa-noprint">
+      <?php if ($devCert): ?><a class="pa-btn pri" href="<?= $h($pdfUrl) ?>">Baixar PDF assinado</a><?php endif; ?>
+      <button type="button" class="pa-btn<?= $devCert ? '' : ' pri' ?>" onclick="window.print()">Imprimir</button>
+    </div>
   </section>
 </main>
 </body>

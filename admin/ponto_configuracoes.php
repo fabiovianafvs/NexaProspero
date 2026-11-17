@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_ponto.php';
+require_once __DIR__ . '/../config/ponto_assinatura.php';
 
 $cid = ponto_guard($pdo, 'ponto_configuracoes');
 ponto_post_handle('ponto_configuracoes.php', function () use ($pdo, $cid) {
@@ -13,6 +14,10 @@ ponto_post_handle('ponto_configuracoes.php', function () use ($pdo, $cid) {
 });
 $cfg = ponto_config($pdo, $cid);
 $ck = static fn(string $k) => !empty($cfg[$k]) ? 'checked' : '';
+$plat = function_exists('ponto_plataforma') ? ponto_plataforma() : [];
+$ph = static fn(string $k): string => ($plat[$k] ?? '') !== '' ? 'placeholder="Padrão da plataforma: ' . ponto_h($k === 'dev_cnpj' ? ponto_fmt_doc((string)$plat[$k]) : (string)$plat[$k]) . '"' : '';
+$devCert = null; $devErr = '';
+if (function_exists('ponto_cert_desenvolvedor')) { try { $devCert = ponto_cert_desenvolvedor(); } catch (Throwable $e) { $devErr = $e->getMessage(); } }
 
 ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da empresa para o registro de ponto. Toda alteração fica na Auditoria.');
 ?>
@@ -57,13 +62,17 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
   </section>
   <section class="pt-card">
     <h2>Dados do programa de ponto (REP-P)</h2>
-    <p class="pt-sub">Preencha somente depois do registro do programa no INPI. Esses dados aparecerão nos arquivos legais e comprovantes.</p>
+    <p class="pt-sub">Esses dados aparecem nos arquivos legais e comprovantes. Campo em branco usa o padrão da plataforma (mostrado em cinza), definido pelo desenvolvedor no servidor.</p>
+    <p class="pt-hint" style="margin:0 0 10px">Assinatura digital (ICP-Brasil):
+      <?php if ($devCert): ?><span class="pt-badge g">Configurada</span> certificado de <?= ponto_h($devCert['titular']) ?>, válido até <?= ponto_h(date('d/m/Y', (int)$devCert['valido_ate'])) ?>. Detalhes em <a href="ponto_arquivos.php">Arquivos legais</a>.
+      <?php elseif ($devErr !== ''): ?><span class="pt-badge r">Com problema</span> <?= ponto_h($devErr) ?>
+      <?php else: ?><span class="pt-badge y">Não configurada</span> o administrador da plataforma instala o certificado no servidor.<?php endif; ?></p>
     <div class="pt-grid">
-      <label class="f">Nº do registro no INPI<input type="text" name="rep_p_registro_inpi" maxlength="40" value="<?= ponto_h($cfg['rep_p_registro_inpi']) ?>"></label>
-      <label class="f">Versão do programa<input type="text" name="rep_p_versao" maxlength="20" value="<?= ponto_h($cfg['rep_p_versao']) ?>"></label>
-      <label class="f">Desenvolvedor<input type="text" name="rep_p_desenvolvedor" maxlength="150" value="<?= ponto_h($cfg['rep_p_desenvolvedor']) ?>"></label>
-      <label class="f">CNPJ do desenvolvedor<input type="text" name="rep_p_cnpj_desenvolvedor" inputmode="numeric" maxlength="18" value="<?= ponto_h(ponto_fmt_doc((string)$cfg['rep_p_cnpj_desenvolvedor'])) ?>"></label>
-      <label class="f">E-mail do desenvolvedor<input type="email" name="rep_p_email_desenvolvedor" maxlength="50" value="<?= ponto_h((string)($cfg['rep_p_email_desenvolvedor'] ?? '')) ?>"></label>
+      <label class="f">Nº do registro no INPI<input type="text" name="rep_p_registro_inpi" <?= $ph('inpi') ?> maxlength="40" value="<?= ponto_h($cfg['rep_p_registro_inpi']) ?>"></label>
+      <label class="f">Versão do programa<input type="text" name="rep_p_versao" <?= $ph('versao') ?> maxlength="20" value="<?= ponto_h($cfg['rep_p_versao']) ?>"></label>
+      <label class="f">Desenvolvedor<input type="text" name="rep_p_desenvolvedor" <?= $ph('dev_nome') ?> maxlength="150" value="<?= ponto_h($cfg['rep_p_desenvolvedor']) ?>"></label>
+      <label class="f">CNPJ do desenvolvedor<input type="text" name="rep_p_cnpj_desenvolvedor" <?= $ph('dev_cnpj') ?> inputmode="numeric" maxlength="18" value="<?= ponto_h(ponto_fmt_doc((string)$cfg['rep_p_cnpj_desenvolvedor'])) ?>"></label>
+      <label class="f">E-mail do desenvolvedor<input type="email" name="rep_p_email_desenvolvedor" <?= $ph('dev_email') ?> maxlength="50" value="<?= ponto_h((string)($cfg['rep_p_email_desenvolvedor'] ?? '')) ?>"></label>
       <label class="f">CPF do responsável pelos cadastros do ponto<input type="text" name="responsavel_cpf" inputmode="numeric" maxlength="14" value="<?= ponto_h(ponto_fmt_doc((string)($cfg['responsavel_cpf'] ?? ''))) ?>" placeholder="Vai no AFD quando empregador ou empregado é incluído/alterado"></label>
     </div>
   </section>

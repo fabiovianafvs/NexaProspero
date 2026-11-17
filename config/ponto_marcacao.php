@@ -775,3 +775,5 @@ if (!function_exists('ponto_geofence_label')) {
 
 // V6: registros cadastrais do REP, AFD, AEJ e Espelho de Ponto.
 require_once __DIR__ . '/ponto_afd.php';
+// V7: assinaturas digitais (certificados, CAdES/PAdES, PDF do comprovante e do atestado).
+require_once __DIR__ . '/ponto_assinatura.php';

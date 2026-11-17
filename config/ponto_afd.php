@@ -262,12 +262,19 @@ if (!function_exists('ponto_arp_sincronizar')) {
 if (!function_exists('ponto_afd_pendencias')) {
   /** O que falta configurar para o AFD/AEJ saírem completos. */
   function ponto_afd_pendencias(PDO $pdo, int $companyId): array {
-    $cfg = ponto_config($pdo, $companyId);
+    $cfg = function_exists('ponto_config_rep') ? ponto_config_rep($pdo, $companyId) : ponto_config($pdo, $companyId);
     $p = [];
     if (trim((string)$cfg['rep_p_registro_inpi']) === '') $p[] = 'Número do registro do programa no INPI (Configurações > Dados do programa de ponto).';
     if (trim((string)$cfg['rep_p_cnpj_desenvolvedor']) === '') $p[] = 'CNPJ do desenvolvedor do programa (Configurações).';
     if (trim((string)$cfg['rep_p_desenvolvedor']) === '') $p[] = 'Nome do desenvolvedor do programa (Configurações).';
     if (strlen(ponto_digits((string)($cfg['responsavel_cpf'] ?? ''))) !== 11) $p[] = 'CPF do responsável pelos cadastros do ponto (Configurações).';
+    if (function_exists('ponto_cert_desenvolvedor')) {
+      try {
+        if (!ponto_cert_desenvolvedor()) $p[] = 'Certificado digital do desenvolvedor no servidor (sem ele os arquivos saem sem a assinatura .p7s).';
+      } catch (Throwable $e) {
+        $p[] = $e->getMessage();
+      }
+    }
     return $p;
   }
 }
@@ -280,7 +287,7 @@ if (!function_exists('ponto_afd_gerar')) {
   function ponto_afd_gerar(PDO $pdo, int $companyId, int $estabId, string $de, string $ate): array {
     $estab = ponto_estabelecimento_get($pdo, $companyId, $estabId);
     if (!$estab) throw new RuntimeException('Estabelecimento não encontrado.');
-    $cfg = ponto_config($pdo, $companyId);
+    $cfg = function_exists('ponto_config_rep') ? ponto_config_rep($pdo, $companyId) : ponto_config($pdo, $companyId);
     $emp = ponto_arp_empresa_dados($estab);
     [$tpDev, $docDev] = ponto_doc_tipo('', (string)$cfg['rep_p_cnpj_desenvolvedor']);
     $now = new DateTimeImmutable('now', ponto_tz($estab, $pdo, $companyId));
@@ -350,7 +357,7 @@ if (!function_exists('ponto_aej_gerar')) {
   function ponto_aej_gerar(PDO $pdo, int $companyId, int $estabId, string $de, string $ate): array {
     $estab = ponto_estabelecimento_get($pdo, $companyId, $estabId);
     if (!$estab) throw new RuntimeException('Estabelecimento não encontrado.');
-    $cfg = ponto_config($pdo, $companyId);
+    $cfg = function_exists('ponto_config_rep') ? ponto_config_rep($pdo, $companyId) : ponto_config($pdo, $companyId);
     $emp = ponto_arp_empresa_dados($estab);
     $tz = ponto_tz($estab, $pdo, $companyId);
     $now = new DateTimeImmutable('now', $tz);
