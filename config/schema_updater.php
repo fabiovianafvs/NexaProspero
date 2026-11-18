@@ -770,6 +770,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'b7dbe6b61724f3dd355ebae9ae47ea850e636cce7a0e9075f57a666da6da8d36',
         'order' => 202611180500,
       ],
+      [
+        'id' => '20261118_despesas_fixas_periodicidade_v1',
+        'module' => 'finance_fixed_expense_frequency',
+        'version' => 202611180600,
+        'label' => 'Despesas Fixas - periodicidade (diária e a cada N dias)',
+        'description' => 'Permite cadastrar despesas fixas diárias ou a cada N dias (dias corridos ou os mesmos dias todo mês), além da mensal. Só acrescenta colunas; as despesas existentes continuam mensais.',
+        'file' => __DIR__ . '/../db/20261118_despesas_fixas_periodicidade_v1.sql',
+        'sha256' => 'b073d469181d080dd35179caade568a7793ea7fc960b255750987e51dde8ae1c',
+        'order' => 202611180600,
+      ],
     ];
   }
 }

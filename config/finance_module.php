@@ -1717,6 +1717,95 @@ if (!function_exists('finance_fixed_expense_next_reference')) {
   }
 }
 
+if (!function_exists('finance_fixed_expense_frequency')) {
+  /**
+   * Periodicidade da despesa fixa (colunas da migração 20261118_despesas_fixas_periodicidade_v1;
+   * sem elas, tudo é MENSAL como antes):
+   *  MENSAL  = um vencimento por mês no dia due_day (comportamento original);
+   *  DIARIA  = um vencimento por dia;
+   *  PERIODO = a cada interval_days dias: CORRIDOS (conta N dias a partir do 1º vencimento)
+   *            ou FIXOS (os mesmos dias todo mês: dia do 1º vencimento, +N, +2N... até o fim do mês).
+   * Em todas, os meses desmarcados em months_mask são pulados.
+   */
+  function finance_fixed_expense_frequency(array $rule): array {
+    $freq = strtoupper(trim((string)($rule['frequency'] ?? 'MENSAL')));
+    if (!in_array($freq, ['MENSAL', 'DIARIA', 'PERIODO'], true)) $freq = 'MENSAL';
+    $n = max(1, min(365, (int)($rule['interval_days'] ?? 0) ?: 1));
+    if ($freq === 'PERIODO' && $n === 1) $freq = 'DIARIA';
+    $mode = strtoupper(trim((string)($rule['period_mode'] ?? 'CORRIDOS'))) === 'FIXOS' ? 'FIXOS' : 'CORRIDOS';
+    return ['freq' => $freq, 'n' => $n, 'mode' => $mode];
+  }
+}
+
+if (!function_exists('finance_fixed_expense_fixed_days')) {
+  /** Dias do mês do modo "mesmos dias todo mês": [primeiro dia, +N, +2N, ...] até 31. */
+  function finance_fixed_expense_fixed_days(int $firstDay, int $n): array {
+    $firstDay = max(1, min(31, $firstDay));
+    $n = max(1, $n);
+    $days = [];
+    for ($d = $firstDay; $d <= 31; $d += $n) $days[] = $d;
+    // Começa antes do primeiro dia também (ex.: 15 em 15 a partir do dia 20 = dias 5 e 20).
+    for ($d = $firstDay - $n; $d >= 1; $d -= $n) $days[] = $d;
+    sort($days);
+    return array_values(array_unique($days));
+  }
+}
+
+if (!function_exists('finance_fixed_expense_next_due')) {
+  /** Próximo vencimento (Y-m-d) das periodicidades DIARIA/PERIODO depois de $afterDue (ou o 1º). */
+  function finance_fixed_expense_next_due(array $rule, ?string $afterDue = null): string {
+    $f = finance_fixed_expense_frequency($rule);
+    $mask = (string)($rule['months_mask'] ?? '111111111111');
+    $first = new DateTimeImmutable(finance_date_or_null($rule['first_due_date'] ?? '') ?: date('Y-m-d'));
+    $after = $afterDue ? new DateTimeImmutable(date('Y-m-d', strtotime($afterDue))) : null;
+    if ($f['freq'] === 'PERIODO' && $f['mode'] === 'FIXOS') {
+      $days = finance_fixed_expense_fixed_days((int)$first->format('j'), $f['n']);
+      $start = ($after && $after >= $first) ? $after->modify('+1 day') : $first;
+      $month = $start->modify('first day of this month');
+      for ($i = 0; $i < 240; $i++) {
+        if (finance_fixed_expense_month_enabled($mask, (int)$month->format('n'))) {
+          $last = (int)$month->format('t');
+          $eff = array_values(array_unique(array_map(static fn($d) => min($d, $last), $days)));
+          foreach ($eff as $d) {
+            $date = $month->setDate((int)$month->format('Y'), (int)$month->format('m'), $d);
+            if ($date >= $start) return $date->format('Y-m-d');
+          }
+        }
+        $month = $month->modify('+1 month');
+      }
+      throw new RuntimeException('Não foi possível localizar o próximo vencimento da despesa fixa.');
+    }
+    $step = $f['freq'] === 'DIARIA' ? 1 : $f['n'];
+    if (!$after || $after < $first) {
+      $cursor = $first;
+    } else {
+      // Mantém a sequência a partir do 1º vencimento (dias corridos), mesmo depois de editar.
+      $diff = (int)$first->diff($after)->days;
+      $cursor = $first->modify('+' . ((intdiv($diff, $step) + 1) * $step) . ' days');
+    }
+    for ($i = 0; $i < 3000; $i++) {
+      if (finance_fixed_expense_month_enabled($mask, (int)$cursor->format('n'))) return $cursor->format('Y-m-d');
+      $cursor = $cursor->modify('+' . $step . ' days');
+    }
+    throw new RuntimeException('Não foi possível localizar o próximo vencimento da despesa fixa.');
+  }
+}
+
+if (!function_exists('finance_fixed_expense_frequency_label')) {
+  function finance_fixed_expense_frequency_label(array $rule): string {
+    $f = finance_fixed_expense_frequency($rule);
+    if ($f['freq'] === 'DIARIA') return 'Diária';
+    if ($f['freq'] === 'PERIODO') {
+      if ($f['mode'] === 'FIXOS') {
+        $first = finance_date_or_null($rule['first_due_date'] ?? '') ?: date('Y-m-d');
+        return 'Dias ' . implode(', ', finance_fixed_expense_fixed_days((int)date('j', strtotime($first)), $f['n']));
+      }
+      return 'A cada ' . $f['n'] . ' dias';
+    }
+    return 'Dia ' . (int)($rule['due_day'] ?? 1);
+  }
+}
+
 if (!function_exists('finance_fixed_expense_due_date')) {
   function finance_fixed_expense_due_date(array $rule, string $referenceMonth): string {
     $ref = new DateTimeImmutable(date('Y-m-01', strtotime($referenceMonth)));
@@ -1775,19 +1864,34 @@ if (!function_exists('finance_fixed_expense_ensure_horizon')) {
           throw new RuntimeException('A Despesa Fixa referencia um Caixa/Banco inválido ou de outra empresa.');
         }
       }
-      $horizon = max(1, min(36, (int)($rule['horizon_count'] ?? 12)));
+      $horizon = max(1, min(60, (int)($rule['horizon_count'] ?? 12)));
       $st = $pdo->prepare("SELECT COUNT(*) FROM finance_fixed_expense_titles ft INNER JOIN finance_payables p ON p.company_id=ft.company_id AND p.id=ft.payable_id WHERE ft.company_id=? AND ft.fixed_expense_id=? AND p.status IN ('ABERTO','PARCIAL') AND COALESCE(p.open_amount,0)>0.009");
       $st->execute([$companyId, $fixedExpenseId]);
       $openCount = (int)$st->fetchColumn();
       $st = $pdo->prepare('SELECT MAX(reference_month) FROM finance_fixed_expense_titles WHERE company_id=? AND fixed_expense_id=?');
       $st->execute([$companyId, $fixedExpenseId]);
       $lastReference = (string)($st->fetchColumn() ?: '');
+      $freq = finance_fixed_expense_frequency($rule);
+      $monthly = $freq['freq'] === 'MENSAL';
+      if (!$monthly && $lastReference !== '') {
+        // Diária/a cada N dias: continua depois do último vencimento gerado (inclusive
+        // de contas geradas quando a despesa ainda era mensal).
+        $st = $pdo->prepare('SELECT MAX(p.due_date) FROM finance_fixed_expense_titles ft INNER JOIN finance_payables p ON p.company_id=ft.company_id AND p.id=ft.payable_id WHERE ft.company_id=? AND ft.fixed_expense_id=?');
+        $st->execute([$companyId, $fixedExpenseId]);
+        $lastDue = (string)($st->fetchColumn() ?: '');
+        if ($lastDue !== '' && $lastDue > $lastReference) $lastReference = $lastDue;
+      }
       $created = 0;
       $attempts = 0;
       while ($openCount < $horizon && $attempts < 120) {
         $attempts++;
-        $reference = finance_fixed_expense_next_reference($rule, $lastReference !== '' ? $lastReference : null);
-        $dueDate = finance_fixed_expense_due_date($rule, $reference);
+        if ($monthly) {
+          $reference = finance_fixed_expense_next_reference($rule, $lastReference !== '' ? $lastReference : null);
+          $dueDate = finance_fixed_expense_due_date($rule, $reference);
+        } else {
+          // Nas outras periodicidades a competência é o próprio dia do vencimento.
+          $reference = $dueDate = finance_fixed_expense_next_due($rule, $lastReference !== '' ? $lastReference : null);
+        }
         $firstDueDate = finance_date_or_null($rule['first_due_date'] ?? '') ?: $dueDate;
         if ($lastReference === '' && $dueDate < $firstDueDate) {
           $lastReference = $reference;
@@ -1802,8 +1906,8 @@ if (!function_exists('finance_fixed_expense_ensure_horizon')) {
         $amount = round((float)($rule['average_amount'] ?? 0), 2);
         if ($amount <= 0) throw new RuntimeException('A despesa fixa precisa possuir um valor médio maior que zero.');
         $prefix = preg_replace('/[^A-Za-z0-9_-]+/', '', (string)($rule['document_prefix'] ?? '')) ?: 'FIXA';
-        $document = substr($prefix . '-' . $fixedExpenseId . '-' . date('Ym', strtotime($reference)), 0, 60);
-        $installment = date('m/Y', strtotime($reference));
+        $document = substr($prefix . '-' . $fixedExpenseId . '-' . date($monthly ? 'Ym' : 'Ymd', strtotime($reference)), 0, 60);
+        $installment = date($monthly ? 'm/Y' : 'd/m/Y', strtotime($reference));
         $note = trim((string)($rule['notes'] ?? ''));
         $autoNote = 'Provisão automática da despesa fixa #' . $fixedExpenseId . ' - competência ' . $installment . '.';
         $notes = trim($autoNote . ($note !== '' ? "\n" . $note : ''));
@@ -1816,7 +1920,7 @@ if (!function_exists('finance_fixed_expense_ensure_horizon')) {
           (string)$rule['description'],
           $document,
           $installment,
-          $reference,
+          $monthly ? $reference : date('Y-m-01', strtotime($reference)),
           $dueDate,
           trim((string)($rule['expected_payment_method'] ?? '')) ?: null,
           $amount, 0, 0, 0, 0, $amount, 'ABERTO', $notes
@@ -1851,7 +1955,7 @@ if (!function_exists('finance_fixed_expense_trim_horizon_after_reversal')) {
 
     $rule = finance_query_one($pdo, 'SELECT id, horizon_count, active FROM finance_fixed_expenses WHERE company_id=? AND id=? LIMIT 1', [$companyId, $fixedExpenseId]);
     if (!$rule || empty($rule['active'])) return 0;
-    $horizon = max(1, min(36, (int)($rule['horizon_count'] ?? 12)));
+    $horizon = max(1, min(60, (int)($rule['horizon_count'] ?? 12)));
 
     $st = $pdo->prepare("SELECT COUNT(*) FROM finance_fixed_expense_titles ft INNER JOIN finance_payables p ON p.company_id=ft.company_id AND p.id=ft.payable_id WHERE ft.company_id=? AND ft.fixed_expense_id=? AND p.status IN ('ABERTO','PARCIAL') AND COALESCE(p.open_amount,0)>0.009");
     $st->execute([$companyId, $fixedExpenseId]);
