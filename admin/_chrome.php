@@ -304,6 +304,7 @@ function admin_topbar(string $title, string $active=''): void {
       'delivery_fiscal_queue' => ['Fila Fiscal', 'delivery_fiscal_queue.php'],
     ]],
     'transporte' => ['Transporte','transporte_configuracoes.php', [
+      'cte_documentos' => ['CT-e (conhecimentos de transporte)', 'cte.php'],
       'transp_veiculos' => ['Veículos', 'transporte_veiculos.php'],
       'transp_motoristas' => ['Motoristas', 'transporte_motoristas.php'],
       'transp_configuracoes' => ['Configurações CT-e/MDF-e', 'transporte_configuracoes.php'],

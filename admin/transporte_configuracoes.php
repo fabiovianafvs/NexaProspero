@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/_bootstrap.php';
 require __DIR__ . '/_chrome.php';
 require_once __DIR__ . '/_transporte.php';
+require_once __DIR__ . '/../config/cte_emissao.php'; // impede voltar a numeração abaixo do último CT-e emitido
 
 $cid = transp_guard($pdo, 'transp_configuracoes');
 $hasCte = function_exists('saas_company_has_module') ? saas_company_has_module($pdo, $cid, 'cte') : true;
@@ -65,6 +66,7 @@ transp_start($pdo, 'transp_configuracoes', 'Transporte — Configurações', 'Co
       <li><?= $ok($inst['cte_rtc'], 'Esquemas do CT-e 4.00 com IBS/CBS', 'Esquemas do CT-e com IBS/CBS não encontrados') ?></li>
       <li><?= $ok($inst['mdfe'], 'Biblioteca do MDF-e (sped-mdfe)', 'Biblioteca do MDF-e não instalada (rode composer install)') ?></li>
       <li><?= $ok($inst['dacte'] && $inst['damdfe'], 'Impressão do DACTE e do DAMDFE (sped-da)', 'Impressão do DACTE/DAMDFE indisponível') ?></li>
+      <?php if ($hasCte): $rt = cte_resp_tecnico(); ?><li><?= $rt ? $ok(true, 'Responsável técnico: CNPJ ' . $rt['CNPJ'] . ' (' . $rt['xContato'] . ')', '') : '<b style="color:#a16207">!</b><span>Responsável técnico não configurado no servidor (alguns estados exigem). Rode: bash /var/www/nexa/deploy/fiscal/configurar_responsavel_tecnico.sh</span>' ?></li><?php endif; ?>
     </ul>
   </section>
   <section class="tr-card">

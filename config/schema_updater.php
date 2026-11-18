@@ -790,6 +790,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'e525d461de3bbb40381a1501bc552941c9a171aced1c229660ef21b76a77a625',
         'order' => 202611180700,
       ],
+      [
+        'id' => '20261118_cte_emissao_v2',
+        'module' => 'transporte',
+        'version' => 202611180800,
+        'label' => 'Transporte (CT-e/MDF-e) - V2 Emissão do CT-e',
+        'description' => 'Cria as tabelas dos CT-e emitidos (rascunhos, transmitidos e autorizados, com o XML) e do histórico de comunicação com a SEFAZ. Aplicar depois da V1 Fundação. Não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261118_cte_emissao_v2.sql',
+        'sha256' => 'cf6102cb0ee07dbb68ea29beaa8bd7d6fcf5715f82cac3564bdb3de664c6f2c7',
+        'order' => 202611180800,
+      ],
     ];
   }
 }

@@ -10,6 +10,7 @@ if (!function_exists('transp_menu_items')) {
   /** Telas do módulo: chave de permissão => [rótulo, página]. */
   function transp_menu_items(): array {
     return [
+      'cte_documentos' => ['CT-e', 'cte.php'],
       'transp_veiculos' => ['Veículos', 'transporte_veiculos.php'],
       'transp_motoristas' => ['Motoristas', 'transporte_motoristas.php'],
       'transp_configuracoes' => ['Configurações', 'transporte_configuracoes.php'],
@@ -133,7 +134,7 @@ dialog.tr-modal::backdrop{background:rgba(15,23,42,.55)}
     <?php if ($actionsHtml !== ''): ?><div class="tr-actions"><?= $actionsHtml ?></div><?php endif; ?>
   </div>
   <nav class="tr-tabs">
-    <?php foreach ($items as $key => [$label, $page]): if (!transp_can($pdo, $key)) continue; ?>
+    <?php foreach ($items as $key => [$label, $page]): if (!transp_can($pdo, $key)) continue; if (strpos($key, 'cte_') === 0 && function_exists('saas_company_has_module') && !saas_company_has_module($pdo, (int)COMPANY_ID, 'cte')) continue; ?>
       <a class="<?= $key === $perm ? 'on' : '' ?>" href="<?= transp_h($page) ?>"><?= transp_h($label) ?></a>
     <?php endforeach; ?>
   </nav>
@@ -144,7 +145,7 @@ dialog.tr-modal::backdrop{background:rgba(15,23,42,.55)}
       exit;
     }
     $f = transp_flash_take();
-    if ($f) echo '<div class="tr-msg ' . ($f[0] === 'ok' ? 'ok' : 'err') . '">' . transp_h($f[1]) . '</div>';
+    if ($f) echo '<div class="tr-msg ' . ($f[0] === 'ok' ? 'ok' : ($f[0] === 'warn' ? 'warn' : 'err')) . '">' . nl2br(transp_h($f[1])) . '</div>';
   }
 }
 

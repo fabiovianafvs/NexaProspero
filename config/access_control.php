@@ -202,6 +202,7 @@ if (!function_exists('access_permissions_catalog')) {
       'configuracoes' => ['label' => 'Configurações gerais', 'group' => 'Configurações', 'module' => '*', 'pages' => ['parametros.php'], 'nav' => ['params']],
       'ia_configuracoes' => ['label' => 'Agentes de IA', 'group' => 'Configurações', 'module' => 'ia_agentes', 'pages' => ['ia_configuracoes.php'], 'nav' => ['ia_configuracoes']],
       'backup_empresa' => ['label' => 'Backup da Empresa', 'group' => 'Configurações', 'module' => 'backup_empresa', 'pages' => ['backup_empresa.php'], 'nav' => ['backup_empresa']],
+      'cte_documentos' => ['label' => 'CT-e: emitir, transmitir e consultar', 'group' => 'Transporte (CT-e/MDF-e)', 'module' => 'cte', 'pages' => ['cte.php', 'cte_editar.php', 'cte_api.php', 'cte_arquivo.php'], 'nav' => ['cte_documentos']],
       'transp_veiculos' => ['label' => 'Veículos', 'group' => 'Transporte (CT-e/MDF-e)', 'module' => ['cte', 'mdfe'], 'pages' => ['transporte_veiculos.php'], 'nav' => ['transp_veiculos']],
       'transp_motoristas' => ['label' => 'Motoristas', 'group' => 'Transporte (CT-e/MDF-e)', 'module' => ['cte', 'mdfe'], 'pages' => ['transporte_motoristas.php'], 'nav' => ['transp_motoristas']],
       'transp_configuracoes' => ['label' => 'Configurações do CT-e/MDF-e', 'group' => 'Transporte (CT-e/MDF-e)', 'module' => ['cte', 'mdfe'], 'pages' => ['transporte_configuracoes.php'], 'nav' => ['transp_configuracoes']],
@@ -523,7 +524,7 @@ if (!function_exists('access_admin_nav_allowed')) {
     $parentPermissions = [
       'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila','whatsapp_atendimento','whatsapp_painel','whatsapp_chatbot'],
       'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_tratamento','ponto_ocorrencias','ponto_banco_horas','ponto_fechamento','ponto_arquivos','ponto_acesso','ponto_biometria','ponto_tipos_ocorrencia','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
-      'transporte' => ['transp_veiculos','transp_motoristas','transp_configuracoes'],
+      'transporte' => ['cte_documentos','transp_veiculos','transp_motoristas','transp_configuracoes'],
       'orcamento' => ['orcamentos','orcamento_novo'],
       'contratos' => ['contratos','contratos_gerar'],
       'compras' => ['compras_assistente','compras_listas','compras_cotacoes','compras_pedidos','compras_painel','compras_alertas','compras_fornecedores_avaliacao','compras_fornecedores_ranking','compras_fornecedores_ranking_config','compras_historico_precos'],
