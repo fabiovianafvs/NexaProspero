@@ -1363,6 +1363,169 @@ if (!function_exists('accounting_closure_stage')) {
   }
 }
 
+/**
+ * ZIP com os XMLs das notas de ENTRADA do período (somente leitura; não altera nada):
+ *  - Fornecedores/: NF-e recebidas e lançadas na Entrada por XML (fiscal_xml_imports),
+ *    com os mesmos filtros da relação de documentos do fechamento, e as compras
+ *    geradas pelo Radar (fiscal_documents ENTRADA com status IMPORTADA);
+ *  - Emitidas_pela_empresa/: NF-e de entrada emitidas pela própria empresa
+ *    (ex.: devolução de cliente), autorizadas ou canceladas.
+ * Notas lançadas sem XML (entrada manual) são listadas no LEIA-ME.txt.
+ *
+ * @return array{files:int,documents:int,without_xml:int}
+ */
+if (!function_exists('accounting_entry_xml_zip')) {
+  function accounting_entry_xml_zip(PDO $pdo, int $companyId, string $ini, string $fim, string $model, string $series, string $targetFile): array {
+    $stats = ['files'=>0,'documents'=>0,'without_xml'=>0];
+    $withoutXml = [];
+    $seenKeys = [];
+    $seenNames = [];
+    $writer = fiscal_xml_export_zip_writer_open($targetFile);
+    $addXml = static function(string $name, string $content) use (&$writer,&$seenNames,&$stats): bool {
+      $content = trim($content);
+      if ($content === '') return false;
+      $name = fiscal_xml_export_zip_archive_name($name, 'arquivo.xml');
+      if (!str_ends_with(strtolower($name), '.xml')) $name .= '.xml';
+      $hash = hash('sha256', $content);
+      $base = preg_replace('/\.xml$/i', '', $name) ?: $name;
+      $candidate = $name;
+      $seq = 2;
+      while (isset($seenNames[$candidate])) {
+        if ($seenNames[$candidate] === $hash) return false;
+        $candidate = $base . '_' . $seq . '.xml';
+        $seq++;
+      }
+      $seenNames[$candidate] = $hash;
+      fiscal_xml_export_zip_writer_add_string($writer, $candidate, $content);
+      $stats['files']++;
+      return true;
+    };
+    $baseName = static function(array $row): string {
+      $key = preg_replace('/\D+/', '', (string)($row['access_key'] ?? '')) ?? '';
+      if (strlen($key) === 44) return $key;
+      return 'modelo_' . fiscal_xml_export_safe_part((string)($row['model'] ?? ''), '55')
+        . '_serie_' . fiscal_xml_export_safe_part((string)($row['series'] ?? ''), '0')
+        . '_numero_' . fiscal_xml_export_safe_part((string)($row['number'] ?? ''), (string)($row['id'] ?? '0'));
+    };
+
+    $completed = false;
+    try {
+      // 1) Notas de entrada registradas em fiscal_documents (emitidas pela empresa ou compras do Radar).
+      $where = [
+        'company_id=?', "UPPER(COALESCE(direction,''))='ENTRADA'", "model IN ('55','65')",
+        "(UPPER(COALESCE(status,'')) IN ('AUTORIZADA','CANCELADA') OR UPPER(COALESCE(status,'')) LIKE 'IMPORTAD%')",
+        fiscal_xml_export_discard_exclusion_sql(),
+        'COALESCE(issue_datetime,created_at)>=?', 'COALESCE(issue_datetime,created_at)<?',
+      ];
+      $params = [$companyId, $ini . ' 00:00:00', date('Y-m-d 00:00:00', strtotime($fim . ' +1 day'))];
+      if (in_array($model, ['55','65'], true)) { $where[] = 'model=?'; $params[] = $model; }
+      if ($series !== '') { $where[] = "COALESCE(series,'')=?"; $params[] = $series; }
+      $st = $pdo->prepare('SELECT id,model,series,number,access_key,status,xml_path FROM fiscal_documents WHERE ' . implode(' AND ', $where) . ' ORDER BY COALESCE(issue_datetime,created_at),id');
+      $st->execute($params);
+      $docs = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+      $cancelIds = [];
+      foreach ($docs as $doc) if (strtoupper((string)($doc['status'] ?? '')) === 'CANCELADA') $cancelIds[] = (int)$doc['id'];
+      $cancelEvents = $cancelIds ? fiscal_xml_export_cancel_events($pdo, $companyId, $cancelIds) : [];
+      $rawSt = $pdo->prepare('SELECT xml_raw FROM fiscal_documents WHERE company_id=? AND id=? LIMIT 1');
+
+      foreach ($docs as $doc) {
+        $status = strtoupper((string)($doc['status'] ?? ''));
+        $base = $baseName($doc);
+        $key = preg_replace('/\D+/', '', (string)($doc['access_key'] ?? '')) ?? '';
+        if (strlen($key) === 44) {
+          if (isset($seenKeys[$key])) continue;
+          $seenKeys[$key] = true;
+        }
+        $xml = fiscal_xml_export_read_path((string)($doc['xml_path'] ?? ''));
+        if ($xml === '') {
+          $rawSt->execute([$companyId, (int)$doc['id']]);
+          $raw = $rawSt->fetchColumn();
+          $rawSt->closeCursor();
+          $xml = is_string($raw) ? $raw : '';
+        }
+        $stats['documents']++;
+        if (trim($xml) === '') {
+          $stats['without_xml']++;
+          $withoutXml[] = 'Nota ' . (string)($doc['number'] ?? '') . ' série ' . (string)($doc['series'] ?? '') . ($key !== '' ? ' - chave ' . $key : '');
+          continue;
+        }
+        if ($status === 'CANCELADA') {
+          $event = $cancelEvents[(int)$doc['id']] ?? [];
+          $eventXml = trim((string)($event['response_xml'] ?? '')) ?: trim((string)($event['request_xml'] ?? ''));
+          $cancelled = fiscal_xml_export_try_cancelled_xml($xml, $eventXml);
+          if ($cancelled !== '') {
+            $addXml('Emitidas_pela_empresa/Canceladas/' . $base . '-procNFe-cancelada.xml', $cancelled);
+          } else {
+            $addXml('Emitidas_pela_empresa/Canceladas/' . $base . '-procNFe.xml', $xml);
+            if ($eventXml !== '') $addXml('Emitidas_pela_empresa/Canceladas/' . $base . '-evento-cancelamento.xml', $eventXml);
+          }
+        } elseif ($status === 'AUTORIZADA') {
+          $addXml('Emitidas_pela_empresa/Autorizadas/' . $base . '-procNFe.xml', $xml);
+        } else {
+          $addXml('Fornecedores/' . $base . (stripos($xml, 'nfeProc') !== false ? '-procNFe.xml' : '-NFe.xml'), $xml);
+        }
+        unset($xml);
+      }
+      unset($docs, $cancelEvents);
+
+      // 2) NF-e de fornecedores lançadas pela Entrada por XML (mesmos filtros da relação de documentos).
+      if (fiscal_table_exists($pdo, 'fiscal_xml_imports')) {
+        $parts = accounting_xml_document_search_parts($companyId, ['ini'=>$ini,'fim'=>$fim,'model'=>$model,'series'=>$series,'movement'=>'TODOS']);
+        if ($parts['enabled']) {
+          $st = $pdo->prepare('SELECT x.id,x.model,x.series,x.number,x.access_key,x.supplier_name FROM fiscal_xml_imports x'
+            . ' LEFT JOIN fiscal_operations op ON op.company_id=x.company_id AND op.id=x.operation_id'
+            . ' WHERE ' . implode(' AND ', $parts['where'])
+            . ' ORDER BY COALESCE(x.entry_date,x.issue_date,DATE(x.created_at)),x.id');
+          $st->execute($parts['params']);
+          $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+          $contentSt = $pdo->prepare('SELECT xml_content FROM fiscal_xml_imports WHERE company_id=? AND id=? LIMIT 1');
+          foreach ($rows as $row) {
+            $key = preg_replace('/\D+/', '', (string)($row['access_key'] ?? '')) ?? '';
+            if (strlen($key) === 44) {
+              if (isset($seenKeys[$key])) continue;
+              $seenKeys[$key] = true;
+            }
+            $contentSt->execute([$companyId, (int)$row['id']]);
+            $raw = $contentSt->fetchColumn();
+            $contentSt->closeCursor();
+            $xml = is_string($raw) ? $raw : '';
+            $stats['documents']++;
+            if (trim($xml) === '') {
+              $stats['without_xml']++;
+              $withoutXml[] = 'Nota ' . (string)($row['number'] ?? '') . ' série ' . (string)($row['series'] ?? '')
+                . ' - ' . trim((string)($row['supplier_name'] ?? '')) . (strlen($key) === 44 ? ' - chave ' . $key : '');
+              continue;
+            }
+            $addXml('Fornecedores/' . $baseName($row) . (stripos($xml, 'nfeProc') !== false ? '-procNFe.xml' : '-NFe.xml'), $xml);
+            unset($xml);
+          }
+          unset($rows);
+        }
+      }
+
+      if ($stats['files'] === 0 || $withoutXml) {
+        $msg = "XMLs das notas de entrada\r\nPeríodo: " . date('d/m/Y', strtotime($ini)) . ' a ' . date('d/m/Y', strtotime($fim)) . "\r\n";
+        if ($stats['files'] === 0) $msg .= "\r\nNenhum XML de nota de entrada foi localizado no período.\r\n";
+        if ($withoutXml) {
+          $msg .= "\r\nNotas de entrada lançadas sem o arquivo XML (" . count($withoutXml) . "):\r\n";
+          foreach ($withoutXml as $line) $msg .= ' - ' . $line . "\r\n";
+        }
+        fiscal_xml_export_zip_writer_add_string($writer, 'LEIA-ME.txt', $msg);
+      }
+      fiscal_xml_export_zip_writer_close($writer);
+      $completed = true;
+      return $stats;
+    } finally {
+      if (!$completed) {
+        $handle = $writer['handle'] ?? null;
+        if (is_resource($handle)) @fclose($handle);
+        @unlink($targetFile);
+      }
+    }
+  }
+}
+
 if (!function_exists('accounting_generate_closure')) {
   function accounting_generate_closure(PDO $pdo, int $companyId, string $ini, string $fim, string $model = '', string $series = '', string $notes = '', ?int $userId = null, array $options = []): int {
     accounting_ensure_schema($pdo);
@@ -1372,6 +1535,8 @@ if (!function_exists('accounting_generate_closure')) {
     if (!in_array($model, ['', '55', '65'], true)) $model = '';
     $series = trim($series);
     $includeInventory = !empty($options['include_inventory']);
+    // XMLs das notas de entrada: ligado por padrão (a tela envia a opção marcada/desmarcada).
+    $includeEntryXml = !array_key_exists('include_entry_xml', $options) || !empty($options['include_entry_xml']);
 
     $reservedId = (int)($options['reserved_closure_id'] ?? 0);
     if ($reservedId > 0) {
@@ -1435,6 +1600,16 @@ if (!function_exists('accounting_generate_closure')) {
         unset($xmlStats);
       }
 
+      // XMLs das notas de entrada (fornecedores e entradas emitidas pela empresa) em um ZIP próprio.
+      $entryXmlStats = null;
+      if ($includeEntryXml) {
+        accounting_closure_stage($pdo,$companyId,$closureId,'Gerando ZIP de XML das notas de entrada...');
+        $entryPath = accounting_closure_dir($companyId,$closureId) . '/XML_ENTRADAS_' . $periodKey . '.zip';
+        $entryXmlStats = accounting_entry_xml_zip($pdo,$companyId,$ini,$fim,$model,$series,$entryPath);
+        $artifacts[] = accounting_register_file($pdo,$closureId,$companyId,'XML_ENTRADA','XMLs das notas de entrada',$entryPath,'application/zip');
+        $xmlFilesTotal += (int)($entryXmlStats['files'] ?? 0);
+      }
+
       // O SINTEGRA é um arquivo fiscal único para todo o período do fechamento.
       // Os relatórios em PDF e os XMLs continuam separados por modelo e série.
       $sintegraOptions = [
@@ -1490,6 +1665,13 @@ if (!function_exists('accounting_generate_closure')) {
       $summary .= "Documentos localizados: " . $documentsCount . "\r\n";
       $summary .= "Total dos documentos: R$ " . number_format($docsTotal,2,',','.') . "\r\n";
       $summary .= "Arquivos XML: {$xmlFilesTotal}\r\n";
+      if ($entryXmlStats !== null) {
+        $summary .= "XMLs das notas de entrada: " . (int)$entryXmlStats['files'] . " arquivo(s) de " . (int)$entryXmlStats['documents'] . " nota(s)";
+        if ((int)$entryXmlStats['without_xml'] > 0) $summary .= " - " . (int)$entryXmlStats['without_xml'] . " lançada(s) sem XML (ver LEIA-ME.txt no ZIP)";
+        $summary .= "\r\n";
+      } else {
+        $summary .= "XMLs das notas de entrada: não incluídos\r\n";
+      }
       // Resume inutilizacoes como eventos fiscais autonomos; nao contabiliza
       // a NF-e descartada como documento emitido nem exporta seu XML.
       $summary .= accounting_closure_inutilizations_summary(
@@ -1542,7 +1724,7 @@ if (!function_exists('accounting_files_by_closure')) {
     $closureIds = array_values(array_unique(array_filter(array_map('intval',$closureIds),static fn(int $id): bool=>$id>0)));
     if (!$closureIds) return [];
     $ph = implode(',',array_fill(0,count($closureIds),'?'));
-    $st = $pdo->prepare("SELECT * FROM accounting_closure_files WHERE company_id=? AND closure_id IN ({$ph}) ORDER BY closure_id,CASE file_type WHEN 'PACOTE' THEN 0 WHEN 'RESUMO' THEN 1 WHEN 'REL_DOCUMENTOS' THEN 2 WHEN 'REL_CFOP' THEN 3 WHEN 'REL_CFOP_PAGAMENTO' THEN 4 WHEN 'SINTEGRA' THEN 5 WHEN 'XML' THEN 6 WHEN 'INVENTARIO' THEN 7 ELSE 9 END,file_name,id");
+    $st = $pdo->prepare("SELECT * FROM accounting_closure_files WHERE company_id=? AND closure_id IN ({$ph}) ORDER BY closure_id,CASE file_type WHEN 'PACOTE' THEN 0 WHEN 'RESUMO' THEN 1 WHEN 'REL_DOCUMENTOS' THEN 2 WHEN 'REL_CFOP' THEN 3 WHEN 'REL_CFOP_PAGAMENTO' THEN 4 WHEN 'SINTEGRA' THEN 5 WHEN 'XML' THEN 6 WHEN 'XML_ENTRADA' THEN 7 WHEN 'INVENTARIO' THEN 8 ELSE 9 END,file_name,id");
     $st->execute(array_merge([$companyId],$closureIds));
     $out=[];
     foreach (($st->fetchAll(PDO::FETCH_ASSOC) ?: []) as $row) $out[(int)$row['closure_id']][]=$row;

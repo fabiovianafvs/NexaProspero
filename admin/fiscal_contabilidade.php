@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $err==='') {
       $notes=trim((string)($_POST['notes'] ?? ''));
       $options=[
         'include_inventory'=>isset($_POST['include_inventory']),
+        'include_entry_xml'=>isset($_POST['include_entry_xml']),
         'inventory_date'=>(string)($_POST['inventory_date'] ?? inventory_month_end($fim)),
         'inventory_stock_filter'=>(string)($_POST['inventory_stock_filter'] ?? 'positivos'),
         'inventory_cost_method'=>(string)($_POST['inventory_cost_method'] ?? 'average'),
@@ -145,6 +146,7 @@ $fimDefault=(string)($_POST['fim'] ?? date('Y-m-d'));
 $modelDefault=(string)($_POST['model'] ?? '');
 $seriesDefault=(string)($_POST['series'] ?? '');
 $includeInventoryDefault=isset($_POST['include_inventory']);
+$includeEntryXmlDefault=($_SERVER['REQUEST_METHOD'] ?? 'GET')==='POST' ? isset($_POST['include_entry_xml']) : true;
 $inventoryDateDefault=(string)($_POST['inventory_date'] ?? inventory_month_end($fimDefault));
 $inventoryStockDefault=(string)($_POST['inventory_stock_filter'] ?? 'positivos');
 $inventoryCostDefault=(string)($_POST['inventory_cost_method'] ?? 'average');
@@ -181,7 +183,7 @@ if ($err!=='') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
 <div class="fiscal-grid accounting-top-grid" style="align-items:start">
   <div class="fiscal-card">
     <h2>Novo fechamento</h2>
-    <p class="fiscal-muted">Os relatórios e os XMLs são gerados separadamente por modelo e série. O SINTEGRA é gerado em um único arquivo para todo o período. O inventário só será incluído quando você marcar a opção.</p>
+    <p class="fiscal-muted">Os relatórios e os XMLs são gerados separadamente por modelo e série. O SINTEGRA é gerado em um único arquivo para todo o período. Os XMLs das notas de entrada vão em um ZIP próprio. O inventário só será incluído quando você marcar a opção.</p>
     <form method="post" class="fiscal-form" data-no-processing>
       <input type="hidden" name="csrf" value="<?= fiscal_h(accounting_csrf_token('admin_accounting')) ?>">
       <input type="hidden" name="action" value="generate">
@@ -197,6 +199,11 @@ if ($err!=='') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
           <?php foreach ($seriesRows as $serie): $serie=(string)$serie; ?><option value="<?= fiscal_h($serie) ?>" <?= $seriesDefault===$serie?'selected':'' ?>>Série <?= fiscal_h($serie) ?></option><?php endforeach; ?>
         </select></div>
         <div class="span-2"><label>Observações para o contador</label><textarea name="notes" placeholder="Ex.: fechamento mensal, documentos complementares, orientações..."><?= fiscal_h((string)($_POST['notes'] ?? '')) ?></textarea></div>
+
+        <div class="span-3 accounting-inventory-toggle">
+          <label class="accounting-checkline"><input type="checkbox" name="include_entry_xml" value="1" <?= $includeEntryXmlDefault?'checked':'' ?>><span>Incluir os XMLs das notas de entrada</span></label>
+          <small>Marcado por padrão. Gera um ZIP com os XMLs das notas de fornecedores lançadas no período e das notas de entrada emitidas pela empresa.</small>
+        </div>
 
         <div class="span-3 accounting-inventory-toggle">
           <label class="accounting-checkline"><input type="checkbox" name="include_inventory" id="include-inventory" value="1" <?= $includeInventoryDefault?'checked':'' ?>><span>Incluir inventário de estoque neste fechamento</span></label>
@@ -242,6 +249,7 @@ if ($err!=='') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
       <div><strong>CFOP por forma de pagamento</strong><span>PDF separado por modelo e série.</span></div>
       <div><strong>SINTEGRA</strong><span>Um único arquivo texto consolidando todos os documentos fiscais do período conforme os filtros do fechamento.</span></div>
       <div><strong>XMLs fiscais</strong><span>ZIP separado por modelo e série, incluindo os XMLs encontrados.</span></div>
+      <div><strong>XMLs das notas de entrada</strong><span>ZIP único do período: notas de fornecedores (pela data de entrada) e notas de entrada emitidas pela empresa. As lançadas sem XML aparecem no LEIA-ME.</span></div>
       <div><strong>Inventário opcional</strong><span>PDF e fotografia permanente do estoque somente quando marcado.</span></div>
     </div>
     <div class="msg" style="margin-top:14px">Ao selecionar “todas as séries”, os relatórios em PDF e os ZIPs de XML são separados por série, enquanto o SINTEGRA permanece único e consolidado para o período. O inventário incluído também aparecerá na lista do menu Inventário.</div>
