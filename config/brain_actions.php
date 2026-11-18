@@ -91,6 +91,26 @@ if (!function_exists('brain_actions_history_add')) {
   }
 }
 
+if (!function_exists('brain_actions_modulos_ocultos')) {
+  /**
+   * Módulos cujas regras/alertas não aparecem para a empresa (módulo do SaaS desligado).
+   * Hoje: 'ponto' (Nexa Ponto, módulo ponto_eletronico). As regras continuam sendo avaliadas e
+   * não detectam nada, então os alertas antigos são resolvidos sozinhos na próxima análise.
+   */
+  function brain_actions_modulos_ocultos(PDO $pdo, int $companyId): array {
+    static $cache = [];
+    if (isset($cache[$companyId])) return $cache[$companyId];
+    $ocultos = [];
+    try {
+      if (!function_exists('saas_company_has_module') && is_file(__DIR__ . '/saas_modules.php')) require_once __DIR__ . '/saas_modules.php';
+      if (!function_exists('saas_company_has_module') || !saas_company_has_module($pdo, $companyId, 'ponto_eletronico')) $ocultos[] = 'ponto';
+    } catch (Throwable $e) {
+      $ocultos[] = 'ponto';
+    }
+    return $cache[$companyId] = $ocultos;
+  }
+}
+
 if (!function_exists('brain_actions_rule_catalog')) {
   function brain_actions_rule_catalog(PDO $pdo, int $companyId): array {
     if (!brain_actions_schema_ready($pdo)) return [];
@@ -131,6 +151,11 @@ if (!function_exists('brain_actions_setting_labels')) {
       'minutes' => ['label'=>'Tempo máximo do pedido em aberto (minutos)','step'=>'1','min'=>'5','max'=>'1440'],
       'pending_days' => ['label'=>'Dias para considerar NF-e pendente','step'=>'1','min'=>'0','max'=>'365'],
       'max_alerts' => ['label'=>'Máximo de alertas por regra','step'=>'1','min'=>'1','max'=>'200'],
+      'hours' => ['label'=>'Horas aguardando para alertar','step'=>'1','min'=>'1','max'=>'720'],
+      'min_hours' => ['label'=>'Horas extras no mês para alertar','step'=>'0.5','min'=>'0.5','max'=>'200'],
+      'days_ahead' => ['label'=>'Avisar com quantos dias de antecedência','step'=>'1','min'=>'1','max'=>'180'],
+      'day_of_month' => ['label'=>'Alertar a partir do dia do mês','step'=>'1','min'=>'1','max'=>'28'],
+      'min_events' => ['label'=>'Dias com uso fora da jornada para alertar','step'=>'1','min'=>'1','max'=>'31'],
     ];
   }
 }
@@ -242,6 +267,12 @@ if (!function_exists('brain_actions_detect_rule')) {
     $code = (string)$rule['rule_code'];
     $settings = (array)$rule['settings'];
     $alerts = [];
+
+    // Nexa Ponto (V11): regras PONTO_* só detectam com o módulo Ponto Eletrônico ligado.
+    if (str_starts_with($code, 'PONTO_')) {
+      if (is_file(__DIR__ . '/ponto_brain.php')) require_once __DIR__ . '/ponto_brain.php';
+      return function_exists('ponto_brain_detectar') ? ponto_brain_detectar($pdo, $companyId, $code, $settings) : [];
+    }
 
     if ($code === 'NEGATIVE_MARGIN_PRODUCT') {
       $days = (int)brain_actions_setting_number($settings, 'days', 30);
@@ -545,7 +576,7 @@ if (!function_exists('brain_actions_counts')) {
           SUM(severity='critical') critical,SUM(severity='high') high,SUM(severity='warning') warning,
           SUM(severity='opportunity') opportunity,SUM(severity='info') info,
           COALESCE(SUM(financial_impact),0) financial_impact
-        FROM brain_alerts WHERE company_id=? AND status='open'", [$companyId]);
+        FROM brain_alerts WHERE company_id=? AND status='open'" . (in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true) ? " AND module_code<>'ponto'" : ''), [$companyId]);
       foreach ($base as $key=>$value) $base[$key] = isset($row[$key]) ? ($key === 'financial_impact' ? (float)$row[$key] : (int)$row[$key]) : $value;
     } catch (Throwable $e) {}
     return $base;
@@ -559,6 +590,7 @@ if (!function_exists('brain_actions_list')) {
     if (!in_array($status,$allowed,true)) $status = 'open';
     $params = [$companyId];
     $where = 'company_id=?';
+    if (in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true)) $where .= " AND module_code<>'ponto'";
     if ($status !== 'all') { $where .= ' AND status=?'; $params[] = $status; }
     return brain_actions_query_rows($pdo, "SELECT * FROM brain_alerts WHERE {$where}
       ORDER BY FIELD(severity,'critical','high','warning','opportunity','info'),financial_impact DESC,last_detected_at DESC,id DESC

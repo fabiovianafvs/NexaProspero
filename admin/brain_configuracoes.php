@@ -21,7 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     brain_actions_csrf_check((string)($_POST['csrf'] ?? ''),'brain_actions_config');
     $catalog = brain_actions_rule_catalog($pdo,$companyId);
     $posted = (array)($_POST['rules'] ?? []);
+    $ocultos = brain_actions_modulos_ocultos($pdo,$companyId);
     foreach ($catalog as $code=>$rule) {
+      if (in_array((string)$rule['module_code'],$ocultos,true)) continue; // módulo desligado: mantém como está
       $data = (array)($posted[$code] ?? []);
       $enabled = !empty($data['enabled']);
       $severity = trim((string)($data['severity'] ?? ''));
@@ -38,6 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $catalog = brain_actions_rule_catalog($pdo,$companyId);
+$ocultos = brain_actions_modulos_ocultos($pdo,$companyId);
+$catalog = array_filter($catalog, static fn(array $r): bool => !in_array((string)$r['module_code'],$ocultos,true));
 $labels = brain_actions_setting_labels();
 admin_topbar('Configurações do Nexa Brain','brain');
 ?>

@@ -392,12 +392,28 @@ if (!function_exists('brain_dashboard_build')) {
     $topProducts = brain_top_products($pdo, $companyId, 30, 12);
     $stockRisks = brain_stock_risks($pdo, $companyId, 20);
     $actions = brain_actions_dashboard_data($pdo, $companyId, 12);
+    // Nexa Ponto (V11): resumo da equipe só com o módulo Ponto Eletrônico ligado.
+    $ponto = null;
+    if (!in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true) && is_file(__DIR__ . '/ponto_brain.php')) {
+      try {
+        require_once __DIR__ . '/ponto_brain.php';
+        if (ponto_brain_ativo($pdo, $companyId)) $ponto = ponto_brain_resumo($pdo, $companyId);
+      } catch (Throwable $e) {
+        brain_log_query_error($e);
+      }
+    }
+    $insights = brain_insights($pdo, $companyId, $snapshot);
+    if ($ponto) {
+      $pi = ponto_brain_insights($ponto);
+      if ($pi) $insights = array_slice(array_merge(array_filter($insights, static fn($i) => ($i['title'] ?? '') !== 'Operação equilibrada'), $pi), 0, 10);
+    }
     return [
       'companyId' => $companyId,
       'generatedAt' => date(DATE_ATOM),
       'snapshot' => $snapshot,
       'actions' => $actions,
-      'insights' => brain_insights($pdo, $companyId, $snapshot),
+      'insights' => $insights,
+      'ponto' => $ponto,
       'topProducts' => $topProducts,
       'categories' => $categories,
       'sellers' => $sellers,
@@ -414,6 +430,8 @@ if (!function_exists('brain_dashboard_get')) {
     if (!$forceRefresh) {
       $cached = nexa_cache_get_json($key);
       if (is_array($cached) && (int)($cached['companyId'] ?? 0) === $companyId && !empty($cached['snapshot'])) {
+        // Módulo do ponto desligado depois do cache: não mostra a parte do ponto.
+        if (!empty($cached['ponto']) && in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true)) $cached['ponto'] = null;
         $cached['_cache'] = ['source'=>'redis','hit'=>true];
         return $cached;
       }
@@ -442,6 +460,22 @@ if (!function_exists('brain_answer')) {
     $dashboard = brain_dashboard_get($pdo, $companyId);
     $s = (array)($dashboard['snapshot'] ?? []);
     if ($q === '') return ['answer'=>'Digite uma pergunta sobre vendas, lucro, CMV, margem, categorias, vendedores, canais, estoque, financeiro ou alertas que precisam de ação.','type'=>'help'];
+
+    // Nexa Ponto (V11): perguntas sobre a equipe, só com o módulo Ponto Eletrônico ligado.
+    $pontoOn = !in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true) && is_file(__DIR__ . '/ponto_brain.php');
+    if ($pontoOn) {
+      try {
+        require_once __DIR__ . '/ponto_brain.php';
+        if (ponto_brain_ativo($pdo, $companyId)) {
+          $resp = ponto_brain_responder($pdo, $companyId, $q, null);
+          if ($resp) return $resp;
+        } else {
+          $pontoOn = false;
+        }
+      } catch (Throwable $e) {
+        brain_log_query_error($e);
+      }
+    }
 
     if (str_contains($q,'alerta') || str_contains($q,'atenção') || str_contains($q,'atencao') || str_contains($q,'prioridade') || str_contains($q,'resolver primeiro')) {
       $counts = (array)(($dashboard['actions'] ?? [])['counts'] ?? []);
@@ -495,6 +529,6 @@ if (!function_exists('brain_answer')) {
       if (!$top) return ['answer'=>'Ainda não há vendas finalizadas suficientes nos últimos 30 dias para montar o ranking.','type'=>'products'];
       $first=$top[0]; return ['answer'=>'O produto líder nos últimos 30 dias é “'.$first['nome'].'”, com '.number_format((float)$first['qtd'],3,',','.').' unidades, '.brain_money((float)$first['total']).' em receita líquida e '.brain_money((float)$first['lucro_bruto']).' de lucro bruto.','type'=>'products'];
     }
-    return ['answer'=>'Posso responder sobre vendas, lucro bruto, CMV, margens, markup, categorias, vendedores, canais, estoque, fluxo de caixa e alertas que precisam de ação.','type'=>'help'];
+    return ['answer'=>'Posso responder sobre vendas, lucro bruto, CMV, margens, markup, categorias, vendedores, canais, estoque, fluxo de caixa' . ($pontoOn ? ', equipe e ponto (faltas, atrasos, horas extras, banco de horas)' : '') . ' e alertas que precisam de ação.','type'=>'help'];
   }
 }

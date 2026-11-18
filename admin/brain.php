@@ -20,13 +20,16 @@ $actionsData = (array)($dashboard['actions'] ?? []);
 $actionCounts = (array)($actionsData['counts'] ?? []);
 $actionAlerts = array_slice((array)($actionsData['alerts'] ?? []), 0, 12);
 $cacheMeta = (array)($dashboard['_cache'] ?? []);
+// Nexa Ponto (V11): só com o módulo Ponto Eletrônico ligado.
+$ponto = !in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true) ? (array)($dashboard['ponto'] ?? []) : [];
+if ($ponto) require_once __DIR__ . '/../config/ponto_apuracao.php';
 $realtimeConfig = brain_realtime_browser_config($companyId, (int)(auth_user_id() ?? 0));
 $brainFlash = null;
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 if (!empty($_SESSION['brain_flash'])) { $brainFlash = $_SESSION['brain_flash']; unset($_SESSION['brain_flash']); }
 $brainCsrf = brain_actions_csrf_token('brain_actions');
 $severityLabels = ['critical'=>'Crítico','high'=>'Alta prioridade','warning'=>'Atenção','opportunity'=>'Oportunidade','info'=>'Informativo'];
-$moduleLabels = ['rentabilidade'=>'Rentabilidade','estoque'=>'Estoque','financeiro'=>'Financeiro','vendas'=>'Vendas','delivery'=>'Delivery','fiscal'=>'Fiscal','brain'=>'Brain'];
+$moduleLabels = ['rentabilidade'=>'Rentabilidade','estoque'=>'Estoque','financeiro'=>'Financeiro','vendas'=>'Vendas','delivery'=>'Delivery','fiscal'=>'Fiscal','ponto'=>'Ponto','brain'=>'Brain'];
 admin_topbar('Nexa Brain', 'brain');
 ?>
 <link rel="stylesheet" href="/assets/brain.css?v=2.3.2">
@@ -133,6 +136,7 @@ admin_topbar('Nexa Brain', 'brain');
         <button data-q="Qual o valor do meu estoque?">Valor do estoque</button>
         <button data-q="O que posso fazer para aumentar o lucro?">Recomendações</button>
         <button data-q="Quais alertas devo resolver primeiro?">Prioridades</button>
+        <?php if ($ponto): ?><button data-q="Quem faltou hoje?">Quem faltou</button><button data-q="Quantas horas extras no mês?">Horas extras</button><button data-q="Como está a equipe hoje no ponto?">Equipe hoje</button><?php endif; ?>
       </div>
     </div>
 
@@ -145,6 +149,34 @@ admin_topbar('Nexa Brain', 'brain');
       </div>
     </div>
   </section>
+
+  <?php if ($ponto): $hm = static fn(int $m): string => function_exists('ponto_hm') ? ponto_hm($m, false) : sprintf('%dh%02d', intdiv(abs($m), 60), abs($m) % 60); ?>
+  <section class="brain-grid lower" id="brainPonto">
+    <div class="brain-card">
+      <div class="brain-card-head"><div><span class="brain-dot"></span><h2>Equipe hoje — Nexa Ponto</h2></div><small><a href="ponto_painel.php">Abrir o painel do ponto</a></small></div>
+      <div class="brain-profit-grid">
+        <div><span>Escalados hoje</span><strong><?= (int)$ponto['escalados'] ?></strong></div>
+        <div class="positive"><span>Trabalhando</span><strong><?= (int)$ponto['trabalhando'] ?></strong></div>
+        <div><span>Em intervalo</span><strong><?= (int)$ponto['intervalo'] ?></strong></div>
+        <div><span>Já saíram</span><strong><?= (int)$ponto['saiu'] ?></strong></div>
+        <div class="<?= (int)$ponto['nao_chegou'] > 0 ? 'negative' : '' ?>"><span>Não chegaram (atrasados)</span><strong><?= (int)$ponto['nao_chegou'] ?></strong></div>
+        <div><span>Pedidos aguardando o gestor</span><strong><?= (int)$ponto['pendentes'] ?></strong></div>
+      </div>
+    </div>
+    <div class="brain-card">
+      <div class="brain-card-head"><div><span class="brain-dot"></span><h2>Ponto no mês</h2></div><small>Apuração até ontem</small></div>
+      <div class="brain-profit-grid">
+        <div><span>Horas extras</span><strong><?= brain_h($hm((int)$ponto['extras_mes'])) ?></strong></div>
+        <div><span>Faltas e atrasos (débito)</span><strong><?= brain_h($hm((int)$ponto['faltas_mes'])) ?></strong></div>
+        <div><span>Dias de falta</span><strong><?= (int)$ponto['faltas_dias_mes'] ?></strong></div>
+        <div><span>Banco a favor da equipe</span><strong><?= brain_h($hm((int)$ponto['banco_positivo'])) ?></strong></div>
+        <div><span>Banco devido pela equipe</span><strong><?= brain_h($hm(abs((int)$ponto['banco_negativo']))) ?></strong></div>
+        <div class="<?= (int)$ponto['inconsistencias_7d'] > 0 ? 'negative' : '' ?>"><span>Dias a tratar (7 dias)</span><strong><?= (int)$ponto['inconsistencias_7d'] ?></strong></div>
+      </div>
+      <?php if (!empty($ponto['top_extras'])): ?><p style="margin:10px 0 0;font-size:13px;color:#475569"><strong>Mais horas extras:</strong> <?= brain_h(implode(' · ', array_map(static fn($x) => $x['nome'] . ' ' . $hm((int)$x['minutos']), $ponto['top_extras']))) ?></p><?php endif; ?>
+    </div>
+  </section>
+  <?php endif; ?>
 
   <section class="brain-grid lower">
     <div class="brain-card">

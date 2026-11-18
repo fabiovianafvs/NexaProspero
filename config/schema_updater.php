@@ -740,6 +740,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'd38d598e5959846f6d518e344ef3407c1561523d5628f00e25045d5b6f55eb56',
         'order' => 202611180200,
       ],
+      [
+        'id' => '20261118_ponto_brain_v11',
+        'module' => 'ponto_eletronico',
+        'version' => 202611180300,
+        'label' => 'Ponto Eletrônico - V11 Inteligência no Nexa Brain',
+        'description' => 'Instala as regras do ponto na Central de Ações do Nexa Brain (dias a tratar, risco trabalhista, horas extras, pedidos parados, banco de horas a vencer, mês sem fechamento, rosto a conferir, uso fora da jornada). Só aparecem para empresas com o módulo Ponto Eletrônico ligado. Requer a Central de Ações do Brain instalada.',
+        'file' => __DIR__ . '/../db/20261118_ponto_brain_v11.sql',
+        'sha256' => '3e735995ce00bab879c3ce17e14bec37574b9b308bbad71b9b2aa868a3dcb80a',
+        'order' => 202611180300,
+      ],
     ];
   }
 }

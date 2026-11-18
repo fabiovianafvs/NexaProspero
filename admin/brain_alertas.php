@@ -17,12 +17,13 @@ if (!empty($_SESSION['brain_flash'])) { $flash = $_SESSION['brain_flash']; unset
 
 $statusOptions = ['open'=>'Abertos','snoozed'=>'Adiados','resolved'=>'Resolvidos','ignored'=>'Ignorados','all'=>'Todos'];
 $severityOptions = ['all'=>'Todas','critical'=>'Crítica','high'=>'Alta','warning'=>'Atenção','opportunity'=>'Oportunidade','info'=>'Informativa'];
-$moduleOptions = ['all'=>'Todos','rentabilidade'=>'Rentabilidade','estoque'=>'Estoque','financeiro'=>'Financeiro','vendas'=>'Vendas','delivery'=>'Delivery','fiscal'=>'Fiscal','brain'=>'Brain'];
+$moduleOptions = ['all'=>'Todos','rentabilidade'=>'Rentabilidade','estoque'=>'Estoque','financeiro'=>'Financeiro','vendas'=>'Vendas','delivery'=>'Delivery','fiscal'=>'Fiscal','ponto'=>'Ponto','brain'=>'Brain'];
 $status = (string)($_GET['status'] ?? 'open');
 $severity = (string)($_GET['severity'] ?? 'all');
 $module = (string)($_GET['module'] ?? 'all');
 if (!isset($statusOptions[$status])) $status = 'open';
 if (!isset($severityOptions[$severity])) $severity = 'all';
+if (in_array('ponto', brain_actions_modulos_ocultos($pdo, (int)COMPANY_ID), true)) unset($moduleOptions['ponto']);
 if (!isset($moduleOptions[$module])) $module = 'all';
 
 $alerts = [];
@@ -34,10 +35,11 @@ if (brain_actions_schema_ready($pdo)) {
   if ($status !== 'all') { $where[] = 'status=?'; $params[] = $status; }
   if ($severity !== 'all') { $where[] = 'severity=?'; $params[] = $severity; }
   if ($module !== 'all') { $where[] = 'module_code=?'; $params[] = $module; }
+  if (in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true)) $where[] = "module_code<>'ponto'";
   $alerts = brain_actions_query_rows($pdo,'SELECT * FROM brain_alerts WHERE ' . implode(' AND ',$where)
     . " ORDER BY FIELD(status,'open','snoozed','ignored','resolved'),FIELD(severity,'critical','high','warning','opportunity','info'),last_detected_at DESC,id DESC LIMIT 100",$params);
 
-  $countRows = brain_actions_query_rows($pdo,'SELECT status,COUNT(*) total FROM brain_alerts WHERE company_id=? GROUP BY status',[$companyId]);
+  $countRows = brain_actions_query_rows($pdo,'SELECT status,COUNT(*) total FROM brain_alerts WHERE company_id=?' . (in_array('ponto', brain_actions_modulos_ocultos($pdo, $companyId), true) ? " AND module_code<>'ponto'" : '') . ' GROUP BY status',[$companyId]);
   foreach ($countRows as $row) if (isset($allCounts[(string)$row['status']])) $allCounts[(string)$row['status']] = (int)$row['total'];
 
   $ids = array_values(array_map(static fn(array $row): int => (int)$row['id'],$alerts));
@@ -56,7 +58,7 @@ $csrf = brain_actions_csrf_token('brain_actions');
 $returnUrl = 'brain_alertas.php?' . http_build_query(['status'=>$status,'severity'=>$severity,'module'=>$module]);
 $statusLabels = ['open'=>'Aberto','snoozed'=>'Adiado','resolved'=>'Resolvido','ignored'=>'Ignorado'];
 $severityLabels = ['critical'=>'Crítico','high'=>'Alta prioridade','warning'=>'Atenção','opportunity'=>'Oportunidade','info'=>'Informativo'];
-$moduleLabels = ['rentabilidade'=>'Rentabilidade','estoque'=>'Estoque','financeiro'=>'Financeiro','vendas'=>'Vendas','delivery'=>'Delivery','fiscal'=>'Fiscal','brain'=>'Brain'];
+$moduleLabels = ['rentabilidade'=>'Rentabilidade','estoque'=>'Estoque','financeiro'=>'Financeiro','vendas'=>'Vendas','delivery'=>'Delivery','fiscal'=>'Fiscal','ponto'=>'Ponto','brain'=>'Brain'];
 $historyActions = [
   'detected'=>'Detectado automaticamente','auto_reopen'=>'Reaberto automaticamente','auto_resolve'=>'Resolvido automaticamente',
   'rule_disabled'=>'Resolvido porque a regra foi desativada','resolve'=>'Marcado como resolvido','snooze'=>'Adiado por 24 horas',
