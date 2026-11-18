@@ -760,6 +760,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'f567a4ed008c5db596e9c28b8f169ea6c363961e60070535156e1f0a3227e8c0',
         'order' => 202611180400,
       ],
+      [
+        'id' => '20261118_chat_interno_v1',
+        'module' => 'chat_interno',
+        'version' => 202611180500,
+        'label' => 'Chat interno (conversas entre os usuários)',
+        'description' => 'Cria as tabelas do Chat interno: conversas diretas e em grupo entre os usuários da empresa, com arquivos e resposta citando outra mensagem. Depois de aplicar, o balão do chat aparece em todas as telas e o item Chat interno no menu. Não altera tabelas existentes.',
+        'file' => __DIR__ . '/../db/20261118_chat_interno_v1.sql',
+        'sha256' => 'b7dbe6b61724f3dd355ebae9ae47ea850e636cce7a0e9075f57a666da6da8d36',
+        'order' => 202611180500,
+      ],
     ];
   }
 }

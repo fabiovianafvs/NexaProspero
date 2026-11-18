@@ -676,6 +676,15 @@ function admin_topbar(string $title, string $active=''): void {
       }
       $links = $filtered;
       try {
+        require_once __DIR__ . '/../config/chat_interno.php';
+        if (chat_ready($pdoAdmin) && !isset($links['chat_interno'])) {
+          $chatPos = array_search('inicio', array_keys($links), true);
+          $chatPos = $chatPos === false ? 0 : $chatPos + 1;
+          $links = array_slice($links, 0, $chatPos, true) + ['chat_interno' => ['Chat interno', 'chat.php']] + array_slice($links, $chatPos, null, true);
+        }
+      } catch (Throwable $e) {
+      }
+      try {
         $companyReseller = reseller_company_by_id($pdoAdmin, (int)COMPANY_ID);
         if ($companyReseller && reseller_is_active_company($companyReseller) && access_is_company_master()) {
           $links['revenda'] = ['Painel da Revenda', '/revenda/'];
@@ -1397,6 +1406,27 @@ function admin_footer(): void {
   Desenvolvido por
   <a href="https://www.nexaprospero.com.br" target="_blank" rel="noopener noreferrer">Nexa Próspero</a>
 </footer>
+<?php
+  // Balão do Chat interno (todas as telas, menos a própria tela do chat).
+  $nexaChatCfg = null;
+  try {
+    if (empty($GLOBALS['NEXA_CHAT_PAGE']) && isset($pdo) && $pdo instanceof PDO && defined('COMPANY_ID') && (int)COMPANY_ID > 0 && function_exists('auth_user_id') && (int)(auth_user_id() ?? 0) > 0) {
+      require_once __DIR__ . '/../config/chat_interno.php';
+      if (chat_ready($pdo)) {
+        $chatUid = (int)auth_user_id();
+        $chatRt = ['enabled' => false];
+        if (function_exists('nexa_realtime_browser_config')) { try { $chatRt = nexa_realtime_browser_config((int)COMPANY_ID, $chatUid); } catch (Throwable $e) {} }
+        $nexaChatCfg = ['me' => $chatUid, 'unread' => chat_unread_total($pdo, (int)COMPANY_ID, $chatUid), 'rt' => ['enabled' => !empty($chatRt['enabled']), 'url' => (string)($chatRt['url'] ?? ''), 'token' => (string)($chatRt['token'] ?? '')]];
+      }
+    }
+  } catch (Throwable $e) {
+    $nexaChatCfg = null;
+  }
+?>
+<?php if ($nexaChatCfg): ?>
+<script>window.NEXA_CHAT = <?= json_encode($nexaChatCfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;</script>
+<script defer src="/assets/nexa-chat.js?v=20261118-1"></script>
+<?php endif; ?>
 <?php if ($deliveryOrderAlertEnabled): ?>
 <script>window.NEXA_REALTIME_CONFIG = <?= json_encode($nexaRealtimeConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;</script>
 <script src="/assets/nexa-realtime.js?v=20260911-4"></script>
