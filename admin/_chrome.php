@@ -780,7 +780,7 @@ function admin_topbar(string $title, string $active=''): void {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title>
 <link rel="stylesheet" href="/assets/admin.css?v=27">
-<script defer src="/assets/admin.js?v=16"></script>
+<script defer src="/assets/admin.js?v=17"></script>
 <!-- LGPD: nas buscas, CPF/CNPJ aparece só com os 3 primeiros e os 3 últimos dígitos. -->
 <script>window.nexaMaskDoc=function(v){v=String(v==null?'':v);var d=v.replace(/\D/g,'');if(d.length<7)return v;var i=0,n=d.length;return v.replace(/\d/g,function(c){var k=i++;return(k<3||k>=n-3)?c:'*'});};</script>
 <!-- Nexa: desabilita o historico de entradas em campos de digitacao, inclusive campos criados por modais. -->

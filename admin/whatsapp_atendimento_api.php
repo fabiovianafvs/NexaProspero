@@ -22,6 +22,12 @@ if (!whatsapp_bot_ready($pdo)) $out(['ok' => false, 'error' => 'Aplique "WhatsAp
 
 $action = (string)($_GET['action'] ?? $_POST['action'] ?? '');
 $isPost = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
+// Arquivo maior que o limite do PHP do servidor (post_max_size): o PHP descarta tudo e
+// parecia "sessão expirada". Avisa o motivo certo.
+$waaIniBytes = static function (string $v): int { $v = trim($v); $n = (int)$v; $u = strtolower(substr($v, -1)); return $u === 'g' ? $n * 1073741824 : ($u === 'm' ? $n * 1048576 : ($u === 'k' ? $n * 1024 : $n)); };
+if ($isPost && !$_POST && !$_FILES && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > $waaIniBytes((string)ini_get('post_max_size'))) {
+  $out(['ok' => false, 'error' => 'Arquivo maior que o permitido pelo servidor (' . ini_get('post_max_size') . '). Peça ao suporte para aumentar o limite de envio de arquivos.'], 413);
+}
 if ($isPost) {
   $token = (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf'] ?? '');
   $expected = (string)($_SESSION['nexa_waa_csrf'] ?? '');
@@ -40,7 +46,29 @@ $loadChat = static function () use ($pdo, $cid, $uid, $supervisor, $chatId, $out
 try {
   switch ($action) {
     case 'list':
-      $out(['ok' => true] + whatsapp_att_list($pdo, $cid, $uid, $supervisor, (string)($_GET['tab'] ?? 'fila'), (string)($_GET['q'] ?? '')));
+      $out(['ok' => true, 'v3' => whatsapp_chat_has_v3($pdo), 'groups' => !empty(whatsapp_bot_config($pdo, $cid)['groups_enabled'])] + whatsapp_att_list($pdo, $cid, $uid, $supervisor, (string)($_GET['tab'] ?? 'fila'), (string)($_GET['q'] ?? '')));
+
+    case 'targets':
+      // Encaminhar: conversas recentes (qualquer situação) que o usuário pode ver.
+      [$scope, $scopeParams] = whatsapp_att_scope($pdo, $cid, $uid, $supervisor);
+      $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
+      $ct = whatsapp_att_contact_sql($pdo);
+      $where = "s.company_id=? AND $scope";
+      $params = array_merge([$cid], $scopeParams);
+      if ($q !== '') {
+        $digits = whatsapp_bot_digits($q);
+        $where .= ' AND (s.push_name LIKE ? OR p.name LIKE ? OR p.fantasy_name LIKE ?' . ($ct['search'] !== '' ? ' OR ' . $ct['search'] : '') . ($digits !== '' ? ' OR s.phone LIKE ?' : '') . ')';
+        array_push($params, '%' . $q . '%', '%' . $q . '%', '%' . $q . '%');
+        if ($ct['search'] !== '') $params[] = '%' . $q . '%';
+        if ($digits !== '') $params[] = '%' . $digits . '%';
+      }
+      $st = $pdo->prepare("SELECT s.id, s.contact, s.phone, s.push_name, s.status, s.department_id, s.user_id, s.unread, s.last_preview, s.last_direction, s.last_message_at, s.queued_at, s.person_id, p.name AS person_name, p.fantasy_name AS person_fantasy, NULL AS department_name, u.name AS user_name{$ct['cols']}
+        FROM whatsapp_bot_sessions s
+        LEFT JOIN finance_people p ON p.company_id=s.company_id AND p.id=s.person_id
+        LEFT JOIN users u ON u.company_id=s.company_id AND u.id=s.user_id{$ct['join']}
+        WHERE $where ORDER BY s.last_message_at DESC, s.id DESC LIMIT 30");
+      $st->execute($params);
+      $out(['ok' => true, 'items' => array_map(static fn($r) => whatsapp_att_row($r), $st->fetchAll(PDO::FETCH_ASSOC) ?: [])]);
 
     case 'chat':
       $chat = $loadChat();
@@ -116,12 +144,12 @@ try {
       $out(['ok' => true]);
 
     case 'send':
-      $ok = whatsapp_att_send_text($pdo, $cid, $loadChat(), $uid, $supervisor, (string)($_POST['text'] ?? ''));
+      $ok = whatsapp_att_send_text($pdo, $cid, $loadChat(), $uid, $supervisor, (string)($_POST['text'] ?? ''), (int)($_POST['reply_to'] ?? 0));
       $out(['ok' => true, 'sent' => $ok, 'warning' => $ok ? '' : 'A mensagem não saiu. Confira a conexão do WhatsApp.']);
 
     case 'file':
       $voice = !empty($_POST['voice']);
-      $ok = whatsapp_att_send_file($pdo, $cid, $loadChat(), $uid, $supervisor, $_FILES['file'] ?? [], (string)($_POST['caption'] ?? ''), $voice);
+      $ok = whatsapp_att_send_file($pdo, $cid, $loadChat(), $uid, $supervisor, $_FILES['file'] ?? [], (string)($_POST['caption'] ?? ''), $voice, (int)($_POST['reply_to'] ?? 0));
       $out(['ok' => true, 'sent' => $ok, 'warning' => $ok ? '' : ($voice ? 'O áudio não saiu.' : 'O arquivo não saiu.') . ' Confira a conexão do WhatsApp.']);
 
     case 'transfer':
@@ -143,6 +171,26 @@ try {
     case 'contact_save':
       $id = whatsapp_att_contact_save($pdo, $cid, $loadChat(), $_POST);
       $out(['ok' => true, 'contact_id' => $id]);
+
+    case 'delete':
+      $msg = whatsapp_att_delete($pdo, $cid, $loadChat(), $uid, $supervisor, (int)($_POST['message_id'] ?? 0));
+      $out(['ok' => true, 'message' => $msg]);
+
+    case 'forward':
+      $targets = array_map('intval', explode(',', (string)($_POST['targets'] ?? '')));
+      $n = whatsapp_att_forward($pdo, $cid, $uid, $supervisor, $chatId, (int)($_POST['message_id'] ?? 0), $targets, (string)($_POST['phone'] ?? ''));
+      $out(['ok' => true, 'sent' => $n, 'warning' => $n ? '' : 'O encaminhamento não saiu. Confira a conexão do WhatsApp.']);
+
+    case 'groups_on':
+    case 'groups_off':
+      if (!$supervisor) $out(['ok' => false, 'error' => 'Só o administrador ou quem configura o chatbot pode ligar os grupos.'], 403);
+      whatsapp_att_groups_set($pdo, $cid, $action === 'groups_on');
+      $n = 0;
+      if ($action === 'groups_on') { try { $n = whatsapp_att_groups_sync($pdo, $cid); } catch (Throwable $e) {} }
+      $out(['ok' => true, 'groups' => $n]);
+
+    case 'groups_sync':
+      $out(['ok' => true, 'groups' => whatsapp_att_groups_sync($pdo, $cid)]);
 
     case 'new':
       $id = whatsapp_att_new_chat($pdo, $cid, $uid, (string)($_POST['phone'] ?? ''), (string)($_POST['text'] ?? ''));

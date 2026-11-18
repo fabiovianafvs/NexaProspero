@@ -95,6 +95,19 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-rt{font-size:11px;color:var(--mut)}
 .waa-answers{background:#eef6ff;border-bottom:1px solid var(--line);padding:8px 14px;font-size:13px;color:#1e3a5f;display:flex;gap:6px 16px;flex-wrap:wrap}.waa-answers b{color:#0b1f5b}
 .waa-back{display:none}
+.waa-b .waa-mbtn{position:absolute;top:2px;right:2px;border:0;border-radius:50%;width:24px;height:24px;background:inherit;color:#54656f;font-size:15px;line-height:1;cursor:pointer;opacity:0;transition:opacity .12s;box-shadow:-6px 0 8px -2px rgba(255,255,255,.9)}
+.waa-b:hover .waa-mbtn,.waa-b .waa-mbtn:focus-visible,.waa-b .waa-mbtn.on{opacity:1}
+.waa-mmenu{position:fixed;z-index:10000;background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(11,20,26,.25);padding:6px 0;min-width:170px;display:none}.waa-mmenu.on{display:block}
+.waa-mmenu button{display:block;width:100%;text-align:left;border:0;background:#fff;padding:9px 16px;font:inherit;font-size:14px;cursor:pointer;color:#111b21}.waa-mmenu button:hover{background:#f0f2f5}.waa-mmenu button.r{color:#b91c1c}
+.waa-q{border-left:4px solid #06cf9c;background:rgba(0,0,0,.05);border-radius:6px;padding:4px 8px;margin:2px 0 4px;font-size:12.5px;cursor:pointer;white-space:normal;max-height:66px;overflow:hidden}.waa-q b{display:block;color:#008069;font-size:12px}.waa-b.out .waa-q{border-left-color:#53bdeb}
+.waa-fwd{font-size:12px;color:#667781;font-style:italic;margin-bottom:2px}
+.waa-delmsg{color:#667781;font-style:italic}
+.waa-part{font-size:12px;font-weight:800;margin-bottom:2px;color:#c2410c}
+.waa-replybar{background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:none;gap:10px;align-items:center}.waa-replybar.on{display:flex}.waa-replybar .waa-q{flex:1;margin:0;cursor:default}
+.waa-flash{animation:waaFlash 1.2s}@keyframes waaFlash{0%,60%{box-shadow:0 0 0 3px #53bdeb}100%{box-shadow:0 1px .5px rgba(11,20,26,.13)}}
+.waa-grpbar{padding:8px 10px;border-bottom:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#f8fafc;font-size:12px;color:#54656f}
+.waa-doc-dl{margin-left:6px;font-size:12px;color:#008069;text-decoration:none;white-space:nowrap}
+.waa-tg{max-height:260px;overflow:auto;border:1px solid #e2e8f0;border-radius:10px}.waa-tg label{display:flex!important;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid #f1f5f9;font-weight:600!important;font-size:13px!important;cursor:pointer}.waa-tg label:hover{background:#f0fdf4}.waa-tg input{width:auto!important}.waa-tg small{color:#667781;font-weight:400}
 @media(max-width:860px){.waa-split{display:none}.waa{grid-template-columns:1fr!important;height:calc(100vh - 120px)}.waa.chat-open .waa-side{display:none}.waa:not(.chat-open) .waa-main{display:none}.waa-back{display:inline-block}.waa-b{max-width:85%}.waa-msgs{padding:12px}}
 </style>
 <?php if (!$ready): ?>
@@ -113,7 +126,9 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <button class="waa-tab" data-tab="atendimento" title="Todas as conversas em atendimento">Atendendo</button>
       <button class="waa-tab" data-tab="robo" title="Conversas com o robô (o número conta as das últimas 24 horas)">Robô</button>
       <button class="waa-tab" data-tab="finalizados" title="Conversas finalizadas (o número conta as de hoje)">Finalizados</button>
+      <button class="waa-tab" data-tab="grupos" title="Grupos do WhatsApp (o número conta os grupos com mensagens não lidas)" hidden>Grupos</button>
     </div>
+    <div class="waa-grpbar" id="waaGrpBar" style="display:none"></div>
     <div class="waa-list" id="waaList"><div class="waa-empty">Carregando…</div></div>
     <div class="waa-sidehead" style="justify-content:space-between"><span class="waa-rt" id="waaRt"></span><a class="waa-rt" href="whatsapp_chatbot.php">Configurar chatbot</a></div>
   </aside>
@@ -139,6 +154,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <div class="waa-banner" id="waaBanner" style="display:none"></div>
       <div class="waa-answers" id="waaAnswers" style="display:none"></div>
       <div class="waa-msgs" id="waaMsgs"></div>
+      <div class="waa-replybar" id="waaReplyBar"><div class="waa-q" id="waaReplyQ"></div><button class="waa-btn" type="button" id="waaReplyCancel" title="Cancelar resposta">✕</button></div>
       <div class="waa-filebar" id="waaFileBar"><img id="waaFileThumb" class="waa-fthumb" alt="" hidden><span id="waaFileName"></span><input id="waaCaption" placeholder="Legenda (opcional)"><button class="waa-btn g" type="button" id="waaFileSend">Enviar</button><button class="waa-btn" type="button" id="waaFileCancel">✕</button></div>
       <form class="waa-compose" id="waaForm">
         <input type="file" id="waaFile" hidden>
@@ -207,6 +223,15 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   <div><label>Empresa (opcional)</label><input id="scOrg" maxlength="120"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="scGo">Enviar contato</button></div>
 </div></div>
+<div class="waa-modal" id="mForward"><div class="waa-card">
+  <h3>Encaminhar mensagem</h3>
+  <div class="waa-q" id="fwPreview" style="cursor:default"></div>
+  <div><label>Buscar conversa (até 5)</label><input id="fwSearch" autocomplete="off" placeholder="Nome, cliente, grupo ou telefone"></div>
+  <div class="waa-tg" id="fwList"><div class="waa-cres-empty">Carregando…</div></div>
+  <div><label>Ou para um número (celular com DDD)</label><input id="fwPhone" inputmode="tel" placeholder="(31) 99999-9999"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="fwGo">Encaminhar</button></div>
+</div></div>
+<div class="waa-mmenu" id="waaMMenu" role="menu"></div>
 <div class="waa-modal" id="mNew"><div class="waa-card">
   <h3>Nova conversa</h3>
   <div style="position:relative"><label>Buscar contato (nome, cliente, telefone)</label><input id="nSearch" autocomplete="off" placeholder="Digite para buscar no cadastro de contatos e pessoas"><div id="nResults" class="waa-cres"></div></div>
@@ -280,13 +305,20 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   const RT = <?= json_encode(['enabled' => !empty($rt['enabled']), 'url' => (string)($rt['url'] ?? ''), 'token' => (string)($rt['token'] ?? ''), 'companyId' => $cid], JSON_UNESCAPED_SLASHES) ?>;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmtWa = (s) => esc(s).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  // Links primeiro (o "_" dentro de um link não pode virar itálico e quebrar o link).
+  const fmtWa = (s) => {
+    const urls = [];
+    const t = String(s ?? '').replace(/https?:\/\/[^\s<>"]+/g, (u) => { urls.push(u); return '\u0000' + (urls.length - 1) + '\u0000'; });
+    return esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>')
+      .replace(/\u0000(\d+)\u0000/g, (_, i) => { const u = esc(urls[+i]); return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'; });
+  };
   const ini = (n) => String(n || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase();
   const tm = (s) => { if (!s) return ''; const d = new Date(String(s).replace(' ', 'T')); const t = new Date(); return d.toDateString() === t.toDateString() ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }); };
   const hm = (s) => new Date(String(s).replace(' ', 'T')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const day = (s) => new Date(String(s).replace(' ', 'T')).toLocaleDateString('pt-BR');
-  const STATUS = { BOT: 'No robô', PENDENTE: 'Na fila', ATENDIMENTO: 'Em atendimento', FINALIZADO: 'Finalizado' };
+  const STATUS = { BOT: 'No robô', PENDENTE: 'Na fila', ATENDIMENTO: 'Em atendimento', FINALIZADO: 'Finalizado', GRUPO: 'Grupo do WhatsApp' };
   let tab = 'fila', q = '', chatId = 0, lastId = 0, lastDay = '', chat = null, listTimer = 0, busy = false, options = null;
+  let V3 = false, GROUPS = false, replyTo = null; const msgCache = new Map();
 
   async function api(action, params = {}, post = false, file = null) {
     let res;
@@ -309,19 +341,24 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   async function loadList() {
     try {
       const d = await api('list', { tab, q });
+      V3 = !!d.v3; GROUPS = !!d.groups;
+      const gTab = document.querySelector('.waa-tab[data-tab="grupos"]');
+      if (gTab) gTab.hidden = !(GROUPS || (SUP && V3));
+      renderGroupBar();
       document.querySelectorAll('.waa-tab').forEach((b) => {
         const n = d.counts[b.dataset.tab];
         b.classList.toggle('on', b.dataset.tab === tab);
         const quiet = b.dataset.tab === 'robo' || b.dataset.tab === 'finalizados';
+        if (b.dataset.tab === 'grupos' && b.hidden) return;
         b.innerHTML = esc(b.textContent.replace(/\d+$/, '').trim()) + (n ? ' <b' + (quiet ? ' class="n"' : '') + '>' + n + '</b>' : '');
       });
       const fila = d.counts.fila || 0, meus = d.counts.meus || 0;
       document.title = (fila + meus > 0 ? '(' + (fila + meus) + ') ' : '') + 'Atendimento WhatsApp';
       const list = $('waaList');
-      if (!d.items.length) { list.innerHTML = '<div class="waa-empty">Nenhuma conversa aqui.</div>'; return; }
+      if (!d.items.length) { list.innerHTML = '<div class="waa-empty">' + (tab === 'grupos' ? (GROUPS ? 'Nenhum grupo ainda. Clique em "Atualizar grupos" ou aguarde uma mensagem num grupo.' : 'Os grupos do WhatsApp estão desligados.') : 'Nenhuma conversa aqui.') + '</div>'; return; }
       list.innerHTML = d.items.map((c) => `
         <div class="waa-item${c.id === chatId ? ' on' : ''}" data-id="${c.id}">
-          <div class="waa-av">${esc(ini(c.name))}</div>
+          <div class="waa-av">${c.is_group ? '👥' : esc(ini(c.name))}</div>
           <div class="waa-meta">
             <div class="waa-row"><span class="waa-name">${esc(c.name)}</span><span class="waa-time">${esc(tm(c.last_at))}</span></div>
             <div class="waa-row"><span class="waa-prev">${c.last_direction === 'OUT' ? '↪ ' : ''}${esc(c.preview)}</span>${c.unread ? '<span class="waa-unread">' + c.unread + '</span>' : ''}</div>
@@ -332,6 +369,26 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     } catch (e) { $('waaList').innerHTML = '<div class="waa-empty">' + esc(e.message) + '</div>'; }
   }
   const scheduleList = () => { clearTimeout(listTimer); listTimer = setTimeout(loadList, 300); };
+  // Barra da aba Grupos: ligar/desligar (supervisor) e trazer a lista de grupos do número.
+  function renderGroupBar() {
+    const bar = $('waaGrpBar');
+    if (tab !== 'grupos') { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    if (!GROUPS) {
+      bar.innerHTML = SUP ? '<span style="flex:1">Mostre aqui os grupos do WhatsApp da empresa para ler e responder. O robô nunca responde em grupo.</span><button class="waa-btn g" type="button" data-grp="groups_on">Ligar grupos</button>'
+        : '<span>Os grupos do WhatsApp estão desligados. Peça ao administrador para ligar.</span>';
+    } else {
+      bar.innerHTML = '<span style="flex:1">Qualquer atendente pode responder nos grupos.</span><button class="waa-btn" type="button" data-grp="groups_sync">Atualizar grupos</button>' + (SUP ? '<button class="waa-btn r" type="button" data-grp="groups_off">Desligar</button>' : '');
+    }
+  }
+  $('waaGrpBar').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-grp]'); if (!b) return;
+    const act = b.dataset.grp;
+    if (act === 'groups_off' && !confirm('Desligar os grupos do WhatsApp? As conversas de grupo param de chegar ao Nexa.')) return;
+    b.disabled = true;
+    try { const d = await api(act, {}, true); if (act !== 'groups_off') alert((d.groups || 0) + ' grupo(s) na lista.'); await loadList(); }
+    catch (err) { fail(err); } finally { b.disabled = false; }
+  });
 
   // ✓ enviada · ✓✓ entregue · ✓✓ azul lida · 🕒 não enviada.
   const tickHtml = (s) => s < 0 ? '<span class="waa-tk wait" title="Não enviada">🕒 não enviado</span>'
@@ -341,18 +398,32 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   const fmtPhone = (p) => { let d = String(p || '').replace(/\D+/g, ''); if (d.length > 11 && d.startsWith('55')) d = d.slice(2); return d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7) : d.length === 10 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6) : d; };
   function bubble(m) {
     let html = '';
+    msgCache.set(m.id, m);
     const d = day(m.at);
     if (d !== lastDay) { lastDay = d; html += '<div class="waa-day">' + esc(d) + '</div>'; }
     if (m.sender === 'sistema') return html + '<div class="waa-sys">' + esc(m.body) + ' · ' + esc(hm(m.at)) + '</div>';
     const out = m.dir === 'OUT';
     const who = out ? (m.sender === 'robo' ? '🤖 Robô' : m.sender === 'celular' ? '📱 Celular' : m.sender === 'envio' ? '📤 Envio automático' + (m.origin ? ' · ' + m.origin : '') : (m.user || 'Atendente')) : '';
+    const menuBtn = V3 && !m.del ? '<button type="button" class="waa-mbtn" data-mid="' + m.id + '" title="Responder, encaminhar ou apagar" aria-label="Opções da mensagem">⌄</button>' : '';
+    const cls = `waa-b ${out ? 'out' : 'in'}${m.sender === 'robo' ? ' bot' : ''}${m.sender === 'envio' ? ' auto' : ''}${m.ok ? '' : ' fail'}`;
+    const part = !out && (m.pname || m.pphone) ? '<div class="waa-part">' + esc(m.pname || m.pphone) + (m.pname && m.pphone ? ' <span class="waa-sub">' + esc(m.pphone) + '</span>' : '') + '</div>' : '';
+    if (m.del) {
+      return html + `<div class="${cls}" data-mid="${m.id}">${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${part}<div class="waa-delmsg">🚫 ${m.del === 2 ? (out ? 'Você apagou esta mensagem' : 'Esta mensagem foi apagada') : 'Mensagem apagada no Nexa'}</div><small>${esc(hm(m.at))}</small></div>`;
+    }
     let media = '';
     if (m.media) {
       const src = 'whatsapp_midia.php?id=' + m.id;
-      if (m.type === 'image' || m.type === 'sticker') media = '<a href="' + src + '" target="_blank"><img src="' + src + '" alt="foto" loading="lazy"></a>';
+      if (m.type === 'image' || m.type === 'sticker') media = '<a href="' + src + '" target="_blank" data-no-processing><img src="' + src + '" alt="foto" loading="lazy"></a>';
       else if (m.type === 'audio') media = '<audio controls preload="none" src="' + src + '"></audio>';
       else if (m.type === 'video') media = '<video controls preload="none" src="' + src + '"></video>';
-      else media = '<a class="waa-doc" href="' + src + '&download=1">📄 <span>' + esc(m.name || 'Documento') + (m.size ? ' · ' + Math.max(1, Math.round(m.size / 1024)) + ' KB' : '') + '</span></a>';
+      else {
+        // PDF abre para ver numa nova aba; os outros arquivos (ZIP, RAR, XML...) são baixados.
+        const pdf = /pdf/i.test(m.mime || '') || /\.pdf$/i.test(m.name || '');
+        const label = '📄 <span>' + esc(m.name || 'Documento') + (m.size ? ' · ' + Math.max(1, Math.round(m.size / 1024)) + ' KB' : '') + '</span>';
+        media = pdf
+          ? '<div style="display:flex;align-items:center"><a class="waa-doc" href="' + src + '" target="_blank" rel="noopener" data-no-processing title="Abrir">' + label + '</a><a class="waa-doc-dl" href="' + src + '&download=1" download data-no-processing title="Baixar">⬇ Baixar</a></div>'
+          : '<a class="waa-doc" href="' + src + '&download=1" download data-no-processing title="Baixar">' + label + ' <span class="waa-doc-dl">⬇</span></a>';
+      }
     } else if (['image', 'audio', 'video', 'document', 'sticker'].includes(m.type)) {
       media = '<div class="waa-sub">' + ({ image: '📷 Foto', audio: '🎤 Áudio', video: '🎬 Vídeo', document: '📄 ' + esc(m.name || 'Documento'), sticker: 'Figurinha' }[m.type]) + '</div>';
     }
@@ -363,30 +434,36 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
         + (c.phone ? '<button type="button" class="waa-vc-go" data-phone="' + esc(c.phone) + '" data-name="' + esc(c.name) + '">Conversar</button>' : '') + '</div>').join('')
         + (!m.ok ? '<div class="waa-sub">Não enviado</div>' : '');
     }
-    return html + `<div class="waa-b ${out ? 'out' : 'in'}${m.sender === 'robo' ? ' bot' : ''}${m.sender === 'envio' ? ' auto' : ''}${m.ok ? '' : ' fail'}" data-mid="${m.id}">${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${media}${body}<small>${esc(hm(m.at))}${out ? tickHtml(m.ok ? (m.ws || 0) : -1) : ''}</small></div>`;
+    const quote = m.reply ? '<div class="waa-q" data-goto="' + (m.reply.id || 0) + '"><b>' + esc(m.reply.who || 'Mensagem') + '</b>' + esc(m.reply.text) + '</div>' : '';
+    const fwd = m.fwd ? '<div class="waa-fwd">↪ Encaminhada</div>' : '';
+    return html + `<div class="${cls}" data-mid="${m.id}">${menuBtn}${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${part}${fwd}${quote}${media}${body}<small>${esc(hm(m.at))}${out && !(chat && chat.status === 'GRUPO' && m.ok) ? tickHtml(m.ok ? (m.ws || 0) : -1) : ''}</small></div>`;
   }
 
   function renderHead() {
     const c = chat;
-    $('waaAv').textContent = ini(c.name);
+    const grp = c.status === 'GRUPO';
+    $('waaAv').textContent = grp ? '👥' : ini(c.name);
     $('waaName').textContent = c.name;
     const parts = [c.contact_role, c.company_label, c.phone, STATUS[c.status] || c.status];
     if (c.department) parts.push(c.department);
     if (c.user) parts.push('com ' + c.user); else if (c.status === 'ATENDIMENTO') parts.push('respondido pelo celular');
     $('waaSub').textContent = parts.filter(Boolean).join(' · ');
     $('waaTags').innerHTML = (c.tags || []).length && window.NexaTags ? NexaTags.html(c.tags.join(',')) : '';
-    const mine = c.status === 'ATENDIMENTO' && c.user_id === ME;
-    const other = c.status === 'ATENDIMENTO' && c.user_id > 0 && c.user_id !== ME;
+    // Grupo: qualquer atendente que vê a conversa escreve, sem aceitar/transferir/finalizar.
+    const mine = grp || (c.status === 'ATENDIMENTO' && c.user_id === ME);
+    const other = !grp && c.status === 'ATENDIMENTO' && c.user_id > 0 && c.user_id !== ME;
+    ['waaTransfer', 'waaFinish'].forEach((id) => { $(id).style.display = grp ? 'none' : ''; });
     $('waaAccept').style.display = mine ? 'none' : '';
     $('waaAccept').textContent = other ? 'Assumir' : 'Aceitar';
     $('waaAccept').disabled = other && !SUP;
     $('waaTransfer').disabled = other && !SUP;
     $('waaFinish').disabled = (other && !SUP) || c.status === 'FINALIZADO';
-    $('waaCrm').style.display = c.crm_attendance_id ? 'none' : '';
+    $('waaCrm').style.display = c.crm_attendance_id || grp ? 'none' : '';
     $('waaCrmLink').style.display = c.crm_attendance_id ? '' : 'none';
     if (c.crm_attendance_id) { $('waaCrmLink').href = 'crm_atendimento.php?id=' + c.crm_attendance_id; $('waaCrmLink').textContent = 'CRM nº ' + c.crm_attendance_id; }
     const b = $('waaBanner');
-    if (other) { b.style.display = ''; b.textContent = 'Esta conversa está com ' + c.user + '.' + (SUP ? ' Como supervisor você pode assumir.' : ''); }
+    if (grp) { b.style.display = 'none'; }
+    else if (other) { b.style.display = ''; b.textContent = 'Esta conversa está com ' + c.user + '.' + (SUP ? ' Como supervisor você pode assumir.' : ''); }
     else if (c.status === 'PENDENTE') { b.style.display = ''; b.textContent = 'Cliente aguardando na fila' + (c.department ? ' de ' + c.department : '') + '. Clique em Aceitar para responder.'; }
     else if (c.status === 'BOT') { b.style.display = ''; b.textContent = 'O robô está atendendo. Para responder, clique em Aceitar (o robô para nesta conversa).'; }
     else if (c.status === 'FINALIZADO') { b.style.display = ''; b.textContent = 'Conversa finalizada. Para responder, clique em Aceitar.'; }
@@ -405,7 +482,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   }
 
   async function openChat(id) {
-    if (id !== chatId) { cancelRec(); closeQuick(); }
+    if (id !== chatId) { cancelRec(); closeQuick(); setReply(null); closeMMenu(); }
     chatId = id; lastId = 0; lastDay = '';
     $('waa').classList.add('chat-open');
     $('waaWelcome').style.display = 'none';
@@ -455,7 +532,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   }
 
   // Lista
-  $('waaTabs').addEventListener('click', (e) => { const b = e.target.closest('.waa-tab'); if (!b) return; tab = b.dataset.tab; loadList(); });
+  $('waaTabs').addEventListener('click', (e) => { const b = e.target.closest('.waa-tab'); if (!b) return; tab = b.dataset.tab; renderGroupBar(); loadList(); });
   $('waaList').addEventListener('click', (e) => { const it = e.target.closest('.waa-item'); if (it) openChat(Number(it.dataset.id)); });
   let st = 0; $('waaSearch').addEventListener('input', (e) => { clearTimeout(st); st = setTimeout(() => { q = e.target.value; loadList(); }, 350); });
   $('waaBack').addEventListener('click', () => { $('waa').classList.remove('chat-open'); chatId = 0; loadList(); });
@@ -481,8 +558,9 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (!v || !chatId) return;
     closeQuick();
     text.value = ''; resize(); toggleSend();
-    const d = await act('send', { text: v });
-    if (!d) { text.value = v; toggleSend(); }
+    const rt = replyTo ? replyTo.id : 0;
+    const d = await act('send', rt ? { text: v, reply_to: rt } : { text: v });
+    if (!d) { text.value = v; toggleSend(); } else if (rt) setReply(null);
   });
 
   // Mensagens rápidas: "/" no início da mensagem ou o botão ⚡.
@@ -629,8 +707,103 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (!pending) return;
     const f = pending, cap = $('waaCaption').value;
     $('waaFileSend').disabled = true;
-    await act('file', { caption: cap }, f);
+    const rt = replyTo ? replyTo.id : 0;
+    const d = await act('file', rt ? { caption: cap, reply_to: rt } : { caption: cap }, f);
     $('waaFileSend').disabled = false; clearFile();
+    if (d && rt) setReply(null);
+  });
+
+  // Menu da mensagem (⌄): Responder, Encaminhar e Apagar.
+  const mmenu = $('waaMMenu');
+  let mmTarget = null;
+  function closeMMenu() { mmenu.classList.remove('on'); document.querySelectorAll('.waa-mbtn.on').forEach((b) => b.classList.remove('on')); mmTarget = null; }
+  const canWrite = () => chat && $('waaForm').style.display !== 'none';
+  function openMMenu(btn) {
+    const m = msgCache.get(Number(btn.dataset.mid)); if (!m) return;
+    mmTarget = m;
+    const items = [];
+    if (canWrite()) items.push('<button type="button" data-mm="reply">↩️ Responder</button>');
+    items.push('<button type="button" data-mm="forward">↪️ Encaminhar</button>');
+    if (canWrite()) items.push('<button type="button" class="r" data-mm="delete">🗑️ Apagar</button>');
+    mmenu.innerHTML = items.join('');
+    btn.classList.add('on');
+    mmenu.classList.add('on');
+    // Junto do botão clicado (considera o zoom automático do painel).
+    mmenu.style.left = '0px'; mmenu.style.top = '0px';
+    const o = mmenu.getBoundingClientRect(), sc = mmenu.offsetWidth > 0 ? o.width / mmenu.offsetWidth : 1;
+    const r = btn.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.right - o.width, innerWidth - o.width - 8));
+    const top = r.bottom + o.height + 6 < innerHeight ? r.bottom + 4 : Math.max(6, r.top - o.height - 4);
+    mmenu.style.left = ((left - o.left) / sc) + 'px'; mmenu.style.top = ((top - o.top) / sc) + 'px';
+  }
+  const preview = (m) => {
+    const t = m.body ? m.body : (m.type === 'document' ? '📄 ' + (m.name || 'Documento') : ({ image: '📷 Foto', audio: '🎤 Áudio', video: '🎬 Vídeo', sticker: 'Figurinha', contact: '👤 Contato', location: '📍 Localização' }[m.type] || 'Mensagem'));
+    return String(t).replace(/\s+/g, ' ').slice(0, 160);
+  };
+  const whoOf = (m) => m.dir === 'OUT' ? (m.sender === 'robo' ? 'Robô' : m.sender === 'celular' ? 'Celular' : (m.user || 'Você')) : (m.pname || m.pphone || (chat ? chat.name : 'Cliente'));
+  function setReply(m) {
+    replyTo = m || null;
+    $('waaReplyBar').classList.toggle('on', !!m);
+    if (m) { $('waaReplyQ').innerHTML = '<b>Respondendo a ' + esc(whoOf(m)) + '</b>' + esc(preview(m)); text.focus(); }
+  }
+  $('waaReplyCancel').addEventListener('click', () => setReply(null));
+  $('waaMsgs').addEventListener('click', (e) => {
+    const b = e.target.closest('.waa-mbtn');
+    if (b) { e.stopPropagation(); if (mmenu.classList.contains('on') && mmTarget && mmTarget.id === Number(b.dataset.mid)) closeMMenu(); else { closeMMenu(); openMMenu(b); } return; }
+    const q = e.target.closest('.waa-q[data-goto]');
+    if (q && Number(q.dataset.goto)) {
+      const el = document.querySelector('.waa-b[data-mid="' + q.dataset.goto + '"]');
+      if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.remove('waa-flash'); void el.offsetWidth; el.classList.add('waa-flash'); }
+      else alert('A mensagem citada é mais antiga que as mostradas aqui.');
+    }
+  });
+  document.addEventListener('mousedown', (e) => { if (mmenu.classList.contains('on') && !mmenu.contains(e.target) && !e.target.closest('.waa-mbtn')) closeMMenu(); });
+  $('waaMsgs').addEventListener('scroll', closeMMenu, { passive: true });
+  mmenu.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-mm]'); if (!b || !mmTarget) return;
+    const m = mmTarget; closeMMenu();
+    if (b.dataset.mm === 'reply') setReply(m);
+    else if (b.dataset.mm === 'forward') openForward(m);
+    else if (b.dataset.mm === 'delete') {
+      const forAll = m.dir === 'OUT' && m.wid && m.ok;
+      if (!confirm(forAll ? 'Apagar para todos? A mensagem some também no celular do cliente.' : 'Apagar esta mensagem? Ela some só aqui no Nexa (no celular do cliente continua).')) return;
+      try { await api('delete', { id: chatId, message_id: m.id }, true); if (replyTo && replyTo.id === m.id) setReply(null); await openChat(chatId); scheduleList(); }
+      catch (err) { fail(err); }
+    }
+  });
+  // Encaminhar: escolhe até 5 conversas (ou um número).
+  let fwMsg = null, fwTimer = 0, fwItems = [];
+  const fwSel = new Set();
+  async function fwLoad() {
+    try {
+      const d = await api('targets', { q: $('fwSearch').value.trim() });
+      fwItems = d.items || [];
+      $('fwList').innerHTML = fwItems.map((c) => '<label><input type="checkbox" value="' + c.id + '"' + (fwSel.has(c.id) ? ' checked' : '') + '> <span>' + (c.is_group ? '👥 ' : '') + esc(c.name) + '<br><small>' + esc([c.phone, c.company_label, STATUS[c.status] || c.status].filter(Boolean).join(' · ')) + '</small></span></label>').join('') || '<div class="waa-cres-empty">Nenhuma conversa encontrada.</div>';
+    } catch (err) { $('fwList').innerHTML = '<div class="waa-cres-empty">' + esc(err.message) + '</div>'; }
+  }
+  function openForward(m) {
+    fwMsg = m; fwSel.clear();
+    $('fwPreview').innerHTML = '<b>' + esc(whoOf(m)) + '</b>' + esc(preview(m));
+    $('fwSearch').value = ''; $('fwPhone').value = '';
+    open('mForward'); fwLoad(); $('fwSearch').focus();
+  }
+  $('fwSearch').addEventListener('input', () => { clearTimeout(fwTimer); fwTimer = setTimeout(fwLoad, 300); });
+  $('fwList').addEventListener('change', (e) => {
+    const cb = e.target.closest('input[type=checkbox]'); if (!cb) return;
+    const id = Number(cb.value);
+    if (cb.checked) { if (fwSel.size >= 5) { cb.checked = false; alert('Escolha no máximo 5 conversas.'); return; } fwSel.add(id); } else fwSel.delete(id);
+  });
+  $('fwGo').addEventListener('click', async () => {
+    if (!fwMsg) return;
+    const phone = $('fwPhone').value.trim();
+    if (!fwSel.size && !phone) { alert('Escolha uma conversa ou informe um número.'); return; }
+    $('fwGo').disabled = true;
+    try {
+      const d = await api('forward', { id: chatId, message_id: fwMsg.id, targets: Array.from(fwSel).join(','), phone }, true);
+      $('mForward').classList.remove('on');
+      if (d.warning) alert(d.warning);
+      scheduleList(); if (fwSel.has(chatId)) refreshChat();
+    } catch (err) { fail(err); } finally { $('fwGo').disabled = false; }
   });
 
   // Dados completos do contato (clique no nome/foto do topo da conversa).
@@ -661,7 +834,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     const ed = $('pfEdit'); if (ed) ed.addEventListener('click', openPfForm);
   }
   async function openProfile() {
-    if (!chatId) return;
+    if (!chatId || (chat && chat.status === 'GRUPO')) return;
     $('pfBody').innerHTML = '<div class="waa-sub">Carregando…</div>'; $('pfForm').style.display = 'none';
     $('pfAv').textContent = ini(chat ? chat.name : ''); $('pfName').textContent = chat ? chat.name : ''; $('pfSub').textContent = '';
     open('mProfile');
@@ -802,8 +975,8 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
       if (!m || m.eventType !== 'whatsapp.chat.updated' || m.replay) return;
       if (!(m.payload && m.payload.ticks)) scheduleList();
-      if (Number(m.entityId) === chatId) refreshChat();
       const p = m.payload || {};
+      if (Number(m.entityId) === chatId) { if (p.deleted) openChat(chatId); else refreshChat(); }
       if (p.new_message && p.status === 'PENDENTE' && document.hidden) beep();
     });
     ws.addEventListener('close', () => { $('waaRt').textContent = '● Tempo real desconectado — reconectando…'; setTimeout(() => connectRt(attempt + 1), Math.min(30000, 1000 * 2 ** Math.min(attempt + 1, 5))); });

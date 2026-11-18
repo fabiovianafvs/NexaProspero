@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/itau_boleto_v3.php';
 require_once __DIR__ . '/../config/itau_webhook.php';
 require_once __DIR__ . '/../config/screen_performance.php';
 require_once __DIR__ . '/../config/cash_receivables_integration.php';
+require_once __DIR__ . '/../config/company_sequences.php';
 
 $cid = function_exists('finance_operational_company_id') ? finance_operational_company_id($pdo) : (int)COMPANY_ID;
 $financeCrossContext = function_exists('finance_multi_company_cross_context') && finance_multi_company_cross_context($pdo);
@@ -675,7 +676,13 @@ if ($status !== '') {
   }
 }
 if ($personFilter > 0) { $where[] = 'r.person_id=?'; $params[] = $personFilter; }
-if ($q !== '') { $where[] = '(p.name LIKE ? OR r.description LIKE ? OR r.document_number LIKE ?)'; $like=nexa_search_like($q); array_push($params,$like,$like,$like); }
+// Código do cliente (número do cadastro, quando a empresa usa numeração própria).
+$recPersonCodeCol = (function_exists('company_sequence_has_column') && company_sequence_has_column($pdo, 'pessoas')) ? 'p.numero_cadastro' : 'p.id';
+if ($q !== '') {
+  $where[] = '(p.name LIKE ? OR p.fantasy_name LIKE ? OR r.description LIKE ? OR r.document_number LIKE ?' . (ctype_digit($q) ? ' OR ' . $recPersonCodeCol . ' = ?' : '') . ')';
+  $like=nexa_search_like($q); array_push($params,$like,$like,$like,$like);
+  if (ctype_digit($q)) $params[] = (int)$q;
+}
 if ($issueIni) { $where[] = 'r.issue_date >= ?'; $params[] = $issueIni; }
 if ($issueFim) { $where[] = 'r.issue_date <= ?'; $params[] = $issueFim; }
 if ($dueIni) { $where[] = 'r.due_date >= ?'; $params[] = $dueIni; }
@@ -706,7 +713,7 @@ foreach (['status','q','person_id','issue_ini','issue_fim','due_ini','due_fim','
   }
 }
 $receivableReturnUrl = 'financeiro_contas_receber.php?' . http_build_query($receivableReturnParams);
-$rows = $receivableListRequested ? finance_query_all($pdo, 'SELECT r.*, p.name AS person_name, ca.code, ca.name AS account_name FROM finance_receivables r LEFT JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=r.company_id AND ca.id=r.chart_account_id WHERE ' . implode(' AND ', $where) . ' ORDER BY r.due_date ASC, r.id DESC LIMIT 500', $params) : [];
+$rows = $receivableListRequested ? finance_query_all($pdo, 'SELECT r.*, p.name AS person_name, p.fantasy_name AS person_fantasy, ' . $recPersonCodeCol . ' AS person_code, ca.code, ca.name AS account_name FROM finance_receivables r LEFT JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=r.company_id AND ca.id=r.chart_account_id WHERE ' . implode(' AND ', $where) . ' ORDER BY r.due_date ASC, r.id DESC LIMIT 500', $params) : [];
 
 // Carrega os boletos vinculados em lote para exibir as ações sem gerar N+1 consultas.
 $receivableChargeMap = [];
@@ -906,7 +913,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
           <button class="btn" type="button" id="clearPersonLookup" title="Limpar pessoa">Limpar</button>
         </div>
       </div>
-      <div class="receivable-history receivable-history-second"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento ou cliente"></div>
+      <div class="receivable-history receivable-history-second"><label>Histórico</label><input name="q" value="<?= finance_h($q) ?>" placeholder="Histórico, documento, cliente, fantasia ou código"></div>
       <div class="receivable-filter-actions"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn" href="financeiro_contas_receber.php?limpar_filtros=1">Limpar filtros</a></div>
     </div>
   </form><script src="/assets/nexa-lembrar-filtros.js?v=2"></script>
@@ -946,11 +953,13 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
   <div class="ntg-wrap">
     <table class="ntg-table" data-ntg="fin_receber" data-scope="<?= (int)COMPANY_ID ?>" data-save-url="grid_preferencias.php" data-csrf="<?= finance_h(nexa_grid_csrf()) ?>"
       data-prefs="<?= finance_h(json_encode($recGridPrefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) ?>"
-      data-defaults='{"id":70,"cliente":230,"doc":130,"historico":200,"atraso":78,"emissao":92,"vencimento":108,"baixa":122,"situacao":100,"original":110,"baixado":128,"aberto":115,"plano":200}'>
+      data-defaults='{"id":70,"codcli":90,"cliente":230,"fantasia":180,"doc":130,"historico":200,"atraso":78,"emissao":92,"vencimento":108,"baixa":122,"situacao":100,"original":110,"baixado":128,"aberto":115,"plano":200}'>
       <thead><tr>
         <th class="ntg-sel"></th>
         <th data-col="id" data-type="num">ID</th>
+        <th data-col="codcli" data-type="num">Cód. cliente</th>
         <th data-col="cliente">Cliente</th>
+        <th data-col="fantasia">Nome fantasia</th>
         <th data-col="doc">Documento</th>
         <th data-col="historico">Histórico</th>
         <th data-col="atraso" data-type="num">Atraso</th>
@@ -1022,7 +1031,10 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
             data-payment="<?= finance_h($r['expected_payment_method'] ?? '') ?>"
             data-fine-charged="<?= ((float)($r['fine_amount'] ?? 0) > 0.0001) ? '1' : '0' ?>"><?php endif; ?></td>
         <td data-col="id" data-sort="<?= (int)$r['id'] ?>">#<?= (int)$r['id'] ?></td>
+        <?php $rowPersonCode = (int)($r['person_code'] ?? 0) ?: (int)($r['person_id'] ?? 0); $rowFantasy = trim((string)($r['person_fantasy'] ?? '')); ?>
+        <td data-col="codcli" data-sort="<?= $rowPersonCode ?>"><?= $rowPersonCode > 0 ? '#' . $rowPersonCode : '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="cliente" title="<?= finance_h($r['person_name'] ?? '') ?>"><strong><?= finance_h($r['person_name'] ?? '') ?></strong></td>
+        <td data-col="fantasia" title="<?= finance_h($rowFantasy) ?>"><?= $rowFantasy !== '' ? finance_h($rowFantasy) : '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="doc" title="<?= finance_h($rowDocText) ?>"><?= $rowDocText !== '' ? finance_h($rowDocText) : '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="historico" title="<?= finance_h($r['description'] ?? '') ?>"><?= finance_h($r['description'] ?? '') ?: '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="atraso" data-sort="<?= $rowIsOverdue ? (int)$rowLateDays : 0 ?>"><?= $rowIsOverdue ? ($rowLateDays . ' dia' . ($rowLateDays === 1 ? '' : 's')) : '<span class="ntg-muted">—</span>' ?></td>

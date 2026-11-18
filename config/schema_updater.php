@@ -750,6 +750,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '3e735995ce00bab879c3ce17e14bec37574b9b308bbad71b9b2aa868a3dcb80a',
         'order' => 202611180300,
       ],
+      [
+        'id' => '20261118_whatsapp_atendimento_v3',
+        'module' => 'whatsapp_chatbot',
+        'version' => 202611180400,
+        'label' => 'WhatsApp - Atendimento v3 (responder, encaminhar, apagar e grupos)',
+        'description' => 'Permite responder citando uma mensagem, encaminhar, apagar (para todos ou só no Nexa) e mostrar os grupos do WhatsApp na tela de Atendimento. Só acrescenta colunas; não altera mensagens existentes.',
+        'file' => __DIR__ . '/../db/20261118_whatsapp_atendimento_v3.sql',
+        'sha256' => 'f567a4ed008c5db596e9c28b8f169ea6c363961e60070535156e1f0a3227e8c0',
+        'order' => 202611180400,
+      ],
     ];
   }
 }

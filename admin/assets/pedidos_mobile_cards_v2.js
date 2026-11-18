@@ -55,11 +55,17 @@
     while(pack.firstChild) popover.appendChild(pack.firstChild);
     button.setAttribute('aria-expanded','true');
     popover.hidden=false;
+    // Converte medidas da tela para px do CSS (zoom automático do painel).
+    popover.style.left='0px'; popover.style.top='0px';
+    const origin=popover.getBoundingClientRect();
+    const scale=popover.offsetWidth>0 && origin.width>0 ? origin.width/popover.offsetWidth : 1;
     const rect=button.getBoundingClientRect();
-    const width=Math.max(194,popover.offsetWidth||194);
-    popover.style.left=Math.max(8,Math.min(rect.right-width,innerWidth-width-8))+'px';
-    const height=Math.min(popover.scrollHeight||180,innerHeight*.7);
-    popover.style.top=(rect.bottom+height+6<innerHeight ? rect.bottom+5 : Math.max(6,rect.top-height-5))+'px';
+    const width=origin.width;
+    const height=Math.min(origin.height,innerHeight*.7);
+    const left=Math.max(8,Math.min(rect.right-width,innerWidth-width-8));
+    const top=rect.bottom+height+6<innerHeight ? rect.bottom+5 : Math.max(6,rect.top-height-5);
+    popover.style.left=((left-origin.left)/scale)+'px';
+    popover.style.top=((top-origin.top)/scale)+'px';
   }
   const modal=document.createElement('div');
   modal.className='orders-grid-modal orders-mobile-status-modal'; modal.hidden=true;
@@ -99,7 +105,8 @@
     const action=node.getAttribute('action')||'';
     const label=(node.innerText||node.textContent||'').toLowerCase();
     if(href.includes('pedido_editar.php')) return 'edit';
-    if(action.includes('pedido_whatsapp.php')) return 'whatsapp';
+    if(action.includes('pedido_whatsapp.php') || href.includes('pedido_whatsapp.php')) return 'whatsapp';
+    if(node.hasAttribute('data-fiscal-print')) return 'print';
     if(href.includes('email_documento.php')) return 'mail';
     if(node.classList.contains('pedidos-fiscal-menu') || node.classList.contains('pedidos-os-fiscal-actions') ||
        /fiscal_|os_fiscal|os_faturar|nfse_/.test(href+' '+action) || /fiscal|nf-e|nfc-e|nfs-e/.test(label)) return 'fiscal';
@@ -120,7 +127,8 @@
       else if(kind==='mail' && node.matches('a')) {decorate(node,'mail','Enviar pedido por e-mail');host.appendChild(node);}
       else if(kind==='whatsapp' && node.matches('form')) {
         decorate(node.querySelector('button'),'whatsapp','Enviar pelo WhatsApp');host.appendChild(node);
-      } else groups[kind].appendChild(node);
+      } else if(kind==='whatsapp' && node.matches('a')) {decorate(node,'whatsapp','Enviar pelo WhatsApp');host.appendChild(node);}
+      else groups[kind].appendChild(node);
     }
     for(const kind of ['print','fiscal','more']) {
       const group=groups[kind];

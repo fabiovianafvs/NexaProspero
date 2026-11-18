@@ -39,6 +39,7 @@
       edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/>',
       print:'<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6zM18 12h.01"/>',
       fiscal:'<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 7h6M9 11h6M9 15h3"/>',
+      fprint:'<path d="M7 8V2h10v6"/><path d="M6 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 13h10v9H7z"/><path d="M10 16h4M10 19h2"/>',
       mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 6 9 7 9-7"/>',
       whatsapp:'<path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 8.8c.6 3.2 2.6 5.2 5.8 6l1.6-1.4"/>',
       status:'<path d="M3 12h18M12 3l-4 4 4 4M12 21l4-4-4-4"/>',
@@ -62,13 +63,25 @@
     if (currentPack) { while (menu.firstChild) currentPack.appendChild(menu.firstChild); currentPack = null; }
     menu.hidden = true;
   }
+  // O painel usa zoom automático (html{zoom:.8} em notebooks): converte as medidas da
+  // tela para px do CSS, senão o menu abre longe do botão clicado.
+  function cssScale(el) {
+    const w = el.offsetWidth;
+    const r = el.getBoundingClientRect().width;
+    return w > 0 && r > 0 ? r / w : 1;
+  }
   function positionMenu(anchor) {
+    menu.style.left = '0px'; menu.style.top = '0px';
+    const scale = cssScale(menu);
+    const origin = menu.getBoundingClientRect();
     const rect = anchor.getBoundingClientRect();
-    const w = Math.max(194, menu.offsetWidth || 194);
-    let left = Math.max(8, Math.min(rect.right - w, window.innerWidth - w - 8));
-    menu.style.left = left + 'px';
-    const height = Math.min(menu.scrollHeight || 200, window.innerHeight * 0.7);
-    menu.style.top = (rect.bottom + height + 8 < window.innerHeight ? rect.bottom + 5 : Math.max(6, rect.top - height - 5)) + 'px';
+    const toCss = (v, o) => (v - o) / scale;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = menu.getBoundingClientRect().width, h = Math.min(menu.getBoundingClientRect().height, vh * 0.7);
+    const left = Math.max(8, Math.min(rect.right - w, vw - w - 8));
+    const top = rect.bottom + h + 8 < vh ? rect.bottom + 5 : Math.max(6, rect.top - h - 5);
+    menu.style.left = toCss(left, origin.left) + 'px';
+    menu.style.top = toCss(top, origin.top) + 'px';
   }
   function showMenu(anchor, content) {
     if (currentPack === content && !menu.hidden) { closeMenu(); return; }
@@ -111,7 +124,7 @@
     const oldButtons = actionRow.querySelector('.pedidos-action-buttons');
     const newActions = row.querySelector('.orders-grid-icons');
     if (!oldButtons || !newActions) return;
-    const groups = {print:pack('print'), fiscal:pack('fiscal'), more:pack('more')};
+    const groups = {print:pack('print'), fiscal:pack('fiscal'), fprint:pack('fprint'), more:pack('more')};
     const statusForm = actionRow.querySelector('.pedidos-status-form');
     const unused = document.createElement('div'); unused.hidden = true; actionRow.appendChild(unused);
     const fiscalSummary = actionRow.querySelector('.pedidos-fiscal-summary-values');
@@ -123,7 +136,9 @@
       const href = node.getAttribute('href') || '';
       const act = node.getAttribute('action') || '';
       const label = originalLabel(node).toLowerCase();
-      if (node.classList.contains('pedidos-fiscal-menu')) {
+      if (node.hasAttribute('data-fiscal-print')) {
+        groups.fprint.appendChild(node);
+      } else if (node.classList.contains('pedidos-fiscal-menu')) {
         const dropdown = node.querySelector('.pedidos-fiscal-menu-list');
         if (dropdown) moveAll(dropdown, groups.fiscal);
         node.remove();
@@ -131,7 +146,7 @@
         groups.fiscal.appendChild(node);
       } else if (href.includes('pedido_editar.php')) {
         edit = node;
-      } else if (node.classList.contains('pedidos-whatsapp-form') || act.includes('pedido_whatsapp.php')) {
+      } else if (node.classList.contains('pedidos-whatsapp-form') || act.includes('pedido_whatsapp.php') || href.includes('pedido_whatsapp.php')) {
         wa = node;
       } else if (href.includes('email_documento.php')) {
         email = node;
@@ -143,23 +158,49 @@
         groups.more.appendChild(node);
       }
     }
-    if (edit) { edit.className='orders-grid-icon'; edit.title='Editar pedido'; edit.setAttribute('aria-label',edit.title); edit.innerHTML=svg('edit'); newActions.appendChild(edit); }
-    if (groups.print.children.length) { const b=iconBtn('print','Imprimir: pedido, produção e cozinha'); b.onclick=()=>window.nexaOrdersDialogs.openActions('print',groups.print,'Pedido #' + String(row.dataset.orderId),b); newActions.appendChild(b); }
-    if (groups.fiscal.children.length) { const b=iconBtn('fiscal','Documento fiscal: emitir, consultar ou imprimir'); b.onclick=()=>window.nexaOrdersDialogs.openActions('fiscal',groups.fiscal,'Pedido #' + String(row.dataset.orderId),b); newActions.appendChild(b); }
-    if (wa) {
-      const btn=wa.querySelector('button');
-      if (btn) { btn.className='orders-grid-icon'; btn.title='Enviar pelo WhatsApp'; btn.setAttribute('aria-label',btn.title); btn.innerHTML=svg('whatsapp'); }
-      newActions.appendChild(wa);
+    const orderLabel = 'Pedido #' + String(row.dataset.orderId);
+    // Ações em ordem de prioridade. Na linha cabem 6 botões: se houver mais, ficam
+    // as 5 primeiras e o 6º (⋯) abre as demais, perto de onde foi clicado.
+    const actions = [];
+    const asIcon = (el, kind, title) => { el.className = 'orders-grid-icon'; el.title = title; el.setAttribute('aria-label', title); el.innerHTML = svg(kind); return el; };
+    const asMenu = (el, text) => { el.className = 'btn btn-sm'; el.removeAttribute('aria-label'); el.textContent = text; return el; };
+    const linkAction = (el, kind, title, text) => ({ icon: () => asIcon(el, kind, title), menu: () => asMenu(el, text) });
+    const runAction = (kind, title, text, run) => ({
+      icon: () => { const b = iconBtn(kind, title); b.onclick = () => run(b); return b; },
+      menu: () => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-sm'; b.textContent = text; b.onclick = () => { const at = row.querySelector('.orders-grid-more') || b; closeMenu(); run(at); }; return b; },
+    });
+    if (edit) actions.push(linkAction(edit, 'edit', 'Editar pedido', '✏️ Editar pedido'));
+    if (groups.print.children.length) actions.push(runAction('print', 'Imprimir: pedido, produção e cozinha', '🖨️ Imprimir pedido', (at) => window.nexaOrdersDialogs.openActions('print', groups.print, orderLabel, at)));
+    if (groups.fiscal.children.length) actions.push(runAction('fiscal', 'Documento fiscal: emitir ou consultar', '🧾 Documento fiscal', (at) => window.nexaOrdersDialogs.openActions('fiscal', groups.fiscal, orderLabel, at)));
+    if (groups.fprint.children.length === 1) {
+      const only = groups.fprint.firstElementChild;
+      const txt = originalLabel(only);
+      actions.push(linkAction(only, 'fprint', txt + ' (documento fiscal)', '🖨️ ' + txt));
+    } else if (groups.fprint.children.length > 1) {
+      actions.push(runAction('fprint', 'Imprimir documento fiscal', '🖨️ Imprimir documento fiscal', (at) => window.nexaOrdersDialogs.openActions('print', groups.fprint, orderLabel, at)));
     }
-    if (email) { email.className='orders-grid-icon'; email.title='Enviar por e-mail'; email.setAttribute('aria-label',email.title); email.innerHTML=svg('mail'); newActions.appendChild(email); }
+    if (wa) {
+      const btn = wa.matches('form') ? wa.querySelector('button') : wa;
+      actions.push({ icon: () => { if (btn) asIcon(btn, 'whatsapp', 'Enviar pelo WhatsApp'); return wa; }, menu: () => { if (btn) asMenu(btn, '💬 WhatsApp'); return wa; } });
+    }
     if (statusForm) {
       unused.appendChild(statusForm);
-      const b=iconBtn('status','Trocar status');
-      b.onclick=()=>window.nexaOrdersDialogs.openStatus(statusForm,'Trocar status · Pedido #' + String(row.dataset.orderId),b);
+      actions.push(runAction('status', 'Trocar status', '🔁 Trocar status', (at) => window.nexaOrdersDialogs.openStatus(statusForm, 'Trocar status · ' + orderLabel, at)));
+    }
+    if (email) actions.push(linkAction(email, 'mail', 'Enviar por e-mail', '✉️ Enviar por e-mail'));
+    const extra = Array.from(groups.more.children);
+    const slots = 6;
+    const direct = actions.length + (extra.length ? 1 : 0) <= slots ? actions.length : slots - 1;
+    actions.slice(0, direct).forEach(a => newActions.appendChild(a.icon()));
+    const overflow = actions.slice(direct);
+    if (overflow.length || extra.length) {
+      overflow.reverse().forEach(a => groups.more.insertBefore(a.menu(), groups.more.firstChild));
+      const b = iconBtn('more', 'Mais ações do pedido');
+      b.classList.add('orders-grid-more');
+      b.onclick = () => showMenu(b, groups.more);
       newActions.appendChild(b);
     }
-    if (groups.more.children.length) { const b=iconBtn('more','Outras ações do pedido'); b.onclick=()=>showMenu(b,groups.more); newActions.appendChild(b); }
-    unused.append(groups.print,groups.fiscal,groups.more);
+    unused.append(groups.print,groups.fiscal,groups.fprint,groups.more);
   });
   // Fechamento da modal pelo fundo e Esc.
   modal.addEventListener('click', e=>{if(e.target===modal)closeStatus();});

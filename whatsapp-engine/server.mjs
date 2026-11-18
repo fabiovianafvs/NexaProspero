@@ -31,7 +31,7 @@ import { URL, fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
-const SERVICE_VERSION = 'engine-1.7';
+const SERVICE_VERSION = 'engine-1.8';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3333);
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/nexa-wa';
@@ -204,6 +204,8 @@ let companyTokens = readJsonSync(TOKENS_FILE, {});
 let settings = readJsonSync(SETTINGS_FILE, {});
 if (!settings.inbound || typeof settings.inbound !== 'object') settings.inbound = {};
 if (!settings.stopped || typeof settings.stopped !== 'object') settings.stopped = {};
+// Grupos do WhatsApp: só são lidos (e entregues ao sistema) nas empresas que ligarem.
+if (!settings.groups || typeof settings.groups !== 'object') settings.groups = {};
 const saveTokens = () => writeFileAtomic(TOKENS_FILE, JSON.stringify(companyTokens, null, 2));
 const saveSettings = () => writeFileAtomic(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 
@@ -295,6 +297,7 @@ function blankState(sid) {
     lastSendAt: 0,
     recent: new Map(),
     numberCache: new Map(),
+    groupNames: new Map(),
     waiters: new Set(),
   };
 }
@@ -368,7 +371,8 @@ async function startSession(sid) {
 
   const ignore = (jid) => {
     const j = String(jid || '');
-    return j.endsWith('@g.us') || j.endsWith('@broadcast') || j.endsWith('@newsletter') || j === 'status@broadcast';
+    if (j.endsWith('@g.us')) return !settings.groups[sid];
+    return j.endsWith('@broadcast') || j.endsWith('@newsletter') || j === 'status@broadcast';
   };
   const browser = Browsers?.ubuntu ? Browsers.ubuntu(BROWSER_NAME) : [BROWSER_NAME, 'Chrome', '22.0'];
   const options = {
@@ -527,6 +531,11 @@ function phoneCandidates(n) {
 async function resolveJid(state, rawTo, rawJid) {
   const jid = String(rawJid || '').trim();
   const phone = normalizePhone(rawTo);
+  // Grupo (só com a leitura de grupos ligada para a empresa).
+  if (/^[0-9]{5,40}(-[0-9]+)?@g\.us$/.test(jid)) {
+    if (!settings.groups[state.sid]) throw httpError(403, 'Grupos do WhatsApp desligados para esta empresa.');
+    return jid;
+  }
   // Prefere SEMPRE o número de telefone: enviar direto para o endereço interno
   // (@lid) derrubava a sessão ("device_removed"). Sem telefone, tenta converter
   // o @lid para o número; só em último caso usa o @lid.
@@ -589,13 +598,29 @@ function enqueueSend(state, job) {
   return run;
 }
 
-async function sendContent(sid, to, jidHint, content) {
+// Resposta citando outra mensagem (body.quoted = {id, from_me, participant, text}) e
+// marca de "Encaminhada" (body.forwarded).
+function sendExtras(body, content) {
+  if (body?.forwarded) content.contextInfo = { ...(content.contextInfo || {}), isForwarded: true, forwardingScore: 1 };
+  const q = body?.quoted;
+  if (!q || !q.id) return {};
+  return {
+    quoted: {
+      key: { remoteJid: '', id: String(q.id).slice(0, 80), fromMe: Boolean(q.from_me), ...(q.participant ? { participant: String(q.participant) } : {}) },
+      message: { conversation: String(q.text || '').slice(0, 1000) || ' ' },
+    },
+  };
+}
+
+async function sendContent(sid, to, jidHint, content, options = {}) {
   const state = getState(sid);
   await waitConnected(state, WAIT_READY_MS);
   return enqueueSend(state, async () => {
     if (!state.sock || state.status !== 'connected') throw httpError(409, 'WhatsApp desconectou antes do envio. Tente novamente.');
     const jid = await resolveJid(state, to, jidHint);
-    const sent = await state.sock.sendMessage(jid, content);
+    if (options.quoted) options.quoted.key.remoteJid = jid;
+    if (content.delete && !content.delete.remoteJid) content.delete.remoteJid = jid;
+    const sent = await state.sock.sendMessage(jid, content, options);
     rememberSent(state, sent);
     return { jid, id: String(sent?.key?.id || '') };
   });
@@ -672,11 +697,32 @@ function handleInboundOrdered(state, msg) {
   next.finally(() => { if (inboundChains.get(k) === next) inboundChains.delete(k); });
 }
 
+// Nome do grupo (guardado por 6 horas para não consultar o WhatsApp a cada mensagem).
+async function groupName(state, jid) {
+  const c = state.groupNames.get(jid);
+  if (c && Date.now() - c.at < 6 * 3600 * 1000) return c.name;
+  try {
+    const meta = await Promise.race([state.sock?.groupMetadata?.(jid), sleep(8000).then(() => null)]);
+    const name = String(meta?.subject || '');
+    if (name) state.groupNames.set(jid, { name, at: Date.now() });
+    if (state.groupNames.size > 2000) state.groupNames.delete(state.groupNames.keys().next().value);
+    return name || c?.name || '';
+  } catch (_) { return c?.name || ''; }
+}
+
 async function handleInbound(state, msg) {
   const key = msg?.key || {};
   const remote = String(key.remoteJid || '');
-  if (!remote || remote.endsWith('@g.us') || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) return;
+  if (!remote || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) return;
+  const isGroup = remote.endsWith('@g.us');
+  if (isGroup && !settings.groups[state.sid]) return;
   const id = String(key.id || '');
+  // Mensagem apagada para todos pelo cliente (ou pelo celular da empresa).
+  const proto0 = msg.message?.protocolMessage;
+  if (proto0 && Number(proto0.type ?? -1) === 0 && proto0.key?.id) {
+    deliverWebhook({ event: 'revoke', company_id: state.sid, message_id: String(proto0.key.id), reply_jid: remote });
+    return;
+  }
   // Mensagem própria: só interessa a digitada por uma pessoa no celular/WhatsApp
   // Web da empresa (as enviadas pela API ficam em state.recent).
   if (key.fromMe && (!id || state.recent.has(id))) return;
@@ -701,6 +747,9 @@ async function handleInbound(state, msg) {
       .map((c) => String(c?.vcard || '').slice(0, 1500) || `BEGIN:VCARD\nFN:${String(c?.displayName || '')}\nEND:VCARD`).join('\n');
   }
   if (!text && type === 'text') return; // reação, enquete etc.
+  // Resposta que cita outra mensagem: o sistema mostra a citação.
+  const node = m.extendedTextMessage || m.imageMessage || m.documentMessage || m.videoMessage || m.audioMessage || m.stickerMessage || m.contactMessage || m.locationMessage || {};
+  const quotedId = String(node.contextInfo?.stanzaId || '');
 
   // Contatos novos podem vir como LID; o número real vem em remoteJidAlt/senderPn.
   const alt = String(key.remoteJidAlt || key.senderPn || msg.senderPn || '');
@@ -712,6 +761,17 @@ async function handleInbound(state, msg) {
       if (pn && String(pn).includes('@s.whatsapp.net')) pnJid = String(pn);
     } catch (_) {}
   }
+  // Grupo: quem escreveu (número e nome) e o nome do grupo.
+  let groupInfo = null;
+  if (isGroup) {
+    const part = String(key.participantAlt || key.participant || msg.participant || '');
+    let partPn = part.endsWith('@s.whatsapp.net') ? part : '';
+    if (!partPn && part.endsWith('@lid')) {
+      try { const pn = await state.sock?.signalRepository?.lidMapping?.getPNForLID?.(part); if (pn && String(pn).includes('@s.whatsapp.net')) partPn = String(pn); } catch (_) {}
+    }
+    groupInfo = { group: true, group_name: await groupName(state, remote), participant: partPn ? digits(partPn.split('@')[0].split(':')[0]) : '', participant_name: key.fromMe ? '' : String(msg.pushName || '').slice(0, 120) };
+    pnJid = '';
+  }
   const payload = {
     event: key.fromMe ? 'human_reply' : 'message',
     company_id: state.sid,
@@ -722,6 +782,8 @@ async function handleInbound(state, msg) {
     type,
     text: String(text).slice(0, 4000),
     timestamp: Number(msg.messageTimestamp?.low ?? msg.messageTimestamp ?? 0) || Math.floor(Date.now() / 1000),
+    ...(quotedId ? { quoted_id: quotedId.slice(0, 80) } : {}),
+    ...(groupInfo || {}),
   };
   if (['image', 'audio', 'video', 'document', 'sticker'].includes(type)) payload.media = await storeMedia(state, msg, m, type);
   deliverWebhook(payload);
@@ -761,7 +823,8 @@ function deliverWebhook(payload) {
         await postJson(WEBHOOK_URL, body);
         return;
       } catch (error) {
-        if (i === delays.length - 1) warn(`[empresa ${payload.company_id}] Webhook de mensagem recebida falhou: ${error?.message || error}`);
+        // Situação (✓✓) de mensagem que o sistema não conhece (ex.: enviada por outro sistema): sem aviso.
+        if (i === delays.length - 1 && payload.event !== 'status') warn(`[empresa ${payload.company_id}] Webhook de mensagem recebida falhou: ${error?.message || error}`);
       }
     }
   })();
@@ -901,7 +964,8 @@ const routes = {
     const to = normalizePhone(body.to);
     const message = String(body.message || '').trim();
     if ((!to && !body.jid) || !message) return sendJson(res, 400, { ok: false, error: 'Destino e mensagem são obrigatórios.' });
-    const sent = await sendContent(sid, to, body.jid, { text: message });
+    const content = { text: message };
+    const sent = await sendContent(sid, to, body.jid, content, sendExtras(body, content));
     sendJson(res, 200, { ok: true, company_id: sid, to, jid: sent.jid, message_id: sent.id });
   },
 
@@ -926,7 +990,7 @@ const routes = {
     else if (kind === 'audio') content = { audio: buffer, mimetype, ptt: Boolean(body.ptt) };
     else content = { document: buffer, mimetype, fileName: filename };
     if (caption && kind !== 'audio') content.caption = caption;
-    const sent = await sendContent(sid, to, body.jid, content);
+    const sent = await sendContent(sid, to, body.jid, content, sendExtras(body, content));
     sendJson(res, 200, { ok: true, company_id: sid, to, filename, size: buffer.length, jid: sent.jid, message_id: sent.id });
   },
 
@@ -942,6 +1006,31 @@ const routes = {
     const vcard = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${name}`, org ? `ORG:${org};` : '', `TEL;type=CELL;type=VOICE;waid=${phone}:+${phone}`, 'END:VCARD'].filter(Boolean).join('\n');
     const sent = await sendContent(sid, to, body.jid, { contacts: { displayName: name, contacts: [{ vcard }] } });
     sendJson(res, 200, { ok: true, company_id: sid, to, jid: sent.jid, message_id: sent.id });
+  },
+
+  // Apaga para todos uma mensagem enviada pela empresa (o WhatsApp aceita por ~2 dias).
+  'POST /delete': async (req, res, body) => {
+    const sid = safeId(body.company_id);
+    if (!isCompany(req, sid)) return denied(res);
+    const id = String(body.message_id || '').replace(/[^0-9A-Za-z_-]/g, '').slice(0, 80);
+    if (!id || (!body.to && !body.jid)) return sendJson(res, 400, { ok: false, error: 'Mensagem e destino são obrigatórios.' });
+    const to = normalizePhone(body.to);
+    const sent = await sendContent(sid, to, body.jid, { delete: { remoteJid: '', fromMe: true, id } }, {});
+    sendJson(res, 200, { ok: true, company_id: sid, jid: sent.jid, message_id: id });
+  },
+
+  // Grupos de que o número participa (para a aba Grupos do Atendimento).
+  'GET /groups': async (req, res, _body, query) => {
+    const sid = safeId(query.get('company_id'));
+    if (!isCompany(req, sid)) return denied(res);
+    if (!settings.groups[sid]) return sendJson(res, 409, { ok: false, error: 'Grupos do WhatsApp desligados para esta empresa.' });
+    const state = getState(sid);
+    await waitConnected(state, WAIT_READY_MS);
+    const all = await state.sock.groupFetchAllParticipating();
+    const items = Object.values(all || {}).map((g) => ({ jid: String(g.id || ''), name: String(g.subject || ''), size: Array.isArray(g.participants) ? g.participants.length : 0 }))
+      .filter((g) => g.jid.endsWith('@g.us'));
+    for (const g of items) if (g.name) state.groupNames.set(g.jid, { name: g.name, at: Date.now() });
+    sendJson(res, 200, { ok: true, company_id: sid, items });
   },
 
   'GET /media': async (req, res, _body, query) => {
@@ -994,8 +1083,12 @@ const routes = {
     if (!isCompany(req, sid)) return denied(res);
     if (body.enabled) settings.inbound[sid] = true;
     else delete settings.inbound[sid];
+    if (body.groups !== undefined) {
+      if (body.groups && body.enabled) settings.groups[sid] = true;
+      else delete settings.groups[sid];
+    }
     await saveSettings();
-    sendJson(res, 200, { ok: true, company_id: sid, inbound_enabled: Boolean(settings.inbound[sid]), webhook_configured: Boolean(WEBHOOK_URL) });
+    sendJson(res, 200, { ok: true, company_id: sid, inbound_enabled: Boolean(settings.inbound[sid]), groups_enabled: Boolean(settings.groups[sid]), webhook_configured: Boolean(WEBHOOK_URL) });
   },
 
   'GET /admin/sessions': async (req, res) => {

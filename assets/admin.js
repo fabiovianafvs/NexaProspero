@@ -459,7 +459,17 @@
       // nesta aba. A sobreposição de processamento ficaria presa indefinidamente.
       // O servidor continua validando permissão/empresa antes do download.
       if(/(?:[?&]action=)(?:export_model|export_tributacoes)(?:&|$)/i.test(href)) return;
-      window.setTimeout(function(){ if(!ev.defaultPrevented) showProcessing(stepsForLink(a)); }, 0);
+      // Downloads (anexos do WhatsApp, arquivos com ?download=1): a página não muda;
+      // se o usuário cancelar a janela de salvar, o "Carregando..." ficava girando.
+      if(/[?&]download=1(?:&|$)/i.test(href) || /(?:^|\/)whatsapp_midia\.php/i.test(href)) return;
+      window.setTimeout(function(){
+        if(ev.defaultPrevented) return;
+        showProcessing(stepsForLink(a));
+        // Segurança: se em 20 s a página continua aqui (download cancelado, arquivo
+        // baixado etc.), libera a tela.
+        var here = location.href;
+        window.setTimeout(function(){ if(location.href === here && document.visibilityState === 'visible') hideProcessing(); }, 20000);
+      }, 0);
       return;
     }
     if(clicked.type && String(clicked.type).toLowerCase() === 'submit') return;

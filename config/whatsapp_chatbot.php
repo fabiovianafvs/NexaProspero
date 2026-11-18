@@ -86,6 +86,8 @@ if (!function_exists('whatsapp_bot_defaults')) {
       'offhours_text' => "Olá{nome}! No momento estamos *fora do horário de atendimento*.\n\nNosso horário:\n{horarios}\n\nSua mensagem fica registrada e respondemos assim que possível. 🙂",
       'offhours_queue_text' => "Certo! Registrei sua solicitação para *{setor}*. Como estamos fora do horário, um atendente vai responder no próximo horário de atendimento. 🙂",
       'offhours_menu' => true,
+      // Grupos do WhatsApp na tela de Atendimento (aba Grupos). O robô nunca responde em grupo.
+      'groups_enabled' => false,
     ];
   }
 }
@@ -202,6 +204,7 @@ if (!function_exists('whatsapp_bot_config')) {
     $cfg['show_sends'] = !empty($cfg['show_sends']);
     $cfg['hours_enabled'] = !empty($cfg['hours_enabled']);
     $cfg['offhours_menu'] = !empty($cfg['offhours_menu']);
+    $cfg['groups_enabled'] = !empty($cfg['groups_enabled']);
     $cfg['hours'] = whatsapp_bot_hours_norm($cfg['hours']);
     $cfg['pause_hours'] = max(1, min(72, (int)$cfg['pause_hours']));
     foreach (['welcome', 'queue_text', 'accept_text', 'close_text', 'holidays', 'offhours_text', 'offhours_queue_text'] as $k) $cfg[$k] = (string)$cfg[$k];
@@ -219,7 +222,8 @@ if (!function_exists('whatsapp_bot_sync_engine')) {
     }
     $sid = whatsapp_service_company_id($waCfg, $companyId);
     try {
-      $res = whatsapp_api_request(array_merge($waCfg, ['timeout_seconds' => 10]), 'POST', '/inbound/config', ['company_id' => $sid, 'enabled' => $enabled]);
+      $groups = $enabled && !empty(whatsapp_bot_config($pdo, $companyId)['groups_enabled']);
+      $res = whatsapp_api_request(array_merge($waCfg, ['timeout_seconds' => 10]), 'POST', '/inbound/config', ['company_id' => $sid, 'enabled' => $enabled, 'groups' => $groups]);
       return ['ok' => !empty($res['ok']), 'message' => !empty($res['webhook_configured']) ? '' : 'O motor ainda não tem o endereço de retorno configurado.'];
     } catch (Throwable $e) {
       return ['ok' => false, 'message' => $e->getMessage()];
@@ -877,6 +881,20 @@ if (!function_exists('whatsapp_chat_message_exists')) {
   }
 }
 
+if (!function_exists('whatsapp_chat_has_v3')) {
+  /** Colunas de responder/encaminhar/apagar/grupos (migração 20261118_whatsapp_atendimento_v3). */
+  function whatsapp_chat_has_v3(PDO $pdo): bool {
+    static $memo = null;
+    if ($memo !== null) return $memo;
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='whatsapp_bot_messages' AND column_name='reply_to_id'");
+      return $memo = (int)$st->fetchColumn() === 1;
+    } catch (Throwable $e) {
+      return $memo = false;
+    }
+  }
+}
+
 if (!function_exists('whatsapp_chat_log')) {
   /**
    * Grava uma mensagem na conversa. $sender: cliente | robo | atendente | celular | sistema.
@@ -885,14 +903,25 @@ if (!function_exists('whatsapp_chat_log')) {
   function whatsapp_chat_log(PDO $pdo, int $companyId, array $chat, string $direction, string $sender, string $body, array $opt = []): int {
     $now = date('Y-m-d H:i:s');
     $messageId = substr((string)($opt['message_id'] ?? ''), 0, 80);
+    $cols = 'company_id, contact, session_id, direction, sender, user_id, message_id, msg_type, body, media_path, media_mime, media_name, media_size, send_ok, created_at';
+    $vals = [
+      $companyId, (string)$chat['contact'], (int)$chat['id'], $direction, $sender, ($opt['user_id'] ?? null) ?: null,
+      $messageId !== '' ? $messageId : null, (string)($opt['type'] ?? 'text'), mb_substr($body, 0, 4000),
+      $opt['media_path'] ?? null, $opt['media_mime'] ?? null, isset($opt['media_name']) ? mb_substr((string)$opt['media_name'], 0, 180) : null,
+      isset($opt['media_size']) ? (int)$opt['media_size'] : null, array_key_exists('send_ok', $opt) ? ((int)(bool)$opt['send_ok']) : 1, $now,
+    ];
+    // Responder (citação), encaminhada e quem escreveu no grupo.
+    if (whatsapp_chat_has_v3($pdo)) {
+      $cols .= ', reply_to_id, quoted_message_id, forwarded, participant_phone, participant_name';
+      array_push($vals,
+        (int)($opt['reply_to_id'] ?? 0) ?: null,
+        substr((string)($opt['quoted_message_id'] ?? ''), 0, 80) ?: null,
+        !empty($opt['forwarded']) ? 1 : 0,
+        substr(whatsapp_bot_digits($opt['participant_phone'] ?? ''), 0, 20) ?: null,
+        mb_substr(trim((string)($opt['participant_name'] ?? '')), 0, 120) ?: null);
+    }
     try {
-      $pdo->prepare('INSERT INTO whatsapp_bot_messages (company_id, contact, session_id, direction, sender, user_id, message_id, msg_type, body, media_path, media_mime, media_name, media_size, send_ok, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-          $companyId, (string)$chat['contact'], (int)$chat['id'], $direction, $sender, ($opt['user_id'] ?? null) ?: null,
-          $messageId !== '' ? $messageId : null, (string)($opt['type'] ?? 'text'), mb_substr($body, 0, 4000),
-          $opt['media_path'] ?? null, $opt['media_mime'] ?? null, isset($opt['media_name']) ? mb_substr((string)$opt['media_name'], 0, 180) : null,
-          isset($opt['media_size']) ? (int)$opt['media_size'] : null, array_key_exists('send_ok', $opt) ? ((int)(bool)$opt['send_ok']) : 1, $now,
-        ]);
+      $pdo->prepare('INSERT INTO whatsapp_bot_messages (' . $cols . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')')->execute($vals);
     } catch (PDOException $e) {
       if ((string)$e->getCode() === '23000') return 0; // o motor reenviou a mesma mensagem
       throw $e;
@@ -961,7 +990,9 @@ if (!function_exists('whatsapp_bot_status_update')) {
     if ($status <= 0) return 'ignorado';
     $st = $pdo->prepare("UPDATE whatsapp_bot_messages SET wa_status=? WHERE company_id=? AND message_id=? AND direction='OUT' AND (wa_status IS NULL OR wa_status < ?)");
     $st->execute([$status, $companyId, $messageId, $status]);
-    if ($st->rowCount() < 1) return 'sem mudança';
+    // A situação pode chegar antes de a mensagem ser gravada (o envio ainda está terminando):
+    // "não encontrada" faz o motor tentar de novo em alguns segundos.
+    if ($st->rowCount() < 1) return whatsapp_chat_message_exists($pdo, $companyId, $messageId) ? 'sem mudança' : 'não encontrada';
     $q = $pdo->prepare('SELECT session_id FROM whatsapp_bot_messages WHERE company_id=? AND message_id=? LIMIT 1');
     $q->execute([$companyId, $messageId]);
     $sid = (int)$q->fetchColumn();
@@ -1077,8 +1108,8 @@ if (!function_exists('whatsapp_chat_ctx')) {
 
 if (!function_exists('whatsapp_chat_send_text')) {
   /** Envia texto ao contato e registra na conversa. */
-  function whatsapp_chat_send_text(PDO $pdo, int $companyId, array $ctx, string $text, string $sender = 'robo', ?int $userId = null, string $wireText = ''): bool {
-    $payload = ['company_id' => $ctx['sid'], 'message' => $wireText !== '' ? $wireText : $text];
+  function whatsapp_chat_send_text(PDO $pdo, int $companyId, array $ctx, string $text, string $sender = 'robo', ?int $userId = null, string $wireText = '', array $extra = []): bool {
+    $payload = ['company_id' => $ctx['sid'], 'message' => $wireText !== '' ? $wireText : $text] + whatsapp_chat_send_extras($ctx, $extra);
     if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone'];
     // Responde sempre pelo número de telefone quando ele é conhecido: o envio direto
     // para o endereço interno (@lid) fazia o WhatsApp derrubar a sessão (device_removed).
@@ -1091,14 +1122,43 @@ if (!function_exists('whatsapp_chat_send_text')) {
       $ok = false;
       $text .= "\n[não enviado: " . $e->getMessage() . ']';
     }
-    whatsapp_chat_log($pdo, $companyId, $ctx['chat'], 'OUT', $sender, $text, ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok]);
+    whatsapp_chat_log($pdo, $companyId, $ctx['chat'], 'OUT', $sender, $text, ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok] + whatsapp_chat_log_extras($extra));
     return $ok;
+  }
+}
+
+if (!function_exists('whatsapp_chat_send_extras')) {
+  /**
+   * Campos do envio para responder citando uma mensagem ($extra['reply'] = linha de
+   * whatsapp_bot_messages) e para marcar como "Encaminhada" ($extra['forwarded']).
+   */
+  function whatsapp_chat_send_extras(array $ctx, array $extra): array {
+    $out = [];
+    if (!empty($extra['forwarded'])) $out['forwarded'] = true;
+    $r = $extra['reply'] ?? null;
+    if (is_array($r) && trim((string)($r['message_id'] ?? '')) !== '') {
+      $isGroup = str_ends_with((string)($ctx['contact'] ?? ''), '@g.us');
+      $text = trim((string)($r['body'] ?? '')) ?: whatsapp_chat_type_label((string)($r['msg_type'] ?? 'text'));
+      $q = ['id' => (string)$r['message_id'], 'from_me' => ($r['direction'] ?? '') === 'OUT', 'text' => mb_substr($text, 0, 500)];
+      if ($isGroup && ($r['direction'] ?? '') === 'IN' && whatsapp_bot_digits($r['participant_phone'] ?? '') !== '') $q['participant'] = whatsapp_bot_digits($r['participant_phone']) . '@s.whatsapp.net';
+      $out['quoted'] = $q;
+    }
+    return $out;
+  }
+}
+
+if (!function_exists('whatsapp_chat_log_extras')) {
+  function whatsapp_chat_log_extras(array $extra): array {
+    $out = [];
+    if (is_array($extra['reply'] ?? null) && (int)($extra['reply']['id'] ?? 0) > 0) $out['reply_to_id'] = (int)$extra['reply']['id'];
+    if (!empty($extra['forwarded'])) $out['forwarded'] = 1;
+    return $out;
   }
 }
 
 if (!function_exists('whatsapp_chat_send_file')) {
   /** Envia arquivo (foto, vídeo, áudio ou documento) e registra na conversa. */
-  function whatsapp_chat_send_file(PDO $pdo, int $companyId, array $ctx, string $bytes, string $mime, string $filename, string $caption = '', string $sender = 'robo', ?int $userId = null, bool $store = true, bool $ptt = false): bool {
+  function whatsapp_chat_send_file(PDO $pdo, int $companyId, array $ctx, string $bytes, string $mime, string $filename, string $caption = '', string $sender = 'robo', ?int $userId = null, bool $store = true, bool $ptt = false, array $extra = []): bool {
     $mime = strtolower(trim($mime)) ?: 'application/octet-stream';
     // Tipo base sem parâmetros (ex.: "audio/ogg; codecs=opus" -> "audio/ogg").
     $base = trim(explode(';', $mime)[0]);
@@ -1110,7 +1170,7 @@ if (!function_exists('whatsapp_chat_send_file')) {
     $ptt = $ptt && $kind === 'audio' && $base === 'audio/ogg';
     if ($ptt) $mime = 'audio/ogg; codecs=opus';
     $filename = mb_substr(basename($filename) ?: 'arquivo', 0, 150);
-    $payload = ['company_id' => $ctx['sid'], 'kind' => $kind, 'caption' => $caption, 'filename' => $filename, 'mimetype' => $mime, 'file_base64' => base64_encode($bytes)];
+    $payload = ['company_id' => $ctx['sid'], 'kind' => $kind, 'caption' => $caption, 'filename' => $filename, 'mimetype' => $mime, 'file_base64' => base64_encode($bytes)] + whatsapp_chat_send_extras($ctx, $extra);
     if ($ptt) $payload['ptt'] = true;
     if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone'];
     // Responde sempre pelo número de telefone quando ele é conhecido: o envio direto
@@ -1124,7 +1184,7 @@ if (!function_exists('whatsapp_chat_send_file')) {
       $ok = false;
       $error = $e->getMessage();
     }
-    $opt = ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok, 'type' => $kind, 'media_mime' => $base, 'media_name' => $filename, 'media_size' => strlen($bytes)];
+    $opt = ['user_id' => $userId, 'message_id' => $messageId, 'send_ok' => $ok, 'type' => $kind, 'media_mime' => $base, 'media_name' => $filename, 'media_size' => strlen($bytes)] + whatsapp_chat_log_extras($extra);
     if ($store) {
       try { $opt['media_path'] = whatsapp_media_store($companyId, $bytes, $base, $filename); } catch (Throwable $e) {}
     }
@@ -1544,6 +1604,7 @@ if (!function_exists('whatsapp_bot_human_reply')) {
    */
   function whatsapp_bot_human_reply(PDO $pdo, array $payload): string {
     if (!whatsapp_bot_ready($pdo)) return 'tabelas ausentes';
+    if (!empty($payload['group'])) return whatsapp_bot_group_message($pdo, $payload, true);
     $sid = whatsapp_bot_digits($payload['company_id'] ?? '');
     $companyId = whatsapp_bot_company_by_session($pdo, $sid);
     if ($companyId <= 0) return 'empresa não encontrada';
@@ -1562,7 +1623,7 @@ if (!function_exists('whatsapp_bot_human_reply')) {
       $body = trim((string)($payload['text'] ?? ''));
       if (!empty($media['media_error'])) $body = trim($body . "\n[" . $media['media_error'] . ']');
       unset($media['media_error']);
-      if (!whatsapp_chat_log($pdo, $companyId, $chat, 'OUT', 'celular', $body, array_merge($media, ['message_id' => $messageId, 'type' => $type]))) return 'repetida';
+      if (!whatsapp_chat_log($pdo, $companyId, $chat, 'OUT', 'celular', $body, array_merge($media, ['message_id' => $messageId, 'type' => $type, 'quoted_message_id' => (string)($payload['quoted_id'] ?? '')]))) return 'repetida';
       $now = date('Y-m-d H:i:s');
       $fields = ['human_at' => $now, 'paused_until' => null];
       if ($chat['status'] !== 'ATENDIMENTO') {
@@ -1577,6 +1638,91 @@ if (!function_exists('whatsapp_bot_human_reply')) {
   }
 }
 
+if (!function_exists('whatsapp_bot_group_chat')) {
+  /** Conversa de um grupo do WhatsApp (status GRUPO: fora do robô, da fila e do Painel). */
+  function whatsapp_bot_group_chat(PDO $pdo, int $companyId, string $jid, string $name = ''): array {
+    $jid = substr(trim($jid), 0, 80);
+    if (!preg_match('/^[0-9]{5,40}(-[0-9]+)?@g\.us$/', $jid)) throw new RuntimeException('Grupo inválido.');
+    $st = $pdo->prepare('SELECT id FROM whatsapp_bot_sessions WHERE company_id=? AND contact=? LIMIT 1');
+    $st->execute([$companyId, $jid]);
+    $id = (int)$st->fetchColumn();
+    $name = mb_substr(trim($name), 0, 150);
+    $v3 = whatsapp_chat_has_v3($pdo);
+    if (!$id) {
+      try {
+        $pdo->prepare("INSERT INTO whatsapp_bot_sessions (company_id, contact, phone, push_name, state, status, data_json, created_at) VALUES (?,?,NULL,?, 'GRUPO', 'GRUPO', '{}', ?)")
+          ->execute([$companyId, $jid, $name !== '' ? $name : null, date('Y-m-d H:i:s')]);
+        $id = (int)$pdo->lastInsertId();
+      } catch (PDOException $e) {
+        if ((string)$e->getCode() !== '23000') throw $e;
+        $st->execute([$companyId, $jid]);
+        $id = (int)$st->fetchColumn();
+      }
+    }
+    $chat = whatsapp_chat_get($pdo, $companyId, $id) ?? [];
+    $upd = [];
+    if ($chat && ($chat['status'] ?? '') !== 'GRUPO') { $upd['status'] = 'GRUPO'; $upd['state'] = 'GRUPO'; $upd['user_id'] = null; }
+    if ($name !== '' && $name !== (string)($chat['push_name'] ?? '')) $upd['push_name'] = $name;
+    if ($upd) {
+      // Sem passar pelo registro do Painel: grupo não é atendimento.
+      $sets = []; $vals = [];
+      foreach ($upd as $k => $v) { $sets[] = $k . '=?'; $vals[] = $v; }
+      if ($v3 && $name !== '') { $sets[] = 'group_name=?'; $vals[] = $name; }
+      $vals[] = $companyId; $vals[] = $id;
+      $pdo->prepare('UPDATE whatsapp_bot_sessions SET ' . implode(', ', $sets) . ' WHERE company_id=? AND id=?')->execute($vals);
+      $chat = whatsapp_chat_get($pdo, $companyId, $id) ?? $chat;
+    }
+    return $chat;
+  }
+}
+
+if (!function_exists('whatsapp_bot_group_message')) {
+  /** Mensagem de grupo (de um participante ou digitada no celular da empresa): só registra. */
+  function whatsapp_bot_group_message(PDO $pdo, array $payload, bool $fromMe): string {
+    $sid = whatsapp_bot_digits($payload['company_id'] ?? '');
+    $companyId = whatsapp_bot_company_by_session($pdo, $sid);
+    if ($companyId <= 0) return 'empresa não encontrada';
+    if (!whatsapp_bot_module_enabled($pdo, $companyId)) return 'módulo não liberado';
+    if (empty(whatsapp_bot_config($pdo, $companyId)['groups_enabled'])) return 'grupos desligados';
+    $jid = (string)($payload['reply_jid'] ?? '');
+    $messageId = substr((string)($payload['message_id'] ?? ''), 0, 80);
+    if (whatsapp_chat_message_exists($pdo, $companyId, $messageId)) return 'repetida';
+    $chat = whatsapp_bot_group_chat($pdo, $companyId, $jid, (string)($payload['group_name'] ?? ''));
+    if (!$chat) return 'falha ao abrir o grupo';
+    $wa = whatsapp_load_config($pdo, $companyId, false, true);
+    $media = whatsapp_chat_media_from_payload($companyId, $wa, $sid, $payload);
+    $body = trim((string)($payload['text'] ?? ''));
+    if (!empty($media['media_error'])) $body = trim($body . "\n[" . $media['media_error'] . ']');
+    unset($media['media_error']);
+    $opt = array_merge($media, [
+      'message_id' => $messageId, 'type' => (string)($payload['type'] ?? 'text'), 'quoted_message_id' => (string)($payload['quoted_id'] ?? ''),
+      'participant_phone' => (string)($payload['participant'] ?? ''), 'participant_name' => (string)($payload['participant_name'] ?? ''),
+    ]);
+    if (!whatsapp_chat_log($pdo, $companyId, $chat, $fromMe ? 'OUT' : 'IN', $fromMe ? 'celular' : 'cliente', $body, $opt)) return 'repetida';
+    if (!$fromMe) $pdo->prepare('UPDATE whatsapp_bot_sessions SET unread=unread+1 WHERE company_id=? AND id=?')->execute([$companyId, (int)$chat['id']]);
+    whatsapp_chat_notify($companyId, (int)$chat['id'], ['status' => 'GRUPO', 'new_message' => !$fromMe]);
+    return 'grupo';
+  }
+}
+
+if (!function_exists('whatsapp_bot_revoke')) {
+  /** Mensagem apagada para todos no WhatsApp (pelo cliente ou pelo celular da empresa). */
+  function whatsapp_bot_revoke(PDO $pdo, array $payload): string {
+    if (!whatsapp_bot_ready($pdo) || !whatsapp_chat_has_v3($pdo)) return 'sem coluna';
+    $companyId = whatsapp_bot_company_by_session($pdo, whatsapp_bot_digits($payload['company_id'] ?? ''));
+    $messageId = substr((string)($payload['message_id'] ?? ''), 0, 80);
+    if ($companyId <= 0 || $messageId === '') return 'ignorado';
+    $st = $pdo->prepare('UPDATE whatsapp_bot_messages SET deleted_at=?, deleted_for_all=1 WHERE company_id=? AND message_id=? AND deleted_at IS NULL');
+    $st->execute([date('Y-m-d H:i:s'), $companyId, $messageId]);
+    if ($st->rowCount() < 1) return 'sem mudança';
+    $q = $pdo->prepare('SELECT session_id FROM whatsapp_bot_messages WHERE company_id=? AND message_id=? LIMIT 1');
+    $q->execute([$companyId, $messageId]);
+    $sid = (int)$q->fetchColumn();
+    if ($sid > 0) whatsapp_chat_notify($companyId, $sid, ['deleted' => 1]);
+    return 'apagada';
+  }
+}
+
 if (!function_exists('whatsapp_bot_handle')) {
   /**
    * Processa uma mensagem recebida do cliente (payload do motor).
@@ -1584,6 +1730,8 @@ if (!function_exists('whatsapp_bot_handle')) {
    */
   function whatsapp_bot_handle(PDO $pdo, array $payload): string {
     if (!whatsapp_bot_ready($pdo)) return 'tabelas ausentes';
+    // Grupo do WhatsApp: só registra a mensagem (o robô nunca responde em grupo).
+    if (!empty($payload['group']) || str_ends_with((string)($payload['reply_jid'] ?? ''), '@g.us')) return whatsapp_bot_group_message($pdo, $payload, false);
     $sid = whatsapp_bot_digits($payload['company_id'] ?? '');
     $companyId = whatsapp_bot_company_by_session($pdo, $sid);
     if ($companyId <= 0) return 'empresa não encontrada';
@@ -1616,7 +1764,7 @@ if (!function_exists('whatsapp_bot_handle')) {
       $body = $text;
       if (!empty($media['media_error'])) $body = trim($body . "\n[" . $media['media_error'] . ']');
       unset($media['media_error']);
-      if (!whatsapp_chat_log($pdo, $companyId, $chat, 'IN', 'cliente', $body, array_merge($media, ['message_id' => $messageId, 'type' => $type]))) return 'repetida';
+      if (!whatsapp_chat_log($pdo, $companyId, $chat, 'IN', 'cliente', $body, array_merge($media, ['message_id' => $messageId, 'type' => $type, 'quoted_message_id' => (string)($payload['quoted_id'] ?? '')]))) return 'repetida';
 
       $now = time();
       $status = (string)$chat['status'];

@@ -165,6 +165,20 @@ if (!function_exists('pedidos_nfse_quick_control')) {
   }
 }
 
+if (!function_exists('pedidos_fiscal_print_links')) {
+  /** Botões para imprimir os documentos fiscais AUTORIZADOS do pedido (DANFE NF-e, DANFC-e e DANFSe). */
+  function pedidos_fiscal_print_links(?array $nfceDoc, ?array $nfeDoc, ?array $nfseDoc, string $returnTo): string {
+    $html = '';
+    foreach ([['NFC-e', $nfceDoc, 'fiscal_nfce_imprimir.php'], ['NF-e', $nfeDoc, 'fiscal_nfce_imprimir.php'], ['NFS-e', $nfseDoc, 'fiscal_nfse_imprimir.php']] as [$label, $doc, $page]) {
+      if (!$doc || (int)($doc['id'] ?? 0) <= 0) continue;
+      $status = strtoupper(trim((string)($label === 'NFS-e' ? ($doc['nfse_status'] ?? $doc['status'] ?? '') : ($doc['status'] ?? ''))));
+      if ($status !== 'AUTORIZADA') continue;
+      $html .= '<a class="btn btn-sm" data-fiscal-print="1" data-no-processing href="' . pedidos_h($page . '?doc_id=' . (int)$doc['id'] . '&return_to=' . rawurlencode($returnTo)) . '">Imprimir ' . $label . '</a>';
+    }
+    return $html;
+  }
+}
+
 if (!function_exists('pedidos_money_br')) {
   function pedidos_money_br($value): string {
     return 'R$ ' . number_format((float)$value, 2, ',', '.');
@@ -259,6 +273,10 @@ if (function_exists('mb_substr')) {
   $fQ = substr($fQ, 0, 80);
 }
 $fStatus = trim((string)($_GET['status'] ?? ''));
+// Situação dos documentos fiscais do pedido (NFC-e, NF-e e NFS-e).
+$fiscalFilterOptions = ['sem' => 'Sem documento fiscal', 'autorizada' => 'Autorizada', 'processando' => 'Em andamento (pré, transmitindo, aguardando)', 'rejeitada' => 'Rejeitada / com erro', 'cancelada' => 'Cancelada'];
+$fFiscal = trim((string)($_GET['fiscal'] ?? ''));
+if (!isset($fiscalFilterOptions[$fFiscal])) $fFiscal = '';
 $ordersPeriodCfg = nexa_screen_performance_get($pdo, $ordersCompanyId);
 $ordersInitialPeriod = nexa_screen_performance_period((int)($ordersPeriodCfg['orders_days'] ?? 10));
 $ordersHasDateRequest = array_key_exists('dt_ini', $_GET) || array_key_exists('dt_fim', $_GET);
@@ -313,6 +331,31 @@ if ($fQ !== '') {
 if ($fStatus !== '') {
   $where[] = 'status = ?';
   $params[] = $fStatus;
+}
+
+// Filtro pela situação fiscal: vale o documento autorizado, se houver; senão o mais recente
+// (NFC-e, NF-e ou NFS-e do pedido; com O.S., também os documentos emitidos pela O.S.).
+if ($fFiscal !== '' && $showFiscalNfceButton) {
+  try {
+    $fiscalHasNfse = (bool)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'fiscal_nfse_details'")->fetchColumn();
+    $fiscalHasOs = (bool)$pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'os_orders' AND column_name = 'pedido_id'")->fetchColumn();
+  } catch (Throwable $e) { $fiscalHasNfse = false; $fiscalHasOs = false; }
+  $fiscalStatusCol = $fiscalHasNfse ? "UPPER(COALESCE(NULLIF(nd.status,''), fd.status, ''))" : "UPPER(COALESCE(fd.status, ''))";
+  $fiscalJoin = $fiscalHasNfse ? ' LEFT JOIN fiscal_nfse_details nd ON nd.company_id = fd.company_id AND nd.fiscal_document_id = fd.id' : '';
+  $fiscalSub = static function (string $source) use ($fiscalStatusCol, $fiscalJoin): string {
+    return "(SELECT $fiscalStatusCol FROM fiscal_documents fd$fiscalJoin WHERE fd.company_id = pedidos.company_id AND $source"
+      . " AND fd.model IN ('55','65','NFSE') AND fd.direction = 'SAIDA' ORDER BY ($fiscalStatusCol = 'AUTORIZADA') DESC, fd.id DESC LIMIT 1)";
+  };
+  $fiscalExpr = $fiscalSub("fd.source_type = 'PEDIDO' AND fd.source_id = pedidos.id");
+  if ($fiscalHasOs) {
+    $fiscalExpr = 'COALESCE(' . $fiscalExpr . ', ' . $fiscalSub("fd.source_type = 'ORDEM_SERVICO' AND fd.source_id IN (SELECT o.id FROM os_orders o WHERE o.company_id = pedidos.company_id AND o.pedido_id = pedidos.id)") . ')';
+  }
+  $fiscalBad = "'REJEITADA','ERRO_AUTORIZACAO','DUPLICIDADE','ERRO_COMUNICACAO','ERRO','DENEGADA'";
+  if ($fFiscal === 'sem') $where[] = "$fiscalExpr IS NULL";
+  elseif ($fFiscal === 'autorizada') $where[] = "$fiscalExpr = 'AUTORIZADA'";
+  elseif ($fFiscal === 'cancelada') $where[] = "$fiscalExpr = 'CANCELADA'";
+  elseif ($fFiscal === 'rejeitada') $where[] = "$fiscalExpr IN ($fiscalBad)";
+  else $where[] = "$fiscalExpr NOT IN ('AUTORIZADA','CANCELADA',$fiscalBad)";
 }
 
 if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $fIni)) {
@@ -380,9 +423,9 @@ $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 // Links de navegação preservam filtros e contexto operacional autenticado.
-$ordersGridPageUrl = static function (int $page, int $pageSize) use ($fQ, $fStatus, $fIni, $fFim, $fPrevIni, $fPrevFim, $ordersCrossContext): string {
+$ordersGridPageUrl = static function (int $page, int $pageSize) use ($fQ, $fStatus, $fFiscal, $fIni, $fFim, $fPrevIni, $fPrevFim, $ordersCrossContext): string {
   $qs = http_build_query([
-    'q' => $fQ, 'status' => $fStatus, 'dt_ini' => $fIni, 'dt_fim' => $fFim,
+    'q' => $fQ, 'status' => $fStatus, 'fiscal' => $fFiscal, 'dt_ini' => $fIni, 'dt_fim' => $fFim,
     'prev_ini' => $fPrevIni, 'prev_fim' => $fPrevFim,
     'pg' => $page, 'por_pagina' => $pageSize,
   ]);
@@ -816,6 +859,16 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
       <?php endforeach; ?>
     </select>
   </label>
+  <?php if ($showFiscalNfceButton): ?>
+  <label>Situação fiscal
+    <select name="fiscal">
+      <option value="" <?= $fFiscal===''?'selected':'' ?>>Todas</option>
+      <?php foreach ($fiscalFilterOptions as $opt => $optLabel): ?>
+        <option value="<?= pedidos_h($opt) ?>" <?= $fFiscal===$opt?'selected':'' ?>><?= pedidos_h($optLabel) ?></option>
+      <?php endforeach; ?>
+    </select>
+  </label>
+  <?php endif; ?>
   <label>De
     <input type="date" name="dt_ini" value="<?= pedidos_h($fIni) ?>">
   </label>
@@ -850,7 +903,7 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
         <div class="orders-grid-toolbar" id="ordersGridToolbar">
           <form method="get" class="orders-grid-pagesize" title="Quantidade máxima de pedidos por página">
             <?php if ($ordersCrossContext && $ordersMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= pedidos_h($ordersMcCtx) ?>"><?php endif; ?>
-            <input type="hidden" name="q" value="<?= pedidos_h($fQ) ?>"><input type="hidden" name="status" value="<?= pedidos_h($fStatus) ?>">
+            <input type="hidden" name="q" value="<?= pedidos_h($fQ) ?>"><input type="hidden" name="status" value="<?= pedidos_h($fStatus) ?>"><input type="hidden" name="fiscal" value="<?= pedidos_h($fFiscal) ?>">
             <input type="hidden" name="dt_ini" value="<?= pedidos_h($fIni) ?>"><input type="hidden" name="dt_fim" value="<?= pedidos_h($fFim) ?>">
             <input type="hidden" name="prev_ini" value="<?= pedidos_h($fPrevIni) ?>"><input type="hidden" name="prev_fim" value="<?= pedidos_h($fPrevFim) ?>">
             <label for="ordersGridPageSize">Exibir</label>
@@ -1137,6 +1190,7 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
                     </div>
                   <?php endif; ?>
                 <?php endif; ?>
+                <?php if ($showFiscalNfceButton): ?><?= pedidos_fiscal_print_links($nfceDoc, $nfeDoc, $nfseDoc, $returnTo) ?><?php endif; ?>
                 <?php if ($wlink): ?>
                   <?php if (!$ordersCrossContext): ?>
                   <a class="btn btn-sm" href="pedido_whatsapp.php?id=<?= $id ?>&documentos=1&return_to=<?= rawurlencode($returnTo) ?>" title="Enviar pedido, boleto e nota fiscal pelo WhatsApp">WhatsApp</a>
@@ -1394,6 +1448,7 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
                 </div>
               <?php endif; ?>
             <?php endif; ?>
+            <?php if ($showFiscalNfceButton): ?><?= pedidos_fiscal_print_links($nfceDoc, $nfeDoc, $nfseDoc, $returnTo) ?><?php endif; ?>
             <?php if ($wlink): ?>
               <?php if (!$ordersCrossContext): ?>
               <a class="btn btn-sm" href="pedido_whatsapp.php?id=<?= $id ?>&documentos=1&return_to=<?= rawurlencode($returnTo) ?>" title="Enviar pedido, boleto e nota fiscal pelo WhatsApp">WhatsApp</a>
@@ -1451,8 +1506,8 @@ window.nexaOrdersGridConfig = <?= json_encode([
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/pedidos_actions_modal_v1.js?v=20261022_1805" defer></script>
-<script src="assets/pedidos_grid_v2.js?v=20261108_cols2" defer></script>
-<script src="assets/pedidos_mobile_cards_v2.js?v=20261022_1805_modal" defer></script>
+<script src="assets/pedidos_grid_v2.js?v=20261118_acoes6" defer></script>
+<script src="assets/pedidos_mobile_cards_v2.js?v=20261118_acoes6" defer></script>
 <?php endif; ?>
 <script>
   (function(){
