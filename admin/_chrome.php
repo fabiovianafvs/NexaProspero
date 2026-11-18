@@ -677,7 +677,7 @@ function admin_topbar(string $title, string $active=''): void {
       $links = $filtered;
       try {
         require_once __DIR__ . '/../config/chat_interno.php';
-        if (chat_ready($pdoAdmin) && !isset($links['chat_interno'])) {
+        if (chat_ready($pdoAdmin) && !isset($links['chat_interno']) && chat_user_allowed($pdoAdmin, (int)COMPANY_ID)) {
           $chatPos = array_search('inicio', array_keys($links), true);
           $chatPos = $chatPos === false ? 0 : $chatPos + 1;
           $links = array_slice($links, 0, $chatPos, true) + ['chat_interno' => ['Chat interno', 'chat.php']] + array_slice($links, $chatPos, null, true);
@@ -1412,7 +1412,7 @@ function admin_footer(): void {
   try {
     if (empty($GLOBALS['NEXA_CHAT_PAGE']) && isset($pdo) && $pdo instanceof PDO && defined('COMPANY_ID') && (int)COMPANY_ID > 0 && function_exists('auth_user_id') && (int)(auth_user_id() ?? 0) > 0) {
       require_once __DIR__ . '/../config/chat_interno.php';
-      if (chat_ready($pdo)) {
+      if (chat_ready($pdo) && chat_user_allowed($pdo, (int)COMPANY_ID)) {
         $chatUid = (int)auth_user_id();
         $chatRt = ['enabled' => false];
         if (function_exists('nexa_realtime_browser_config')) { try { $chatRt = nexa_realtime_browser_config((int)COMPANY_ID, $chatUid); } catch (Throwable $e) {} }

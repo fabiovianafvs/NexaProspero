@@ -11,7 +11,7 @@ $id = max(0, (int)($_GET['id'] ?? 0));
 if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
 
 try {
-  if ($uid <= 0 || !chat_ready($pdo)) throw new RuntimeException('Indisponível.');
+  if ($uid <= 0 || !chat_ready($pdo) || !chat_user_allowed($pdo, $cid)) throw new RuntimeException('Indisponível.');
   $st = $pdo->prepare('SELECT conversation_id, media_path, media_mime, media_name, deleted_at FROM chat_messages WHERE company_id = ? AND id = ? LIMIT 1');
   $st->execute([$cid, $id]);
   $m = $st->fetch(PDO::FETCH_ASSOC);

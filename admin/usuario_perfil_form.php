@@ -128,6 +128,14 @@ try {
     if (!in_array('relatorio_analise_dashboard', $postedPermissions, true)) {
       $savedPermissions[] = '__deny_relatorio_analise_dashboard';
     }
+    // Chat interno é liberado por padrão: desmarcado grava o bloqueio.
+    if (!in_array('chat_interno', $postedPermissions, true)) {
+      $savedPermissions[] = '__deny_chat_interno';
+    }
+    // Pessoas (opt-out): mantém o bloqueio já gravado no perfil.
+    if (in_array('__deny_pessoas', $oldPermissions, true) && !in_array('clientes', $postedPermissions, true)) {
+      $savedPermissions[] = '__deny_pessoas';
+    }
     $savedPermissions = array_values(array_unique($savedPermissions));
     $permissionsJson = json_encode($savedPermissions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($permissionsJson === false) {
@@ -165,6 +173,7 @@ try {
   ]);
   $oldPermissions = array_values(array_unique(array_filter(array_map('strval', (array)($_POST['permissions'] ?? [])))));
   if (!in_array('relatorio_analise_dashboard', $oldPermissions, true)) $oldPermissions[] = '__deny_relatorio_analise_dashboard';
+  if (!in_array('chat_interno', $oldPermissions, true)) $oldPermissions[] = '__deny_chat_interno';
 }
 
 $groups = [];
@@ -237,6 +246,7 @@ admin_topbar('Editar perfil', 'usuarios_perfis');
 
   <div class="aclpf-card">
     <h2>Permissões do perfil</h2>
+    <div class="aclpf-actions" style="justify-content:flex-start;margin-bottom:8px"><button class="aclpf-btn small" type="button" id="aclpfAllOn">Marcar tudo</button><button class="aclpf-btn small" type="button" id="aclpfAllOff">Desmarcar tudo</button></div>
     <p class="aclpf-muted">Todos os menus e submenus do sistema podem ser habilitados individualmente. Opções ligadas a módulos não contratados ficam bloqueadas e são preservadas no perfil para uma futura reativação do módulo.</p>
 
     <?php foreach ($groups as $groupName => $permissions): ?>
@@ -244,8 +254,8 @@ admin_topbar('Editar perfil', 'usuarios_perfis');
         <div class="aclpf-perm-head">
           <h3><?= aclpf_h($groupName) ?></h3>
           <div>
-            <button class="aclpf-btn small" type="button" data-check-group>Marcar disponíveis</button>
-            <button class="aclpf-btn small" type="button" data-uncheck-group>Desmarcar</button>
+            <button class="aclpf-btn small" type="button" data-check-group>Marcar todos</button>
+            <button class="aclpf-btn small" type="button" data-uncheck-group>Desmarcar todos</button>
           </div>
         </div>
         <div class="aclpf-checks">
@@ -254,6 +264,7 @@ admin_topbar('Editar perfil', 'usuarios_perfis');
               $module = $permission['module'] ?? '*';
               $enabled = $moduleEnabled($module);
               $checked = in_array((string)$key, $oldPermissions, true);
+              if ($key === 'chat_interno') { $enabled = true; $checked = !in_array('__deny_chat_interno', $oldPermissions, true); }
               if ($key === 'relatorio_analise_dashboard'
                   && in_array('__deny_relatorio_analise_dashboard', $oldPermissions, true)) $checked = false;
             ?>
@@ -292,6 +303,12 @@ admin_topbar('Editar perfil', 'usuarios_perfis');
 
 <script>
 (function () {
+  ['aclpfAllOn', 'aclpfAllOff'].forEach(function (id) {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', function () {
+      document.querySelectorAll('#profileEditForm input[type="checkbox"][name="permissions[]"]:not(:disabled)').forEach(function (c) { c.checked = id === 'aclpfAllOn'; });
+    });
+  });
   document.querySelectorAll('[data-permission-group]').forEach(function (group) {
     const enabledChecks = function () {
       return group.querySelectorAll('input[type="checkbox"][name="permissions[]"]:not(:disabled)');

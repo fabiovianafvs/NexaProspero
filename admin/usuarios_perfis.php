@@ -159,6 +159,8 @@ try {
     // Pessoas é opt-out: perfis antigos e novos possuem acesso por padrão.
     // Ao desmarcar no modal, gravamos um token interno de negação sem alterar schema.
     if (!in_array('clientes', $selected, true)) $allowed[] = $peopleDenyToken;
+    // Chat interno também é opt-out: desmarcado no formulário grava o bloqueio.
+    if (!empty($_POST['permissions_present']) ? !in_array('chat_interno', $selected, true) : in_array('__deny_chat_interno', $selected, true)) $allowed[] = '__deny_chat_interno';
     if ($name === '') throw new RuntimeException('Informe o nome do perfil.');
     $json = json_encode(array_values(array_unique($allowed)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($id > 0) {
@@ -196,6 +198,7 @@ if ($err !== '' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)(
   if (!empty($_POST['permissions_present'])) {
     $selectedPerms = array_values(array_unique(array_filter(array_map('strval', (array)($_POST['permissions'] ?? [])))));
     if (!in_array('clientes', $selectedPerms, true)) $selectedPerms[] = $peopleDenyToken;
+    if (!in_array('chat_interno', $selectedPerms, true)) $selectedPerms[] = '__deny_chat_interno';
   }
 }
 $profiles = [];
@@ -277,20 +280,21 @@ $openModal = isset($_GET['new']) || $editId > 0 || ($err !== '' && ($_SERVER['RE
       </div>
 
       <div class="acl-permissions">
-        <div class="acl-permissions-title"><h3>Permissões</h3><span class="acl-muted">Marque apenas o que este perfil poderá utilizar.</span></div>
+        <div class="acl-permissions-title"><h3>Permissões</h3><span class="acl-muted">Marque apenas o que este perfil poderá utilizar.</span><span class="acl-group-btns"><button class="acl-btn small" type="button" data-perm-all="1">Marcar tudo</button><button class="acl-btn small" type="button" data-perm-all="0">Desmarcar tudo</button></span></div>
         <?php foreach ($groups as $groupLabel => $perms): ?>
-          <div class="acl-perm-group">
-            <h4><?= acl_h($groupLabel) ?></h4>
+          <div class="acl-perm-group" data-perm-group>
+            <div class="acl-perm-head"><h4><?= acl_h($groupLabel) ?></h4><span class="acl-group-btns"><button class="acl-btn small" type="button" data-perm-toggle="1">Marcar todos</button><button class="acl-btn small" type="button" data-perm-toggle="0">Desmarcar todos</button></span></div>
             <div class="acl-checks">
               <?php foreach ($perms as $key => $perm):
                 $isPeople = (string)$key === 'clientes';
-                $enabled = $isPeople ? true : $moduleEnabled($perm['module'] ?? '*');
-                $checked = $isPeople ? !in_array($peopleDenyToken, $selectedPerms, true) : in_array($key, $selectedPerms, true);
+                $isChat = (string)$key === 'chat_interno';
+                $enabled = ($isPeople || $isChat) ? true : $moduleEnabled($perm['module'] ?? '*');
+                $checked = $isPeople ? !in_array($peopleDenyToken, $selectedPerms, true) : ($isChat ? !in_array('__deny_chat_interno', $selectedPerms, true) : in_array($key, $selectedPerms, true));
                 $label = $isPeople ? 'Pessoas' : (string)($perm['label'] ?? $key);
               ?>
                 <label class="acl-check <?= $enabled ? '' : 'disabled' ?> <?= $isPeople ? 'people-default' : '' ?>">
                   <input type="checkbox" name="permissions[]" value="<?= acl_h($key) ?>" <?= $checked ? 'checked' : '' ?> <?= $enabled ? '' : 'disabled' ?>>
-                  <span><strong><?= acl_h($label) ?></strong><small class="acl-muted"><?= $isPeople ? 'Padrão do sistema · disponível em todos os módulos; desmarque para ocultar.' : ('Módulo: ' . acl_h(($perm['module'] ?? '*') === '*' ? 'Geral/compartilhado' : saas_module_label((string)$perm['module'])) . ($enabled ? '' : ' — indisponível no plano')) ?></small></span>
+                  <span><strong><?= acl_h($label) ?></strong><small class="acl-muted"><?= $isPeople ? 'Padrão do sistema · disponível em todos os módulos; desmarque para ocultar.' : ($isChat ? 'Liberado por padrão · desmarque para esconder o balão e o menu do Chat interno.' : (('Módulo: ' . acl_h(($perm['module'] ?? '*') === '*' ? 'Geral/compartilhado' : saas_module_label((string)$perm['module'])) . ($enabled ? '' : ' — indisponível no plano')))) ?></small></span>
                 </label>
               <?php endforeach; ?>
             </div>
@@ -301,7 +305,18 @@ $openModal = isset($_GET['new']) || $editId > 0 || ($err !== '' && ($_SERVER['RE
     </form>
   </div>
 </div>
+<style>.acl-perm-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}.acl-perm-head h4{margin:0!important}.acl-group-btns{display:inline-flex;gap:6px;flex-wrap:wrap}.acl-btn.small{padding:6px 10px;font-size:12px}</style>
 <script>
+(function(){
+  // Marcar/desmarcar todas as permissões de um grupo (ou do perfil inteiro). Opções bloqueadas pelo plano ficam como estão.
+  const form=document.getElementById('profileForm');
+  if(form) form.addEventListener('click',function(e){
+    const b=e.target.closest('[data-perm-toggle],[data-perm-all]'); if(!b) return;
+    const on=(b.dataset.permToggle||b.dataset.permAll)==='1';
+    const scope=b.hasAttribute('data-perm-all')?form:b.closest('[data-perm-group]');
+    scope.querySelectorAll('input[type="checkbox"][name="permissions[]"]:not(:disabled)').forEach(function(c){c.checked=on;});
+  });
+})();
 (function(){
   const modal=document.getElementById('profileModal');
   if(!modal || modal.hasAttribute('hidden')) return;

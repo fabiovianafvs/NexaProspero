@@ -17,6 +17,7 @@ $out = static function (array $data, int $code = 200): void {
   exit;
 };
 if ($uid <= 0) $out(['ok' => false, 'error' => 'Sessão expirada. Entre novamente.'], 401);
+if (!chat_user_allowed($pdo, $cid)) $out(['ok' => false, 'error' => 'O Chat interno está desligado no seu perfil de acesso.'], 403);
 if (!chat_ready($pdo)) $out(['ok' => false, 'error' => 'Aplique "Chat interno" no Atualizador do Banco.'], 409);
 
 $action = (string)($_GET['action'] ?? $_POST['action'] ?? '');

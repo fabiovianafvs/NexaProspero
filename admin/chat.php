@@ -12,6 +12,10 @@ if (is_file(__DIR__ . '/../config/brain_realtime.php')) require_once __DIR__ . '
 $cid = (int)COMPANY_ID;
 $uid = (int)(auth_user_id() ?? 0);
 $embed = !empty($_GET['embed']);
+if (!chat_user_allowed($pdo, $cid)) {
+  if (function_exists('access_render_denied')) access_render_denied('O Chat interno está desligado no seu perfil de acesso.');
+  http_response_code(403); exit('O Chat interno está desligado no seu perfil de acesso.');
+}
 if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['nexa_chat_csrf'])) $_SESSION['nexa_chat_csrf'] = bin2hex(random_bytes(20));
 $csrf = (string)($_SESSION['nexa_chat_csrf'] ?? '');
 $ready = chat_ready($pdo);

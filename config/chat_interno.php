@@ -27,16 +27,44 @@ if (!function_exists('chat_ready')) {
   }
 }
 
+const CHAT_DENY_TOKEN = '__deny_chat_interno';
+
+if (!function_exists('chat_user_allowed')) {
+  /**
+   * O usuário logado pode usar o Chat interno? Liberado por padrão; o perfil de acesso
+   * bloqueia com o token __deny_chat_interno (opção "Chat interno" desmarcada).
+   * Administrador da empresa e usuário sem perfil sempre podem.
+   */
+  function chat_user_allowed(PDO $pdo, int $companyId): bool {
+    if (function_exists('access_is_company_master') && access_is_company_master()) return true;
+    if (!function_exists('access_current_user') || !function_exists('access_profile_permissions')) return true;
+    $u = access_current_user($pdo);
+    if (!$u || (int)($u['is_active'] ?? 0) !== 1) return false;
+    $profileId = (int)($u['profile_id'] ?? 0);
+    if ($profileId <= 0) return true;
+    return !in_array(CHAT_DENY_TOKEN, access_profile_permissions($pdo, $companyId, $profileId), true);
+  }
+}
+
 if (!function_exists('chat_users')) {
-  /** Usuários ativos da empresa: [id => nome]. */
+  /** Usuários ativos da empresa que podem usar o chat: [id => nome]. */
   function chat_users(PDO $pdo, int $companyId): array {
     if (!function_exists('access_company_users_sql') && is_file(__DIR__ . '/access_control.php')) require_once __DIR__ . '/access_control.php';
-    $sql = function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)';
+    $sql = function_exists('access_company_users_sql') ? access_company_users_sql($pdo, 'u') : '(u.company_id = ?)';
     $params = function_exists('access_company_users_params') ? access_company_users_params($pdo, $companyId) : [$companyId];
-    $st = $pdo->prepare('SELECT id, name FROM users WHERE ' . $sql . ' AND is_active = 1 ORDER BY name, id');
-    $st->execute($params);
+    // Quem tem o chat bloqueado no perfil não aparece para os outros.
+    $hasProfiles = false;
+    try { $hasProfiles = (bool)$pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'profile_id'")->fetchColumn(); } catch (Throwable $e) {}
+    $st = $pdo->prepare('SELECT u.id, u.name' . ($hasProfiles ? ', u.role, p.permissions_json' : '') . ' FROM users u'
+      . ($hasProfiles ? ' LEFT JOIN user_profiles p ON p.id = u.profile_id AND p.company_id = ?' : '')
+      . ' WHERE ' . $sql . ' AND u.is_active = 1 ORDER BY u.name, u.id');
+    $st->execute($hasProfiles ? array_merge([$companyId], $params) : $params);
     $out = [];
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) $out[(int)$r['id']] = trim((string)$r['name']) ?: ('Usuário ' . (int)$r['id']);
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+      $isAdmin = in_array((string)($r['role'] ?? ''), ['company_admin', 'platform_admin'], true);
+      if (!$isAdmin && str_contains((string)($r['permissions_json'] ?? ''), '"' . CHAT_DENY_TOKEN . '"')) continue;
+      $out[(int)$r['id']] = trim((string)$r['name']) ?: ('Usuário ' . (int)$r['id']);
+    }
     return $out;
   }
 }

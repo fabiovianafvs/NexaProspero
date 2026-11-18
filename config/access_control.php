@@ -61,6 +61,9 @@ if (!function_exists('access_permissions_catalog')) {
       'pessoas_anexos_remover' => ['label' => 'Pessoas · Anexos: remover', 'group' => 'Geral', 'module' => ['financeiro','delivery','orcamento'], 'pages' => [], 'nav' => []],
       'exportacao' => ['label' => 'Exportação', 'group' => 'Integrações', 'module' => 'exportacao', 'pages' => ['exportacao.php','firebird.php','firebird_run.php'], 'nav' => ['export']],
       'api' => ['label' => 'API', 'group' => 'Integrações', 'module' => 'api', 'pages' => ['api.php'], 'nav' => ['api']],
+      // Chat interno: liberado por padrão (opt-out pelo token __deny_chat_interno, como Pessoas).
+      // As telas do chat conferem chat_user_allowed(); por isso 'pages' fica vazio aqui.
+      'chat_interno' => ['label' => 'Chat interno (balão e menu)', 'group' => 'Geral', 'module' => '*', 'pages' => [], 'nav' => [], 'description' => 'Liberado por padrão. Desmarque para esconder o balão e o menu do Chat interno neste perfil.'],
       'suporte' => ['label' => 'Suporte', 'group' => 'Geral', 'module' => '*', 'pages' => [], 'nav' => ['suporte']],
       'importacao_produtos' => ['label' => 'Importação', 'group' => 'Integrações', 'module' => 'importacao_produtos', 'pages' => ['importacao.php'], 'nav' => ['importacao']],
       'manutencao_produtos' => ['label' => 'Manutenção de Produtos', 'group' => 'Utilitários', 'module' => '*', 'pages' => ['utilitarios_manutencao_produtos.php'], 'nav' => ['manutencao_produtos']],
