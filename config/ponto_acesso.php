@@ -101,6 +101,19 @@ if (!function_exists('ponto_acesso_avaliar')) {
     if (!$col || empty($col['controla_ponto']) || !empty($col['acesso_livre'])) return $r;
     $r['controlado'] = true;
     $r['colaborador'] = $col;
+    return array_merge($r, ponto_acesso_regra_colaborador($pdo, $companyId, $col, $cfg, $agora, true));
+    return $r;
+  }
+}
+
+if (!function_exists('ponto_acesso_regra_colaborador')) {
+  /**
+   * A regra da jornada para um colaborador: liberação do gestor, situação, janela da jornada
+   * (com tolerâncias) e, se $usaMarcacoes, o ponto de entrada/saída. O acesso físico (V9) usa
+   * sem as marcações, porque a pessoa passa pela porta antes de bater o ponto.
+   */
+  function ponto_acesso_regra_colaborador(PDO $pdo, int $companyId, array $col, array $cfg, ?int $agora = null, bool $usaMarcacoes = true): array {
+    $r = ['ok' => true, 'motivo' => '', 'mensagem' => '', 'liberacao' => null, 'janela' => '', 'marcacoes' => 0];
     [$now, $nowLocal] = ponto_acesso_agora($pdo, $companyId, $col, $agora);
 
     $lib = ponto_acesso_liberacao_ativa($pdo, $companyId, (int)$col['id'], $nowLocal);
@@ -139,7 +152,7 @@ if (!function_exists('ponto_acesso_avaliar')) {
       return $nega('FORA_HORARIO', 'Fora do horário da sua jornada (' . $r['janela'] . ').');
     }
 
-    if (!empty($cfg['acesso_exigir_marcacao']) || !empty($cfg['acesso_bloquear_saida'])) {
+    if ($usaMarcacoes && (!empty($cfg['acesso_exigir_marcacao']) || !empty($cfg['acesso_bloquear_saida']))) {
       $desde = $achou ? date('Y-m-d H:i:s', $achou['ini'] - $antes - 7200) : $hoje . ' 00:00:00';
       $st = $pdo->prepare('SELECT COUNT(*) FROM ponto_arp_marcacoes WHERE company_id = ? AND colaborador_id = ? AND data_hora >= ? AND data_hora <= ?');
       $st->execute([$companyId, (int)$col['id'], $desde, $nowLocal]);

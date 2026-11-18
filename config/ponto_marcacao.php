@@ -487,13 +487,17 @@ if (!function_exists('ponto_coletor_save')) {
     $id = (int)($in['id'] ?? 0);
     $desc = trim(preg_replace('/\s+/u', ' ', (string)($in['descricao'] ?? '')) ?? '');
     if ($desc === '' || mb_strlen($desc) > 80) throw new RuntimeException('Informe o nome do aparelho (até 80 caracteres). Ex.: Tablet da recepção.');
-    $tipo = in_array((string)($in['tipo'] ?? ''), ['TABLET', 'TOTEM', 'COMPUTADOR', 'SMARTPHONE'], true) ? (string)$in['tipo'] : 'TABLET';
+    $tipos = ['TABLET', 'TOTEM', 'COMPUTADOR', 'SMARTPHONE'];
+    // V9: equipamentos (Control iD / outras marcas pela API), quando a migração já foi aplicada.
+    if (function_exists('ponto_v9_ready') && ponto_v9_ready($pdo)) $tipos = array_merge($tipos, array_keys(PONTO_EQUIP_TIPOS));
+    $tipo = in_array((string)($in['tipo'] ?? ''), $tipos, true) ? (string)$in['tipo'] : 'TABLET';
+    $equip = !in_array($tipo, ['TABLET', 'TOTEM', 'COMPUTADOR', 'SMARTPHONE'], true);
     $cod = isset(PONTO_COLETOR_CODIGOS[(string)($in['identificador_afd'] ?? '')]) ? (string)$in['identificador_afd'] : '02';
     $data = ['descricao' => $desc, 'tipo' => $tipo, 'identificador_afd' => $cod,
       'estabelecimento_id' => ponto_fk_check($pdo, $companyId, 'estabelecimentos', (int)($in['estabelecimento_id'] ?? 0), 'Estabelecimento'),
       'local_id' => ponto_fk_check($pdo, $companyId, 'locais', (int)($in['local_id'] ?? 0), 'Local'),
       'permitir_pin' => empty($in['permitir_pin']) ? 0 : 1, 'permitir_rfid' => empty($in['permitir_rfid']) ? 0 : 1];
-    if (!$data['permitir_pin'] && !$data['permitir_rfid']) throw new RuntimeException('Habilite o PIN, o cartão ou os dois.');
+    if (!$data['permitir_pin'] && !$data['permitir_rfid'] && !$equip) throw new RuntimeException('Habilite o PIN, o cartão ou os dois.');
     if ($id > 0) {
       $st = $pdo->prepare('SELECT * FROM ponto_coletores WHERE company_id = ? AND id = ?');
       $st->execute([$companyId, $id]);

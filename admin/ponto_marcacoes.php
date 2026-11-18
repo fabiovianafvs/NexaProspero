@@ -37,7 +37,7 @@ if (isset($_GET['verificar'])) {
 }
 $rows = ponto_marcacoes_list($pdo, $cid, $f, 2000);
 $fora = count(array_filter($rows, static fn($r) => $r['geofence'] === 'FORA_DA_AREA'));
-$meio = ['PIN' => 'Terminal (PIN)', 'RFID' => 'Terminal (cartão)', 'SESSAO' => 'Bater Ponto (login)'];
+$meio = ['PIN' => 'Terminal (PIN)', 'RFID' => 'Cartão', 'SESSAO' => 'Bater Ponto (login)', 'FACIAL' => 'Equipamento (rosto)', 'BIOMETRIA' => 'Equipamento (digital)'];
 ?>
 <form method="get" class="pt-card pt-search">
   <label class="f">De<input type="date" name="de" value="<?= ponto_h($f['de']) ?>"></label>

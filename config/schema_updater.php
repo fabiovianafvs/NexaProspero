@@ -720,6 +720,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'd0af2ffa991edd51316841dac81c1235d6e027cc2ddd5a1b35d1df30800b0052',
         'order' => 202611170500,
       ],
+      [
+        'id' => '20261118_ponto_equipamentos_v9',
+        'module' => 'ponto_eletronico',
+        'version' => 202611180100,
+        'label' => 'Ponto Eletrônico - V9 Equipamentos',
+        'description' => 'Equipamentos Control iD e de outras marcas (pela API): registrar o ponto e/ou liberar porta e catraca, cadastro do cartão pelo equipamento e histórico das leituras. Aparelhos já cadastrados não mudam. Aplicar depois da V8.',
+        'file' => __DIR__ . '/../db/20261118_ponto_equipamentos_v9.sql',
+        'sha256' => '3bd7e48f39c2ba1f1279f1e75c5918435142d36e14bb9f4cd9f84cfeca4fe488',
+        'order' => 202611180100,
+      ],
     ];
   }
 }
