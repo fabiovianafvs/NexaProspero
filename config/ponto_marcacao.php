@@ -781,3 +781,5 @@ if (!function_exists('ponto_geofence_label')) {
 require_once __DIR__ . '/ponto_afd.php';
 // V7: assinaturas digitais (certificados, CAdES/PAdES, PDF do comprovante e do atestado).
 require_once __DIR__ . '/ponto_assinatura.php';
+// V10: biometria facial (foto/rosto na marcação feita pelo Nexa).
+require_once __DIR__ . '/ponto_facial.php';

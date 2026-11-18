@@ -7,7 +7,7 @@ require __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/_ponto.php';
 
 $cid = (int)COMPANY_ID;
-$canView = ponto_can($pdo, 'ponto_colaboradores') || ponto_can($pdo, 'ponto_painel');
+$canView = ponto_can($pdo, 'ponto_colaboradores') || ponto_can($pdo, 'ponto_painel') || ponto_can($pdo, 'ponto_biometria');
 if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {

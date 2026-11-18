@@ -50,16 +50,29 @@
 
   function registrar(intencao) {
     if (state.busy || !state.ticket) return;
+    if (window.NexaFace && NexaFace.ativo()) {
+      state.busy = true; clearTimeout(state.timer);
+      NexaFace.capturar({ sub: $('tmNome').textContent + ': centralize o rosto e toque no botão.' }).then(function (f) {
+        state.busy = false;
+        if (f) enviar(intencao, f); else idleTimeout(30);
+      });
+      return;
+    }
+    enviar(intencao, null);
+  }
+
+  function enviar(intencao, f) {
     state.busy = true; clearTimeout(state.timer);
     document.querySelectorAll('#tmConf [data-int]').forEach(function (b) { b.disabled = true; });
     var g = P.geo;
-    P.post('/ponto.php', { action: 'registrar', ft: T.ft, ticket: state.ticket, intencao: intencao, uuid: state.uuid, lat: g.lat, lng: g.lng, acc: g.acc }).then(function (r) {
+    P.post('/ponto.php', { action: 'registrar', ft: T.ft, ticket: state.ticket, intencao: intencao, uuid: state.uuid, lat: g.lat, lng: g.lng, acc: g.acc, foto: f && f.foto, descritor: f && f.descritor }).then(function (r) {
       state.busy = false;
       document.querySelectorAll('#tmConf [data-int]').forEach(function (b) { b.disabled = false; });
       if (!r.ok) { P.beep(false); alert(r.erro || 'Não foi possível registrar.'); if (/expirada/i.test(r.erro || '')) resetIdent(); else idleTimeout(30); return; }
       P.beep(true);
       $('dNome').textContent = r.nome; $('dHora').textContent = r.hora; $('dTipo').textContent = r.intencao;
       $('dData').textContent = r.data; $('dNsr').textContent = r.nsr;
+      $('dFacT').hidden = $('dFac').hidden = !r.facial; $('dFac').textContent = r.facial || '';
       $('dQr').innerHTML = r.qr || '<a href="' + P.esc(r.comprovante) + '" target="_blank" rel="noopener">Abrir comprovante</a>';
       $('paDone').hidden = false;
       var n = 15; $('dCount').textContent = n;

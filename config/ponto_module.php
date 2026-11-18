@@ -160,6 +160,8 @@ if (!function_exists('ponto_config_defaults')) {
       // Acesso ao Nexa ligado ao ponto (V8). Desligado por padrão.
       'acesso_modo' => 'DESLIGADO', 'acesso_exigir_marcacao' => 1, 'acesso_bloquear_saida' => 0,
       'acesso_antes_min' => 15, 'acesso_depois_min' => 15, 'acesso_admins' => 0,
+      // Biometria facial no Nexa (V10). Desligado por padrão.
+      'facial_modo' => 'DESLIGADO', 'facial_falha' => 'SINALIZAR', 'facial_rigor' => 'NORMAL', 'facial_foto_dias' => 90,
     ];
   }
 }
@@ -239,6 +241,13 @@ if (!function_exists('ponto_config_save')) {
         if ($v < 0 || $v > 240) throw new RuntimeException('Tolerância do acesso ao Nexa: de 0 a 240 minutos.');
         $new[$k] = $v;
       }
+    }
+    if (isset($in['facial_modo'])) {
+      $fm = (string)$in['facial_modo']; $ff = (string)($in['facial_falha'] ?? 'SINALIZAR'); $fr = (string)($in['facial_rigor'] ?? 'NORMAL');
+      if (!in_array($fm, ['DESLIGADO', 'FOTO', 'RECONHECER'], true) || !in_array($ff, ['SINALIZAR', 'BLOQUEAR'], true) || !in_array($fr, ['RIGOROSO', 'NORMAL', 'FLEXIVEL'], true)) throw new RuntimeException('Opção de reconhecimento facial inválida.');
+      $fd = (int)($in['facial_foto_dias'] ?? 90);
+      if ($fd < 30 || $fd > 365) throw new RuntimeException('Guardar as fotos das marcações: de 30 a 365 dias.');
+      $new['facial_modo'] = $fm; $new['facial_falha'] = $ff; $new['facial_rigor'] = $fr; $new['facial_foto_dias'] = $fd;
     }
     config_store_set($pdo, $companyId, 'ponto', $new);
     if (session_status() === PHP_SESSION_ACTIVE) unset($_SESSION['nexa_ponto_acesso']);
@@ -1139,6 +1148,10 @@ if (!function_exists('ponto_colaborador_save')) {
       ponto_audit($pdo, $companyId, 'alterar', 'colaboradores', $id, array_intersect_key($old, $changes), $changes, $id);
       // REP-P (V6): inclusão/alteração/exclusão do empregado no ARP (registro tipo 5 do AFD).
       if (function_exists('ponto_arp_colaborador_alterado')) ponto_arp_colaborador_alterado($pdo, $companyId, $old, ponto_colaborador_get($pdo, $companyId, $id));
+      // V10 (LGPD): desligado = o rosto é apagado e sai dos aparelhos.
+      if (($d['status'] ?? null) === 'DESLIGADO' && ($old['status'] ?? '') !== 'DESLIGADO' && function_exists('ponto_biometria_revogar')) {
+        try { ponto_biometria_revogar($pdo, $companyId, $id, function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : 0, 'Colaborador desligado'); } catch (Throwable $e) { /* sem rosto cadastrado */ }
+      }
       return $id;
     }
     $cols = array_keys($d);
@@ -1214,6 +1227,8 @@ if (!function_exists('ponto_foto_save')) {
       ->execute([$rel, $hash, 'image/jpeg', $now, $companyId, $colaboradorId]);
     ponto_audit($pdo, $companyId, $col['foto_path'] ? 'trocar_foto' : 'incluir_foto', 'colaboradores', $colaboradorId,
       $col['foto_hash'] ? ['foto_hash' => $col['foto_hash']] : null, ['foto_hash' => $hash], $colaboradorId);
+    // V10: foto nova vai para os aparelhos que recebem rostos (só com o consentimento em vigor).
+    if (function_exists('ponto_equip_rostos_enfileirar')) { try { ponto_equip_rostos_enfileirar($pdo, $companyId, null, $colaboradorId, 'FOTO'); } catch (Throwable $e) { error_log('[Nexa Ponto] ' . $e->getMessage()); } }
     return ['foto_hash' => $hash, 'foto_updated_at' => $now];
   }
 }

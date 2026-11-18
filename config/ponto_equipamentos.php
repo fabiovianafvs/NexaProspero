@@ -70,6 +70,16 @@ if (!function_exists('ponto_equip_save_extra')) {
     if (!$d['funcao_ponto'] && !$d['funcao_acesso']) throw new RuntimeException('Marque o que o equipamento faz: registrar o ponto, liberar a porta/catraca ou os dois.');
     $pdo->prepare('UPDATE ponto_coletores SET funcao_ponto = ?, funcao_acesso = ?, acesso_regra = ?, acesso_sentido = ?, acesso_acao = ?, equip_serial = ?, dupla_seg = ? WHERE company_id = ? AND id = ?')
       ->execute(array_merge(array_values($d), [$companyId, $id]));
+    // V10: aparelho Control iD que recebe os rostos cadastrados no Nexa.
+    if (function_exists('ponto_v10_ready') && ponto_v10_ready($pdo)) {
+      $st = $pdo->prepare('SELECT tipo, enviar_rostos FROM ponto_coletores WHERE company_id = ? AND id = ?');
+      $st->execute([$companyId, $id]);
+      $cur = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+      $er = ($cur['tipo'] ?? '') === 'CONTROLID' && !empty($in['enviar_rostos']) ? 1 : 0;
+      $pdo->prepare('UPDATE ponto_coletores SET enviar_rostos = ? WHERE company_id = ? AND id = ?')->execute([$er, $companyId, $id]);
+      $d['enviar_rostos'] = $er;
+      if ($er && empty($cur['enviar_rostos'])) ponto_equip_rostos_enfileirar($pdo, $companyId, $id, null, 'FOTO');
+    }
     ponto_audit($pdo, $companyId, 'alterar_funcoes', 'coletores', $id, null, $d);
   }
 }
@@ -334,6 +344,11 @@ if (!function_exists('ponto_controlid_atender')) {
         [$col, $ident, , $mot] = ponto_equip_identificar($pdo, $companyId, $eq, 'usuario', (string)($in['user_id'] ?? ''), '', $meio);
         $out = ponto_equip_processar($pdo, $companyId, $eq, $col, $ident, $card !== '0' ? $card : '', false, $mot, $uuid);
         return [200, ponto_controlid_resposta($eq, $out, $portal)];
+      case 'push':
+        return ponto_controlid_push($pdo, $companyId, $eq, $in);
+      case 'result':
+        ponto_controlid_result($pdo, $companyId, $eq, $in);
+        return [200, null];
       case 'new_user_id_and_password':
         [$col, $ident, , $mot] = ponto_equip_identificar($pdo, $companyId, $eq, 'senha', (string)($in['user_id'] ?? ''), (string)($in['password'] ?? ''));
         $out = ponto_equip_processar($pdo, $companyId, $eq, $col, $ident, '', false, $mot, $uuid);
@@ -368,3 +383,163 @@ if (!function_exists('ponto_equip_api_atender')) {
     ]];
   }
 }
+
+/* ------------------------------------------------------------------------- */
+/* V10: rostos enviados aos aparelhos Control iD (modo push)                  */
+/* ------------------------------------------------------------------------- */
+/*
+ * O aparelho pergunta ao Nexa de tempos em tempos (GET <endereço>/push?deviceId=&uuid=) se há
+ * algo a fazer; o Nexa responde com o próximo comando da fila (criar/atualizar a pessoa com o
+ * código do colaborador e mandar a foto do cadastro) e o aparelho devolve o resultado em
+ * POST <endereço>/result. Só vão rostos de quem deu o consentimento (ponto_biometria).
+ * Quem pergunta é o aparelho: o servidor do Nexa não fica verificando nada sozinho.
+ */
+
+if (!function_exists('ponto_equip_rostos_enfileirar')) {
+  /**
+   * Coloca na fila de cada aparelho com "enviar rostos" ligado. $coletorId/$colId null = todos.
+   * tipo FOTO (criar/atualizar pessoa + foto) ou REMOVER. Devolve quantos comandos novos.
+   */
+  function ponto_equip_rostos_enfileirar(PDO $pdo, int $companyId, ?int $coletorId, ?int $colId, string $tipo = 'FOTO'): int {
+    if (!function_exists('ponto_v10_ready') || !ponto_v10_ready($pdo) || !ponto_v9_ready($pdo)) return 0;
+    $sql = "SELECT id FROM ponto_coletores WHERE company_id = ? AND ativo = 1 AND tipo = 'CONTROLID' AND enviar_rostos = 1";
+    $p = [$companyId];
+    if ($coletorId) { $sql .= ' AND id = ?'; $p[] = $coletorId; }
+    $st = $pdo->prepare($sql); $st->execute($p);
+    $eqs = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    if (!$eqs) return 0;
+    if ($colId) {
+      if ($tipo === 'FOTO') {
+        $b = ponto_biometria_get($pdo, $companyId, $colId);
+        $c = ponto_colaborador_get($pdo, $companyId, $colId);
+        if (!ponto_biometria_ativa($b) || !$c || !ponto_foto_file($c)) return 0;
+      }
+      $cols = [$colId];
+    } else {
+      // Todos os colaboradores com rosto em vigor e foto no cadastro.
+      $st = $pdo->prepare('SELECT b.colaborador_id FROM ponto_biometria b JOIN ponto_colaboradores c ON c.company_id = b.company_id AND c.id = b.colaborador_id
+        WHERE b.company_id = ? AND b.consentimento_em IS NOT NULL AND b.revogado_em IS NULL AND c.status <> \'DESLIGADO\' AND c.foto_path IS NOT NULL');
+      $st->execute([$companyId]);
+      $cols = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+    $n = 0;
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM ponto_equip_comandos WHERE company_id = ? AND coletor_id = ? AND colaborador_id = ? AND tipo = ? AND status IN ('PENDENTE', 'ENVIADO')");
+    $ins = $pdo->prepare("INSERT INTO ponto_equip_comandos (company_id, coletor_id, colaborador_id, tipo, status, created_at) VALUES (?,?,?,?, 'PENDENTE', ?)");
+    $cancel = $pdo->prepare("UPDATE ponto_equip_comandos SET status = 'SUBSTITUIDO', concluido_em = ? WHERE company_id = ? AND coletor_id = ? AND colaborador_id = ? AND status = 'PENDENTE' AND tipo <> ?");
+    foreach ($eqs as $e) foreach ($cols as $c) {
+      $cancel->execute([date('Y-m-d H:i:s'), $companyId, $e, $c, $tipo]);
+      $chk->execute([$companyId, $e, $c, $tipo]);
+      if ((int)$chk->fetchColumn() > 0) continue;
+      $ins->execute([$companyId, $e, $c, $tipo, date('Y-m-d H:i:s')]);
+      $n++;
+    }
+    return $n;
+  }
+}
+
+if (!function_exists('ponto_controlid_push')) {
+  /** Próximo comando da fila deste aparelho, no formato "transactions" do modo push (ou vazio). */
+  function ponto_controlid_push(PDO $pdo, int $companyId, array $eq, array $in): array {
+    if (!function_exists('ponto_v10_ready') || !ponto_v10_ready($pdo)) return [200, null];
+    $uuid = mb_substr(preg_replace('/[^A-Za-z0-9_.:-]/', '', (string)($in['uuid'] ?? '')) ?? '', 0, 64);
+    if ($uuid === '') $uuid = ponto_uuid();
+    // Pendente, ou enviado há mais de 10 min sem resposta (até 3 tentativas).
+    $st = $pdo->prepare("SELECT * FROM ponto_equip_comandos WHERE company_id = ? AND coletor_id = ? AND (status = 'PENDENTE' OR (status = 'ENVIADO' AND enviado_em < ?)) ORDER BY id LIMIT 1");
+    $st->execute([$companyId, (int)$eq['id'], date('Y-m-d H:i:s', time() - 600)]);
+    $cmd = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$cmd) return [200, null];
+    if ((int)$cmd['tentativas'] >= 3) {
+      $pdo->prepare("UPDATE ponto_equip_comandos SET status = 'ERRO', mensagem = ?, concluido_em = ? WHERE company_id = ? AND id = ?")
+        ->execute(['O aparelho não respondeu depois de 3 tentativas.', date('Y-m-d H:i:s'), $companyId, (int)$cmd['id']]);
+      return [200, null];
+    }
+    $colId = (int)$cmd['colaborador_id'];
+    $col = ponto_colaborador_get($pdo, $companyId, $colId);
+    $tx = [];
+    if ($cmd['tipo'] === 'REMOVER' || !$col) {
+      $tx[] = ['transactionid' => 1, 'verb' => 'POST', 'endpoint' => 'destroy_objects', 'contentType' => 'application/json',
+        'body' => ['object' => 'users', 'where' => ['users' => ['id' => $colId]]]];
+    } else {
+      $foto = ponto_foto_file($col);
+      $b = ponto_biometria_get($pdo, $companyId, $colId);
+      if (!$foto || !ponto_biometria_ativa($b) || filesize($foto) > 1500000) {
+        $pdo->prepare("UPDATE ponto_equip_comandos SET status = 'ERRO', mensagem = ?, concluido_em = ? WHERE company_id = ? AND id = ?")
+          ->execute([!$foto ? 'Colaborador sem foto no cadastro.' : (!ponto_biometria_ativa($b) ? 'Sem consentimento/rosto cadastrado.' : 'Foto grande demais.'), date('Y-m-d H:i:s'), $companyId, (int)$cmd['id']]);
+        return [200, null];
+      }
+      $nome = mb_substr(trim((string)$col['nome']), 0, 60);
+      $mat = (string)($col['matricula'] ?? '');
+      $tx[] = ['transactionid' => 1, 'verb' => 'POST', 'endpoint' => 'create_objects', 'contentType' => 'application/json',
+        'body' => ['object' => 'users', 'values' => [['id' => $colId, 'name' => $nome, 'registration' => $mat]]]];
+      $tx[] = ['transactionid' => 2, 'verb' => 'POST', 'endpoint' => 'modify_objects', 'contentType' => 'application/json',
+        'body' => ['object' => 'users', 'values' => ['name' => $nome, 'registration' => $mat], 'where' => ['users' => ['id' => $colId]]]];
+      $tx[] = ['transactionid' => 3, 'verb' => 'POST', 'endpoint' => 'user_set_image_list', 'contentType' => 'application/json',
+        'body' => ['match' => false, 'user_images' => [['user_id' => $colId, 'timestamp' => time(), 'image' => base64_encode((string)file_get_contents($foto))]]]];
+    }
+    $pdo->prepare("UPDATE ponto_equip_comandos SET status = 'ENVIADO', push_uuid = ?, tentativas = tentativas + 1, enviado_em = ? WHERE company_id = ? AND id = ?")
+      ->execute([$uuid, date('Y-m-d H:i:s'), $companyId, (int)$cmd['id']]);
+    return [200, ['transactions' => $tx]];
+  }
+}
+
+if (!function_exists('ponto_controlid_result')) {
+  /** Resultado do comando enviado pelo push. */
+  function ponto_controlid_result(PDO $pdo, int $companyId, array $eq, array $in): void {
+    if (!function_exists('ponto_v10_ready') || !ponto_v10_ready($pdo)) return;
+    $uuid = (string)($in['uuid'] ?? '');
+    if ($uuid === '') return;
+    $st = $pdo->prepare("SELECT * FROM ponto_equip_comandos WHERE company_id = ? AND coletor_id = ? AND push_uuid = ? AND status = 'ENVIADO' ORDER BY id DESC LIMIT 1");
+    $st->execute([$companyId, (int)$eq['id'], mb_substr($uuid, 0, 64)]);
+    $cmd = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$cmd) return;
+    $res = is_array($in['transactions_results'] ?? null) ? $in['transactions_results'] : [];
+    $ok = false; $msg = '';
+    if ($res) {
+      $last = null;
+      foreach ($res as $r) if (is_array($r)) $last = $r;
+      $alvo = $cmd['tipo'] === 'REMOVER' ? ($res[0] ?? null) : $last;
+      $ok = is_array($alvo) && !empty($alvo['success']);
+      $resp = is_array($alvo) ? ($alvo['response'] ?? null) : null;
+      if (is_string($resp)) { $j = json_decode($resp, true); if (is_array($j)) $resp = $j; }
+      // user_set_image_list: results[0].success / errors[0].code
+      if ($ok && is_array($resp) && isset($resp['results'][0]) && empty($resp['results'][0]['success'])) {
+        $ok = false;
+        $code = (int)($resp['results'][0]['errors'][0]['code'] ?? 0);
+        $msg = [1 => 'Foto inválida.', 2 => 'Rosto não detectado na foto do cadastro.', 3 => 'Este rosto já pertence a outra pessoa no aparelho.', 4 => 'Rosto fora do centro da foto.',
+          5 => 'Rosto muito longe na foto.', 6 => 'Rosto muito perto na foto.', 7 => 'Rosto de lado na foto.', 8 => 'Foto sem nitidez.', 9 => 'Rosto colado na borda da foto.'][$code]
+          ?? (string)($resp['results'][0]['errors'][0]['message'] ?? 'O aparelho recusou a foto.');
+      } elseif (!$ok) {
+        $msg = is_array($resp) ? (string)($resp['error'] ?? $resp['message'] ?? json_encode($resp)) : (string)($resp ?? 'O aparelho recusou o comando.');
+      }
+    } else {
+      $ok = empty($in['error']);
+      $msg = $ok ? '' : (is_string($in['error']) ? $in['error'] : 'O aparelho recusou o comando.');
+    }
+    $pdo->prepare('UPDATE ponto_equip_comandos SET status = ?, mensagem = ?, concluido_em = ? WHERE company_id = ? AND id = ?')
+      ->execute([$ok ? 'OK' : 'ERRO', $msg !== '' ? mb_substr($msg, 0, 200) : null, date('Y-m-d H:i:s'), $companyId, (int)$cmd['id']]);
+  }
+}
+
+if (!function_exists('ponto_equip_comandos_resumo')) {
+  /** Por aparelho: pendentes, enviados com sucesso e erros (para a tela). */
+  function ponto_equip_comandos_resumo(PDO $pdo, int $companyId): array {
+    if (!function_exists('ponto_v10_ready') || !ponto_v10_ready($pdo)) return [];
+    $st = $pdo->prepare("SELECT coletor_id, status, COUNT(*) AS n FROM ponto_equip_comandos WHERE company_id = ? AND status IN ('PENDENTE','ENVIADO','OK','ERRO') GROUP BY coletor_id, status");
+    $st->execute([$companyId]);
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(int)$r['coletor_id']][$r['status']] = (int)$r['n'];
+    return $out;
+  }
+  /** Por colaborador: situação mais recente em cada aparelho. */
+  function ponto_equip_comandos_por_colaborador(PDO $pdo, int $companyId): array {
+    if (!function_exists('ponto_v10_ready') || !ponto_v10_ready($pdo)) return [];
+    $st = $pdo->prepare("SELECT c.colaborador_id, c.coletor_id, c.status, c.tipo, c.mensagem, k.descricao FROM ponto_equip_comandos c
+      JOIN ponto_coletores k ON k.company_id = c.company_id AND k.id = c.coletor_id
+      WHERE c.company_id = ? AND c.status <> 'SUBSTITUIDO' ORDER BY c.id");
+    $st->execute([$companyId]);
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(int)$r['colaborador_id']][(int)$r['coletor_id']] = $r;
+    return $out;
+  }
+}
+

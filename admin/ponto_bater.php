@@ -37,13 +37,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (!$pode) throw new RuntimeException($motivo);
     $lat = trim((string)($_POST['lat'] ?? ''));
     if ($exige && $lat === '') throw new RuntimeException('Para registrar o ponto é preciso permitir a localização neste aparelho.');
+    // V10: foto/rosto conforme a regra da empresa (pode recusar antes de gravar).
+    $fctx = function_exists('ponto_facial_antes_de_marcar') ? ponto_facial_antes_de_marcar($pdo, $cid, $col, $_POST) : null;
     $m = ponto_marcar($pdo, $cid, $col, [
       'identificacao' => 'SESSAO', 'coletor_codigo' => '02', 'usuario_id' => $uid,
       'intencao' => (string)($_POST['intencao'] ?? ''), 'request_uuid' => (string)($_POST['uuid'] ?? ''),
       'latitude' => $lat, 'longitude' => (string)($_POST['lng'] ?? ''), 'precisao' => (string)($_POST['acc'] ?? ''),
     ]);
+    if ($fctx) ponto_facial_depois_de_marcar($pdo, $cid, $m, $fctx);
     [$gl] = ponto_geofence_label((string)$m['geofence']);
-    ponto_json(['ok' => true, 'now_ms' => (int)round(microtime(true) * 1000), 'nsr' => (int)$m['nsr'],
+    ponto_json(['ok' => true, 'facial' => $fctx ? (PONTO_FACIAL_RESULTADOS[$fctx['resultado']] ?? '') : '', 'now_ms' => (int)round(microtime(true) * 1000), 'nsr' => (int)$m['nsr'],
       'hora' => substr((string)$m['data_hora'], 11, 5), 'data' => date('d/m/Y', strtotime((string)$m['data_hora'])),
       'intencao' => PONTO_INTENCOES[(string)$m['intencao']] ?? 'Registro de ponto', 'geofence' => (string)$m['geofence'], 'geofence_label' => $gl,
       'distancia' => $m['distancia_m'] !== null ? (int)$m['distancia_m'] : null, 'repetida' => !empty($m['repetida']),
@@ -161,12 +164,16 @@ $h = 'ponto_h';
     <h2 id="paDoneT">Ponto registrado</h2>
     <div class="t" id="paDoneHora"></div>
     <div id="paDoneTipo" style="font-weight:800;color:#334155"></div>
-    <dl><dt>Data</dt><dd id="paDoneData"></dd><dt>NSR</dt><dd id="paDoneNsr"></dd><dt>Localização</dt><dd id="paDoneGeo"></dd></dl>
+    <dl><dt>Data</dt><dd id="paDoneData"></dd><dt>NSR</dt><dd id="paDoneNsr"></dd><dt>Localização</dt><dd id="paDoneGeo"></dd><dt id="paDoneFacT" hidden>Rosto</dt><dd id="paDoneFac" hidden></dd></dl>
     <div class="pa-row"><a class="pa-btn" id="paDoneComp" href="#" target="_blank" rel="noopener">Ver comprovante</a><button type="button" class="pa-btn pri" id="paDoneOk">OK</button></div>
   </div>
 </div>
 
 <script src="/assets/ponto/ponto-app.js?v=2"></script>
+<?php $fcfg = function_exists('ponto_facial_pagina_cfg') ? ponto_facial_pagina_cfg($pdo, $cid) : ['modo' => 'DESLIGADO']; if ($fcfg['modo'] !== 'DESLIGADO' && $col && !$erro): ?>
+<script src="/assets/ponto/ponto-face.js?v=1"></script>
+<script>NexaFace.init(<?= json_encode($fcfg) ?>);</script>
+<?php endif; ?>
 <script>
 (function(){
   var P = window.NexaPonto;
@@ -187,8 +194,20 @@ $h = 'ponto_h';
       if (g.status === 'pendente') { geoTxt.textContent = 'Aguarde a localização…'; return; }
       alert('A empresa exige a localização para registrar o ponto. ' + g.msg); return;
     }
+    if (window.NexaFace && NexaFace.ativo()) {
+      busy = true;
+      NexaFace.capturar({ sub: 'O seu ponto é registrado com uma foto. Centralize o rosto e toque no botão.' }).then(function(f){
+        busy = false;
+        if (f) enviar(intencao, f);
+      });
+      return;
+    }
+    enviar(intencao, null);
+  }
+  function enviar(intencao, f){
+    var g = P.geo;
     busy = true; buttons(false); main.firstChild.textContent = 'Registrando…';
-    P.post('ponto_bater.php', { csrf: csrf, intencao: intencao, uuid: uuid, lat: g.lat, lng: g.lng, acc: g.acc }).then(function(r){
+    P.post('ponto_bater.php', { csrf: csrf, intencao: intencao, uuid: uuid, lat: g.lat, lng: g.lng, acc: g.acc, foto: f && f.foto, descritor: f && f.descritor }).then(function(r){
       busy = false;
       if (!r || !r.ok) { buttons(true); main.firstChild.textContent = 'Registrar de novo'; P.beep(false); alert((r && r.erro) || 'Não foi possível registrar.'); return; }
       uuid = P.uuid(); P.beep(true);
@@ -198,6 +217,8 @@ $h = 'ponto_h';
       document.getElementById('paDoneNsr').textContent = r.nsr;
       document.getElementById('paDoneGeo').textContent = r.geofence_label + (r.distancia !== null && r.geofence !== 'DENTRO_DA_AREA' ? ' (' + r.distancia + ' m do local)' : '');
       document.getElementById('paDoneComp').href = r.comprovante;
+      document.getElementById('paDoneFacT').hidden = document.getElementById('paDoneFac').hidden = !r.facial;
+      document.getElementById('paDoneFac').textContent = r.facial || '';
       document.getElementById('paDone').hidden = false;
       document.getElementById('paDoneOk').focus();
     });

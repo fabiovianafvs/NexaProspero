@@ -730,6 +730,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '3bd7e48f39c2ba1f1279f1e75c5918435142d36e14bb9f4cd9f84cfeca4fe488',
         'order' => 202611180100,
       ],
+      [
+        'id' => '20261118_ponto_biometria_v10',
+        'module' => 'ponto_eletronico',
+        'version' => 202611180200,
+        'label' => 'Ponto Eletrônico - V10 Biometria facial',
+        'description' => 'Cadastro do rosto com consentimento, foto/conferência do rosto nas marcações feitas pelo Nexa e envio dos rostos aos aparelhos Control iD. Nada muda até a empresa ligar em Ponto > Configurações. Aplicar depois da V9.',
+        'file' => __DIR__ . '/../db/20261118_ponto_biometria_v10.sql',
+        'sha256' => 'd38d598e5959846f6d518e344ef3407c1561523d5628f00e25045d5b6f55eb56',
+        'order' => 202611180200,
+      ],
     ];
   }
 }

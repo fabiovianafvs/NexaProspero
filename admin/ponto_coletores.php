@@ -35,6 +35,10 @@ ponto_post_handle($back, function () use ($pdo, $cid, $v9) {
     $_SESSION['ponto_equip_url'] = [$id, ponto_equip_gerar_endereco($pdo, $cid, $id)];
     return 'Endereço novo gerado. O endereço anterior parou de funcionar: configure o novo no equipamento.';
   }
+  if ($action === 'enviar_rostos' && $v9) {
+    $n = ponto_equip_rostos_enfileirar($pdo, $cid, $id, null, 'FOTO');
+    return $n ? $n . ' rosto(s) na fila: o aparelho busca na próxima conexão dele.' : 'Nenhum rosto novo para enviar (só vão os colaboradores com rosto cadastrado e foto).';
+  }
   if ($action === 'aprender' && $v9) {
     ponto_equip_aprender($pdo, $cid, $id, (int)($_POST['colaborador_id'] ?? 0));
     return 'Aguardando o cartão: passe o crachá novo no equipamento em até 2 minutos.';
@@ -70,6 +74,8 @@ if (is_array($equipUrl) && count($equipUrl) === 2) {
 $temEquip = $v9 && (bool)array_filter($rows, 'ponto_equip_is');
 $eventos = $temEquip ? ponto_equip_eventos_lista($pdo, $cid, 0, 60) : [];
 $colsOpt = $temEquip ? ponto_options($pdo, $cid, 'colaboradores', false) : [];
+$v10 = $v9 && function_exists('ponto_v10_ready') && ponto_v10_ready($pdo);
+$filaRostos = $v10 ? ponto_equip_comandos_resumo($pdo, $cid) : [];
 $link = null;
 if (is_array($ativ) && count($ativ) === 2) {
   foreach ($rows as $r) if ((int)$r['id'] === (int)$ativ[0]) { $link = ['c' => $r, 'url' => ponto_base_url() . '/ponto.php?ativar=' . rawurlencode((string)$ativ[1])]; }
@@ -89,14 +95,16 @@ if (is_array($ativ) && count($ativ) === 2) {
       <tr class="<?= (int)$r['ativo'] ? '' : 'off' ?>">
         <td data-l="Aparelho"><b><?= ponto_h($r['descricao']) ?></b><br><span class="pt-hint"><?= ponto_h($tipos[$r['tipo']] ?? $r['tipo']) ?> · AFD <?= ponto_h($r['identificador_afd']) ?></span></td>
         <td data-l="Estabelecimento"><?= ponto_h($r['estabelecimento'] ?: '—') ?><?= $r['local'] ? '<br><span class="pt-hint">' . ponto_h($r['local']) . '</span>' : '' ?></td>
-        <td data-l="Identificação"><?php if ($eqp): ?><?= ponto_h(implode(' + ', array_filter([(int)$r['funcao_ponto'] ? 'Registra o ponto' : '', (int)$r['funcao_acesso'] ? 'Libera ' . ((string)$r['acesso_acao'] === 'catra' ? 'a catraca' : 'a porta') : '']))) ?><br><span class="pt-hint"><?= (int)$r['funcao_acesso'] ? ponto_h(PONTO_EQUIP_SENTIDOS[$r['acesso_sentido']] ?? '') . ' · ' . ((string)$r['acesso_regra'] === 'ATIVO' ? 'qualquer hora' : 'só na jornada') : '' ?></span><?php else: ?><?= ponto_h(implode(' + ', array_filter([(int)$r['permitir_pin'] ? 'Matrícula/CPF + PIN' : '', (int)$r['permitir_rfid'] ? 'Cartão' : '']))) ?><?php endif; ?></td>
+        <td data-l="Identificação"><?php if ($eqp): ?><?= ponto_h(implode(' + ', array_filter([(int)$r['funcao_ponto'] ? 'Registra o ponto' : '', (int)$r['funcao_acesso'] ? 'Libera ' . ((string)$r['acesso_acao'] === 'catra' ? 'a catraca' : 'a porta') : '']))) ?><br><span class="pt-hint"><?= (int)$r['funcao_acesso'] ? ponto_h(PONTO_EQUIP_SENTIDOS[$r['acesso_sentido']] ?? '') . ' · ' . ((string)$r['acesso_regra'] === 'ATIVO' ? 'qualquer hora' : 'só na jornada') : '' ?></span>
+          <?php if ($v10 && !empty($r['enviar_rostos'])): $fq = $filaRostos[(int)$r['id']] ?? []; ?><br><span class="pt-hint">Rostos: <?= (int)($fq['OK'] ?? 0) ?> enviado(s)<?= ($fq['PENDENTE'] ?? 0) + ($fq['ENVIADO'] ?? 0) ? ' · ' . (($fq['PENDENTE'] ?? 0) + ($fq['ENVIADO'] ?? 0)) . ' na fila' : '' ?><?= !empty($fq['ERRO']) ? ' · <b style="color:#b91c1c">' . (int)$fq['ERRO'] . ' com erro</b>' : '' ?></span><?php endif; ?><?php else: ?><?= ponto_h(implode(' + ', array_filter([(int)$r['permitir_pin'] ? 'Matrícula/CPF + PIN' : '', (int)$r['permitir_rfid'] ? 'Cartão' : '']))) ?><?php endif; ?></td>
         <td data-l="Situação"><?php if (!(int)$r['ativo']): ?><span class="pt-badge n">Desativado</span><?php elseif ($con && $eqp): ?><span class="pt-badge g">Endereço gerado</span><?php elseif ($con): ?><span class="pt-badge g">Conectado</span><?php else: ?><span class="pt-badge y"><?= $eqp ? 'Sem endereço' : 'Aguardando ativação' ?></span><?php endif; ?></td>
         <td data-l="Último acesso"><?= $r['ultimo_acesso'] ? ponto_h(date('d/m/Y H:i', strtotime((string)$r['ultimo_acesso']))) : '—' ?></td>
         <td class="act"><div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end">
           <?php if ((int)$r['ativo']): ?>
-            <button class="pt-btn sm" type="button" onclick='pcEdit(<?= ponto_h(json_encode(array_intersect_key($r, array_flip(['id', 'descricao', 'tipo', 'identificador_afd', 'estabelecimento_id', 'local_id', 'permitir_pin', 'permitir_rfid', 'funcao_ponto', 'funcao_acesso', 'acesso_regra', 'acesso_sentido', 'acesso_acao', 'equip_serial', 'dupla_seg'])), JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
+            <button class="pt-btn sm" type="button" onclick='pcEdit(<?= ponto_h(json_encode(array_intersect_key($r, array_flip(['id', 'descricao', 'tipo', 'identificador_afd', 'estabelecimento_id', 'local_id', 'permitir_pin', 'permitir_rfid', 'funcao_ponto', 'funcao_acesso', 'acesso_regra', 'acesso_sentido', 'acesso_acao', 'equip_serial', 'dupla_seg', 'enviar_rostos'])), JSON_UNESCAPED_UNICODE)) ?>)'>Editar</button>
             <?php if ($eqp): ?>
             <form method="post" style="display:inline-flex" <?= $con ? 'data-confirm="Gerar um endereço novo? O endereço atual para de funcionar e precisa ser trocado no equipamento."' : '' ?>><?= ponto_csrf_field() ?><input type="hidden" name="action" value="endereco"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="pt-btn sm" type="submit"><?= $con ? 'Novo endereço' : 'Gerar endereço' ?></button></form>
+            <?php if ($v10 && !empty($r['enviar_rostos'])): ?><form method="post" style="display:inline-flex"><?= ponto_csrf_field() ?><input type="hidden" name="action" value="enviar_rostos"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="pt-btn sm" type="submit">Enviar rostos</button></form><?php endif; ?>
             <?php if ((int)$r['permitir_rfid']): ?><button class="pt-btn sm" type="button" onclick="pcAprender(<?= (int)$r['id'] ?>, <?= ponto_h(json_encode((string)$r['descricao'], JSON_UNESCAPED_UNICODE)) ?>)">Cadastrar cartão</button><?php endif; ?>
             <?php else: ?>
             <form method="post" style="display:inline"><?= ponto_csrf_field() ?><input type="hidden" name="action" value="ativacao"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="pt-btn sm" type="submit"><?= $con ? 'Reconectar' : 'Link de ativação' ?></button></form>
@@ -140,6 +148,7 @@ if (is_array($ativ) && count($ativ) === 2) {
           <label class="f pc-ac pc-cid">Como abrir<select name="acesso_acao" id="pcAcao"><?php foreach (PONTO_EQUIP_ACOES as $k => $v): ?><option value="<?= $k ?>"><?= ponto_h($v) ?></option><?php endforeach; ?></select></label>
           <label class="f pc-cid">Número de série (device_id)<input type="text" name="equip_serial" id="pcSerial" maxlength="40" inputmode="numeric" placeholder="Opcional: só aceita este aparelho"></label>
           <label class="f">Ignorar leitura repetida por (segundos)<input type="number" name="dupla_seg" id="pcDupla" min="0" max="900" value="120"></label>
+          <?php if ($v10): ?><label class="ck s2 pc-cid"><input type="checkbox" name="enviar_rostos" id="pcRostos" value="1"> Enviar os rostos cadastrados no Nexa para este aparelho (iDFace)</label><?php endif; ?>
         </div>
         <p class="pt-hint" style="margin-top:8px">A regra "só dentro da jornada" usa o horário de cada colaborador com as tolerâncias e liberações de Ponto &gt; Acesso ao Nexa. Saída é sempre liberada. Leituras repetidas da mesma pessoa no tempo indicado abrem a porta, mas não geram outra marcação.</p>
       </div>
@@ -173,7 +182,7 @@ if (is_array($ativ) && count($ativ) === 2) {
     <ol class="pt-hint" style="margin:12px 0 0;padding-left:18px;line-height:1.6">
       <li>No equipamento Control iD (tela de administração pelo navegador, na rede da empresa), ligue o <b>modo online</b> e cadastre o servidor com o endereço acima.</li>
       <li>Para <b>crachá</b>: identificação no servidor (modo online "Enterprise"). Cadastre os cartões aqui em "Cadastrar cartão".</li>
-      <li>Para <b>rosto ou digital</b>: identificação no aparelho (modo online "Pro"). Cadastre a pessoa no aparelho usando como <b>ID</b> o "Código no equipamento" do colaborador (lista abaixo).</li>
+      <li>Para <b>rosto ou digital</b>: identificação no aparelho (modo online "Pro"). Com "Enviar os rostos" marcado, ligue também o <b>modo push</b> no aparelho com este mesmo endereço: o Nexa envia a pessoa e a foto do cadastro (só de quem tem o rosto cadastrado em Ponto &gt; Biometria facial). Sem isso, cadastre a pessoa no aparelho usando como <b>ID</b> o "Código no equipamento" do colaborador (lista abaixo).</li>
       <li>Passe um crachá: o resultado aparece em "Últimas leituras dos equipamentos".</li>
     </ol>
     <?php else: ?>
@@ -249,6 +258,7 @@ function pcFill(r){
     document.getElementById('pcAcao').value = r.acesso_acao || 'door';
     document.getElementById('pcSerial').value = r.equip_serial || '';
     document.getElementById('pcDupla').value = r.dupla_seg === undefined ? 120 : r.dupla_seg;
+    if (document.getElementById('pcRostos')) document.getElementById('pcRostos').checked = String(r.enviar_rostos) === '1';
   }
   pcSync();
   ptOpen('pcModal');

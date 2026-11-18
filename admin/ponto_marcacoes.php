@@ -10,6 +10,17 @@ require_once __DIR__ . '/_ponto.php';
 require_once __DIR__ . '/../config/ponto_marcacao.php';
 
 $cid = ponto_guard($pdo, 'ponto_marcacoes');
+// V10: foto tirada na marcação (fora da pasta pública).
+if (isset($_GET['foto_marcacao'])) {
+  $file = function_exists('ponto_facial_foto_file') ? ponto_facial_foto_file($pdo, $cid, (int)$_GET['foto_marcacao']) : null;
+  if (!$file) { http_response_code(404); exit; }
+  while (ob_get_level() > 0) ob_end_clean();
+  header('Content-Type: image/jpeg');
+  header('Cache-Control: private, max-age=600');
+  header('X-Content-Type-Options: nosniff');
+  readfile($file);
+  exit;
+}
 $hoje = date('Y-m-d');
 $f = [
   'de' => ponto_date_safe($_GET['de'] ?? '', $hoje),
@@ -37,6 +48,8 @@ if (isset($_GET['verificar'])) {
 }
 $rows = ponto_marcacoes_list($pdo, $cid, $f, 2000);
 $fora = count(array_filter($rows, static fn($r) => $r['geofence'] === 'FORA_DA_AREA'));
+$faciais = function_exists('ponto_facial_por_marcacoes') ? ponto_facial_por_marcacoes($pdo, $cid, array_column($rows, 'id')) : [];
+$facAlerta = count(array_filter($faciais, static fn($x) => in_array($x['resultado'], ['NAO_CONFERE', 'SEM_ROSTO', 'SEM_FOTO'], true)));
 $meio = ['PIN' => 'Terminal (PIN)', 'RFID' => 'Cartão', 'SESSAO' => 'Bater Ponto (login)', 'FACIAL' => 'Equipamento (rosto)', 'BIOMETRIA' => 'Equipamento (digital)'];
 ?>
 <form method="get" class="pt-card pt-search">
@@ -57,7 +70,7 @@ $meio = ['PIN' => 'Terminal (PIN)', 'RFID' => 'Cartão', 'SESSAO' => 'Bater Pont
 <?php endif; ?>
 
 <section class="pt-card">
-  <p class="pt-sub"><?= count($rows) ?> registro(s)<?= count($rows) >= 2000 ? ' (mostrando os 2.000 mais recentes; reduza o período)' : '' ?><?= $fora ? ' · <b style="color:#b91c1c">' . $fora . ' fora da área</b>' : '' ?></p>
+  <p class="pt-sub"><?= count($rows) ?> registro(s)<?= count($rows) >= 2000 ? ' (mostrando os 2.000 mais recentes; reduza o período)' : '' ?><?= $fora ? ' · <b style="color:#b91c1c">' . $fora . ' fora da área</b>' : '' ?><?= $facAlerta ? ' · <b style="color:#b91c1c">' . $facAlerta . ' com o rosto a conferir</b>' : '' ?></p>
   <?php if (!$rows): ?><div class="pt-empty">Nenhuma marcação no período.</div><?php else: ?>
   <table class="pt-table cards">
     <thead><tr><th>Data / hora</th><th>Colaborador</th><th>Tipo</th><th>Como</th><th>Localização</th><th>NSR</th><th></th></tr></thead>
@@ -67,7 +80,11 @@ $meio = ['PIN' => 'Terminal (PIN)', 'RFID' => 'Cartão', 'SESSAO' => 'Bater Pont
         <td data-l="Data/hora"><b><?= ponto_h(date('d/m/Y', strtotime((string)$r['data_hora']))) ?> <?= ponto_h(substr((string)$r['data_hora'], 11, 5)) ?></b></td>
         <td data-l="Colaborador"><?= ponto_h($r['nome']) ?><br><span class="pt-hint">Mat. <?= ponto_h($r['matricula']) ?><?= count($estabs) > 1 ? ' · ' . ponto_h($r['estabelecimento']) : '' ?></span></td>
         <td data-l="Tipo"><?= ponto_h(PONTO_INTENCOES[(string)$r['intencao']] ?? '—') ?></td>
-        <td data-l="Como"><?= ponto_h($meio[$r['identificacao']] ?? $r['identificacao']) ?><?= $r['coletor_nome'] ? '<br><span class="pt-hint">' . ponto_h($r['coletor_nome']) . '</span>' : '' ?></td>
+        <td data-l="Como"><?= ponto_h($meio[$r['identificacao']] ?? $r['identificacao']) ?><?= $r['coletor_nome'] ? '<br><span class="pt-hint">' . ponto_h($r['coletor_nome']) . '</span>' : '' ?>
+          <?php if ($fx = $faciais[(int)$r['id']] ?? null): $fbad = in_array($fx['resultado'], ['NAO_CONFERE', 'SEM_ROSTO', 'SEM_FOTO'], true); ?><br>
+            <span class="pt-badge <?= $fbad ? 'r' : ($fx['resultado'] === 'SEM_CADASTRO' ? 'n' : 'g') ?>" title="<?= $fx['distancia'] !== null ? 'Diferença ' . ponto_h((string)$fx['distancia']) : '' ?>"><?= ponto_h(PONTO_FACIAL_RESULTADOS[$fx['resultado']] ?? $fx['resultado']) ?></span>
+            <?php if ($fx['arquivo']): ?><a class="pt-hint" href="ponto_marcacoes.php?foto_marcacao=<?= (int)$r['id'] ?>" target="_blank" rel="noopener">ver foto</a><?php endif; ?>
+          <?php endif; ?></td>
         <td data-l="Localização"><span class="pt-badge <?= $gc ?>"><?= ponto_h($gl) ?></span>
           <?php if ($r['distancia_m'] !== null && $r['geofence'] !== 'DENTRO_DA_AREA'): ?><br><span class="pt-hint"><?= (int)$r['distancia_m'] ?> m de <?= ponto_h($r['local_nome'] ?: 'local') ?></span><?php endif; ?>
           <?php if ($r['latitude'] !== null): ?><br><a class="pt-hint" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=<?= ponto_h($r['latitude']) ?>&mlon=<?= ponto_h($r['longitude']) ?>#map=18/<?= ponto_h($r['latitude']) ?>/<?= ponto_h($r['longitude']) ?>">ver no mapa<?= $r['precisao_m'] !== null ? ' (±' . (int)$r['precisao_m'] . ' m)' : '' ?></a><?php endif; ?>

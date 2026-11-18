@@ -18,10 +18,11 @@ $cid = tenant_company_id($company);
 header('Cache-Control: no-store');
 header('X-Robots-Tag: noindex');
 
-function ponto_equip_json(int $code, array $body): void {
+function ponto_equip_json(int $code, ?array $body): void {
   http_response_code($code);
   header('Content-Type: application/json; charset=utf-8');
-  echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  // Corpo vazio = "nada a fazer" (modo push da Control iD).
+  echo $body === null ? '' : json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   exit;
 }
 
@@ -44,7 +45,8 @@ if (!$eq) {
 }
 
 // Número de série conferido quando informado no cadastro (Control iD manda device_id).
-if ($modo === 'controlid' && !empty($eq['equip_serial']) && isset($_REQUEST['device_id']) && (string)$_REQUEST['device_id'] !== (string)$eq['equip_serial']) {
+$devId = $_REQUEST['device_id'] ?? ($_GET['deviceId'] ?? null);
+if ($modo === 'controlid' && !empty($eq['equip_serial']) && $devId !== null && (string)$devId !== (string)$eq['equip_serial']) {
   ponto_equip_json(403, ['result' => ['event' => 1, 'message' => 'Equipamento não autorizado']]);
 }
 
@@ -54,7 +56,7 @@ if (!$in) {
   $j = json_decode($raw, true);
   if (is_array($j)) $in = $j;
 }
-if ($modo === 'api') $in += $_GET;
+$in += $_GET;
 
 try {
   [$code, $body] = $modo === 'controlid'

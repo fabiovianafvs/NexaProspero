@@ -114,11 +114,13 @@ if ($isPost) {
       [$colId, $ident] = ponto_ticket_check($pdo, $cid, (string)($_POST['ticket'] ?? ''), (int)$coletor['id']);
       $col = ponto_colaborador_get($pdo, $cid, $colId);
       if (!$col) throw new RuntimeException('Colaborador não encontrado.');
+      $fctx = function_exists('ponto_facial_antes_de_marcar') ? ponto_facial_antes_de_marcar($pdo, $cid, $col, $_POST) : null;
       $m = ponto_marcar($pdo, $cid, $col, ['identificacao' => $ident, 'coletor' => $coletor, 'coletor_codigo' => (string)$coletor['identificador_afd'],
         'intencao' => (string)($_POST['intencao'] ?? ''), 'request_uuid' => (string)($_POST['uuid'] ?? ''),
         'latitude' => (string)($_POST['lat'] ?? ''), 'longitude' => (string)($_POST['lng'] ?? ''), 'precisao' => (string)($_POST['acc'] ?? '')]);
+      if ($fctx) ponto_facial_depois_de_marcar($pdo, $cid, $m, $fctx);
       $url = ponto_comprovante_url($pdo, $cid, $m);
-      ponto_json_out(['ok' => true, 'now_ms' => $nowMs(), 'nsr' => (int)$m['nsr'], 'nome' => (string)$col['nome'],
+      ponto_json_out(['ok' => true, 'now_ms' => $nowMs(), 'nsr' => (int)$m['nsr'], 'nome' => (string)$col['nome'], 'facial' => $fctx ? (PONTO_FACIAL_RESULTADOS[$fctx['resultado']] ?? '') : '',
         'hora' => substr((string)$m['data_hora'], 11, 5), 'data' => date('d/m/Y', strtotime((string)$m['data_hora'])),
         'intencao' => PONTO_INTENCOES[(string)$m['intencao']] ?? 'Registro de ponto', 'comprovante' => $url, 'qr' => ponto_qr_svg(ponto_base_url() . $url, 3)]);
     }
@@ -186,7 +188,7 @@ ob_start(); ?>
     <div style="font-weight:800" id="dNome"></div>
     <div class="t" id="dHora"></div>
     <div style="font-weight:800;color:#334155" id="dTipo"></div>
-    <dl><dt>Data</dt><dd id="dData"></dd><dt>NSR</dt><dd id="dNsr"></dd></dl>
+    <dl><dt>Data</dt><dd id="dData"></dd><dt>NSR</dt><dd id="dNsr"></dd><dt id="dFacT" hidden>Rosto</dt><dd id="dFac" hidden></dd></dl>
     <div class="pa-qr" id="dQr"></div>
     <p class="pa-hint">Aponte a câmera do celular para o QR Code e guarde o seu comprovante.</p>
     <div class="pa-row"><button type="button" class="pa-btn pri" id="dOk">Concluir (<span id="dCount">15</span>)</button></div>
@@ -196,5 +198,6 @@ ob_start(); ?>
 $body = (string)ob_get_clean();
 $labels = json_encode(PONTO_INTENCOES, JSON_UNESCAPED_UNICODE);
 $script = '<script>window.TM=' . json_encode(['ft' => ponto_coletor_form_token($pdo, $cid, $coletor), 'tz' => $tz, 'now' => $nowMs(), 'rfid' => $rfid, 'pin' => $pin, 'dev' => (string)$coletor['descricao']], JSON_UNESCAPED_UNICODE) . ';window.TM.labels=' . $labels . ';</script>'
-  . '<script src="/assets/ponto/ponto-terminal.js?v=2"></script>';
+  . (($fcfg = ponto_facial_pagina_cfg($pdo, $cid))['modo'] !== 'DESLIGADO' ? '<script src="/assets/ponto/ponto-face.js?v=1"></script><script>NexaFace.init(' . json_encode($fcfg) . ');</script>' : '')
+  . '<script src="/assets/ponto/ponto-terminal.js?v=3"></script>';
 ponto_terminal_page($companyName, $body, $script);

@@ -75,6 +75,19 @@ ponto_start($pdo, 'ponto_configuracoes', 'Configurações do Ponto', 'Regras da 
     <p class="pt-hint">No modo "Bloquear", fora da jornada o Nexa mostra uma tela onde o funcionário bate o ponto ou pede liberação; o gestor libera em Ponto &gt; Acesso ao Nexa. Colaborador marcado como "Acesso ao Nexa sem restrição de horário" no cadastro não é bloqueado. Colaborador sem jornada cadastrada só precisa ter batido o ponto. A verificação é refeita a cada minuto de uso.</p>
   </section>
   <?php endif; ?>
+  <?php if (function_exists('ponto_v10_ready') && ponto_v10_ready($pdo)): $fm = (string)($cfg['facial_modo'] ?? 'DESLIGADO'); ?>
+  <section class="pt-card">
+    <h2>Reconhecimento facial</h2>
+    <p class="pt-sub">Vale para o Bater Ponto (celular/computador) e para o terminal da empresa. Os aparelhos Control iD com câmera reconhecem o rosto sozinhos (Ponto &gt; Aparelhos).</p>
+    <div class="pt-grid">
+      <label class="f s2">Ao bater o ponto<select name="facial_modo"><?php foreach (PONTO_FACIAL_MODOS as $v => $lb): ?><option value="<?= ponto_h($v) ?>" <?= $fm === $v ? 'selected' : '' ?>><?= ponto_h($lb) ?></option><?php endforeach; ?></select></label>
+      <label class="f s2">Se a foto falhar ou o rosto não conferir<select name="facial_falha"><?php foreach (PONTO_FACIAL_FALHAS as $v => $lb): ?><option value="<?= ponto_h($v) ?>" <?= ($cfg['facial_falha'] ?? 'SINALIZAR') === $v ? 'selected' : '' ?>><?= ponto_h($lb) ?></option><?php endforeach; ?></select></label>
+      <label class="f">Rigor da comparação<select name="facial_rigor"><?php foreach (PONTO_FACIAL_RIGOR_LABEL as $v => $lb): ?><option value="<?= ponto_h($v) ?>" <?= ($cfg['facial_rigor'] ?? 'NORMAL') === $v ? 'selected' : '' ?>><?= ponto_h($lb) ?></option><?php endforeach; ?></select></label>
+      <label class="f">Guardar a foto das marcações por (dias)<input type="number" name="facial_foto_dias" min="30" max="365" value="<?= (int)($cfg['facial_foto_dias'] ?? 90) ?>"></label>
+    </div>
+    <p class="pt-hint">O rosto só é comparado para quem tem o rosto cadastrado em Ponto &gt; Biometria facial (com o termo de consentimento assinado). Quem não tem cadastro continua batendo o ponto normalmente, e a marcação fica como "sem rosto cadastrado". A foto e o resultado aparecem em Ponto &gt; Marcações.</p>
+  </section>
+  <?php endif; ?>
   <section class="pt-card">
     <h2>Dados do programa de ponto (REP-P)</h2>
     <p class="pt-sub">Esses dados aparecem nos arquivos legais e comprovantes. Campo em branco usa o padrão da plataforma (mostrado em cinza), definido pelo desenvolvedor no servidor.</p>
