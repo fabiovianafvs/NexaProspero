@@ -303,6 +303,11 @@ function admin_topbar(string $title, string $active=''): void {
       'delivery_vehicles' => ['Veículos', 'delivery_vehicles.php'],
       'delivery_fiscal_queue' => ['Fila Fiscal', 'delivery_fiscal_queue.php'],
     ]],
+    'transporte' => ['Transporte','transporte_configuracoes.php', [
+      'transp_veiculos' => ['Veículos', 'transporte_veiculos.php'],
+      'transp_motoristas' => ['Motoristas', 'transporte_motoristas.php'],
+      'transp_configuracoes' => ['Configurações CT-e/MDF-e', 'transporte_configuracoes.php'],
+    ]],
     'contratos' => ['Contratos','contratos.php', [
       'contratos_monitor' => ['Monitor de Contratos', 'contratos.php'],
       'contratos_gerar' => ['Gerar Contratos', 'contratos_gerar.php'],

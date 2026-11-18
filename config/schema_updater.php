@@ -780,6 +780,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'b073d469181d080dd35179caade568a7793ea7fc960b255750987e51dde8ae1c',
         'order' => 202611180600,
       ],
+      [
+        'id' => '20261118_transporte_fundacao_v1',
+        'module' => 'transporte',
+        'version' => 202611180700,
+        'label' => 'Transporte (CT-e/MDF-e) - V1 Fundação',
+        'description' => 'Cria as tabelas do módulo de Transporte: veículos (tração e reboques), motoristas, numeração do CT-e/MDF-e e auditoria. Não altera nenhuma tabela existente.',
+        'file' => __DIR__ . '/../db/20261118_transporte_fundacao_v1.sql',
+        'sha256' => 'e525d461de3bbb40381a1501bc552941c9a171aced1c229660ef21b76a77a625',
+        'order' => 202611180700,
+      ],
     ];
   }
 }
