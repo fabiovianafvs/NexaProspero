@@ -136,7 +136,7 @@ $modelLabel = (string)($doc['model'] ?? '') === '55' ? 'NF-e' : 'NFC-e';
 </style>
 </head>
 <body>
-<header class="top"><div class="topin"><div class="brand"><img src="/assets/logo-nexa-prospero.jpg" alt="Próspero"><div><strong>Central do Contador Próspero</strong><span><?= $e((string)$company['name']) ?></span></div></div><div><a href="index.php?company=<?= $companyId ?>&view=documents">Documentos fiscais</a> &nbsp; <a href="logout.php">Sair</a></div></div></header>
+<header class="top"><div class="topin"><div class="brand"><img src="/assets/logo-nexa-v6-2.png" alt="Nexa Próspero"><div><strong>Central do Contador Próspero</strong><span><?= $e((string)$company['name']) ?></span></div></div><div><a href="index.php?company=<?= $companyId ?>&view=documents">Documentos fiscais</a> &nbsp; <a href="logout.php">Sair</a></div></div></header>
 <main class="page">
   <div class="head"><div><h1><?= $e($modelLabel) ?> <?= $e((string)($doc['series'] ?? '')) ?>/<?= $e((string)($doc['number'] ?? '')) ?></h1><p>Conferência completa do documento fiscal, participantes, produtos, tributação, IBS/CBS, pagamentos e eventos.</p></div><a class="btn" href="index.php?company=<?= $companyId ?>&view=documents">← Voltar aos documentos</a></div>
 
