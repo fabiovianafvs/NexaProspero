@@ -43,6 +43,11 @@ $loadChat = static function () use ($pdo, $cid, $uid, $supervisor, $chatId, $out
   return $chat;
 };
 
+// Ações que gravam só por POST (com o token CSRF conferido acima).
+if (!$isPost && !in_array($action, ['list', 'targets', 'chat', 'options', 'profile', 'people', 'quick', 'contacts'], true)) {
+  $out(['ok' => false, 'error' => 'Use POST para esta ação.'], 405);
+}
+
 try {
   switch ($action) {
     case 'list':
@@ -174,6 +179,10 @@ try {
 
     case 'delete':
       $msg = whatsapp_att_delete($pdo, $cid, $loadChat(), $uid, $supervisor, (int)($_POST['message_id'] ?? 0));
+      $out(['ok' => true, 'message' => $msg]);
+
+    case 'edit':
+      $msg = whatsapp_att_edit($pdo, $cid, $loadChat(), $uid, $supervisor, (int)($_POST['message_id'] ?? 0), (string)($_POST['text'] ?? ''));
       $out(['ok' => true, 'message' => $msg]);
 
     case 'forward':

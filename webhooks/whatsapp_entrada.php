@@ -37,16 +37,20 @@ if ($secret === '' || $ts === '' || !ctype_digit($ts) || abs(time() - (int)$ts) 
 }
 
 $payload = json_decode($raw, true);
-if (!is_array($payload) || !in_array(($payload['event'] ?? ''), ['message', 'human_reply', 'status', 'revoke'], true)) {
+if (!is_array($payload) || !in_array(($payload['event'] ?? ''), ['message', 'human_reply', 'status', 'revoke', 'edit'], true)) {
   echo '{"ok":true,"ignored":true}';
   exit;
 }
 
-// Situação (✓✓) e mensagem apagada: rápidas, tratadas antes de responder. Se a mensagem
+// Situação (✓✓), mensagem apagada e mensagem editada: rápidas, tratadas antes de responder. Se a mensagem
 // ainda não foi gravada (o envio está terminando), responde 409 e o motor tenta de novo.
-if (in_array(($payload['event'] ?? ''), ['status', 'revoke'], true)) {
+if (in_array(($payload['event'] ?? ''), ['status', 'revoke', 'edit'], true)) {
   try {
-    $r = ($payload['event'] === 'status') ? whatsapp_bot_status_update($pdo, $payload) : whatsapp_bot_revoke($pdo, $payload);
+    $r = match ((string)$payload['event']) {
+      'status' => whatsapp_bot_status_update($pdo, $payload),
+      'revoke' => whatsapp_bot_revoke($pdo, $payload),
+      default => whatsapp_bot_edit($pdo, $payload),
+    };
     if ($r === 'não encontrada') { http_response_code(409); echo '{"ok":false,"retry":true}'; exit; }
   } catch (Throwable $e) {
     error_log('[whatsapp_entrada] ' . $e->getMessage());

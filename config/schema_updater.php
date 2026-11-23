@@ -800,6 +800,26 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'cf6102cb0ee07dbb68ea29beaa8bd7d6fcf5715f82cac3564bdb3de664c6f2c7',
         'order' => 202611180800,
       ],
+      [
+        'id' => '20261123_cartoes_contas_receber_v1',
+        'module' => 'finance_card_receivables',
+        'version' => 202611230100,
+        'label' => 'Controle de Cartões - baixas do Contas a Receber',
+        'description' => 'Permite que a baixa do Contas a Receber com forma de pagamento de cartão (com "Habilitar controle") lance a venda e as parcelas no Controle de Cartões. Só acrescenta colunas; não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261123_cartoes_contas_receber_v1.sql',
+        'sha256' => '51b9e82073196ee3a3c7ffa369f246813560d7201f9ca0bb0d7a4c97dba1e0d6',
+        'order' => 202611230100,
+      ],
+      [
+        'id' => '20261123_whatsapp_atendimento_v4',
+        'module' => 'whatsapp_chatbot',
+        'version' => 202611230200,
+        'label' => 'WhatsApp - Atendimento v4 (editar mensagens)',
+        'description' => 'Permite editar uma mensagem de texto enviada pelo Atendimento (o WhatsApp aceita até 15 minutos depois do envio) e mostra "Editada" também quando o cliente edita. Aplicar depois da v3. Só acrescenta colunas; não altera mensagens existentes.',
+        'file' => __DIR__ . '/../db/20261123_whatsapp_atendimento_v4.sql',
+        'sha256' => 'd574d5f8c9fcdd7d4a2e743ea3a6245ef901a31b949a4d197bfccc0aa29c965a',
+        'order' => 202611230200,
+      ],
     ];
   }
 }

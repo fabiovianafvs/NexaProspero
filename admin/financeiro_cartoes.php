@@ -85,7 +85,8 @@ if ($schemaReady) {
     $where[]='(fp.name LIKE ? OR fp.document LIKE ? OR CAST(cs.order_id AS CHAR) LIKE ? OR pm.name LIKE ? OR cs.acquirer_name LIKE ? OR cs.nsu LIKE ? OR cs.authorization_code LIKE ?)';
     $like='%'.$q.'%'; array_push($params,$like,$like,$like,$like,$like,$like,$like);
   }
-  $sql="SELECT ci.*,cs.order_id,cs.person_id,cs.sale_date,cs.payment_method_id,cs.acquirer_name,cs.card_brand,cs.nsu,cs.authorization_code,cs.provider_transaction_id,
+  $recvSel=finance_column_exists($pdo,'finance_card_sales','receivable_id')?'cs.receivable_id,':'NULL AS receivable_id,';
+  $sql="SELECT ci.*,{$recvSel}cs.order_id,cs.person_id,cs.sale_date,cs.payment_method_id,cs.acquirer_name,cs.card_brand,cs.nsu,cs.authorization_code,cs.provider_transaction_id,
       fp.name person_name,fp.document person_document,pm.name payment_name,
       ba_def.name default_bank_name,ba_recv.name received_bank_name,ca.code chart_code,ca.name chart_name
     FROM finance_card_installments ci
@@ -232,7 +233,7 @@ foreach($columns as $key=>$label): ?>
   <td data-col="select" class="center"><?php if($open && $canSettle): ?><input class="card-check card-row-check" type="checkbox" name="installment_ids[]" value="<?= (int)$r['id'] ?>" data-net="<?= finance_h(number_format((float)$r['net_amount'],2,'.','')) ?>"><?php endif; ?></td>
   <td data-col="due" class="nowrap"><?= finance_date_br($r['due_date']) ?></td>
   <td data-col="sale" class="nowrap"><?= finance_date_br($r['sale_date']) ?></td>
-  <td data-col="order" class="center"><strong>#<?= (int)$r['order_id'] ?></strong></td>
+  <td data-col="order" class="center"><?php if((int)$r['order_id']<=0 && (int)($r['receivable_id']??0)>0): ?><a href="financeiro_contas_receber.php?edit=<?= (int)$r['receivable_id'] ?>" title="Título do Contas a Receber"><strong>C/R #<?= (int)$r['receivable_id'] ?></strong></a><?php else: ?><strong>#<?= (int)$r['order_id'] ?></strong><?php endif; ?></td>
   <td data-col="customer_code" class="center"><?= (int)($r['person_id']??0) ?></td>
   <td data-col="customer"><strong><?= finance_h($r['person_name'] ?: 'Consumidor / não informado') ?></strong><?php if(trim((string)$r['person_document'])!==''): ?><span class="card-note"><?= finance_h($r['person_document']) ?></span><?php endif; ?></td>
   <td data-col="default_bank"><?= finance_h($r['default_bank_name'] ?: '—') ?></td>

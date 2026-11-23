@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { URL } = require('url');
 
 const SERVICE_NAME = 'nexa-realtime';
-const SERVICE_VERSION = '2.0.0';
+const SERVICE_VERSION = '2.1.0';
 const recentWindowMs = Math.max(60_000, Number(process.env.NEXA_REALTIME_RECENT_WINDOW_MS || 10 * 60 * 1000));
 const recentMaxPerCompany = Math.max(10, Number(process.env.NEXA_REALTIME_RECENT_MAX_PER_COMPANY || 100));
 
@@ -29,6 +29,8 @@ if (!config.secret) {
 }
 
 const rooms = new Map();
+// Presença: quantas conexões cada usuário tem abertas por empresa (Painel Ao Vivo do WhatsApp mostra on-line/off-line).
+const presence = new Map();
 let redisReady = false;
 // Ao reiniciar o gateway, retoma uma pequena janela recente do Stream.
 // Isso evita perder um pedido criado poucos minutos antes do Admin conectar,
@@ -162,13 +164,47 @@ function sendJson(client, payload) {
   }
 }
 
+function presenceOnline(companyId) {
+  const users = presence.get(companyId);
+  return users ? [...users.keys()] : [];
+}
+
+function presenceBroadcast(companyId, userId, online) {
+  const clients = rooms.get(companyId);
+  if (!clients) return;
+  for (const client of clients) sendJson(client, { type: 'presence', companyId, userId, online });
+}
+
+function presenceJoin(client) {
+  if (!client.userId) return;
+  if (!presence.has(client.companyId)) presence.set(client.companyId, new Map());
+  const users = presence.get(client.companyId);
+  const count = (users.get(client.userId) || 0) + 1;
+  users.set(client.userId, count);
+  if (count === 1) presenceBroadcast(client.companyId, client.userId, true);
+}
+
+function presenceLeave(client) {
+  if (!client.userId) return;
+  const users = presence.get(client.companyId);
+  if (!users) return;
+  const count = (users.get(client.userId) || 0) - 1;
+  if (count > 0) { users.set(client.userId, count); return; }
+  users.delete(client.userId);
+  if (!users.size) presence.delete(client.companyId);
+  presenceBroadcast(client.companyId, client.userId, false);
+}
+
 function closeClient(client) {
+  if (client.closed) { try { client.socket.destroy(); } catch (_) {} return; }
+  client.closed = true;
   const clients = rooms.get(client.companyId);
   if (clients) {
     clients.delete(client);
     if (!clients.size) rooms.delete(client.companyId);
   }
   try { client.socket.destroy(); } catch (_) {}
+  presenceLeave(client);
 }
 
 function processClientFrames(client, chunk) {
@@ -232,6 +268,9 @@ server.on('upgrade', (req, socket) => {
     socket.on('close', () => closeClient(client));
     socket.on('error', () => closeClient(client));
     sendJson(client, { type: 'welcome', companyId: client.companyId, connectedAt: new Date().toISOString(), service: SERVICE_NAME, version: SERVICE_VERSION });
+    presenceJoin(client);
+    // Quem está com o Nexa aberto agora (só ids de usuário da mesma empresa).
+    sendJson(client, { type: 'presence.list', companyId: client.companyId, users: presenceOnline(client.companyId) });
     // Entrega eventos recentes ainda válidos caso o Admin tenha sido aberto após o pedido.
     // Continua 100% orientado a eventos/Redis; não consulta o MySQL.
     replayRecent(client);

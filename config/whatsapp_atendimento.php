@@ -45,7 +45,7 @@ if (!function_exists('whatsapp_att_tabs')) {
     return [
       'fila' => ['Fila', "s.status='PENDENTE'"],
       'meus' => ['Meus', "s.status='ATENDIMENTO' AND s.user_id=:me"],
-      'atendimento' => ['Em atendimento', "s.status='ATENDIMENTO'"],
+      // "Atendendo" (todas em atendimento) saiu: quem atende cada conversa aparece no Painel Ao Vivo.
       'robo' => ['No robô', "s.status='BOT'"],
       'finalizados' => ['Finalizados', "s.status='FINALIZADO'"],
       // Grupos do WhatsApp (só com a opção ligada; o número conta os grupos com mensagens não lidas).
@@ -103,6 +103,58 @@ if (!function_exists('whatsapp_att_list')) {
   }
 }
 
+if (!function_exists('whatsapp_att_live')) {
+  /**
+   * Painel Ao Vivo: conversas na fila (Pendentes) e as que estão com cada atendente agora.
+   * Atendentes = quem está nos setores do chatbot + quem tem conversa aberta.
+   * Conversa "respondida pelo celular" (em atendimento sem usuário) vai para o grupo "Pelo celular".
+   */
+  function whatsapp_att_live(PDO $pdo, int $companyId): array {
+    $ct = whatsapp_att_contact_sql($pdo);
+    $st = $pdo->prepare("SELECT s.id, s.contact, s.phone, s.push_name, s.status, s.department_id, s.user_id, s.unread, s.last_preview, s.last_direction,
+        s.last_message_at, s.queued_at, s.accepted_at, s.person_id, p.name AS person_name, p.fantasy_name AS person_fantasy, d.name AS department_name, u.name AS user_name{$ct['cols']}
+      FROM whatsapp_bot_sessions s
+      LEFT JOIN finance_people p ON p.company_id=s.company_id AND p.id=s.person_id
+      LEFT JOIN whatsapp_departments d ON d.company_id=s.company_id AND d.id=s.department_id
+      LEFT JOIN users u ON u.company_id=s.company_id AND u.id=s.user_id{$ct['join']}
+      WHERE s.company_id=? AND s.status IN ('PENDENTE','ATENDIMENTO')
+      ORDER BY s.status='ATENDIMENTO', s.queued_at ASC, s.accepted_at ASC, s.id ASC LIMIT 1000");
+    $st->execute([$companyId]);
+    $pending = []; $byUser = []; $phone = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+      $row = whatsapp_att_row($r);
+      if ($row['status'] === 'PENDENTE') $pending[] = $row;
+      elseif ($row['user_id'] > 0) $byUser[$row['user_id']][] = $row;
+      else $phone[] = $row;
+    }
+    $deps = [];
+    foreach (whatsapp_departments($pdo, $companyId) as $d) $deps[(int)$d['id']] = (string)$d['name'];
+    $userDeps = [];
+    foreach (whatsapp_department_members($pdo, $companyId) as $depId => $uids) {
+      if (!isset($deps[$depId])) continue;
+      foreach ($uids as $u) $userDeps[(int)$u][] = $deps[$depId];
+    }
+    $names = function_exists('whatsapp_painel_user_names') ? whatsapp_painel_user_names($pdo, $companyId) : [];
+    $ids = array_values(array_unique(array_merge(array_keys($userDeps), array_keys($byUser))));
+    $attendants = [];
+    foreach ($ids as $u) {
+      $name = $names[$u] ?? '';
+      if ($name === '' && empty($byUser[$u])) continue; // usuário de outra empresa/excluído sem conversa
+      $attendants[] = [
+        'id' => $u,
+        'name' => $name !== '' ? $name : ('Usuário #' . $u),
+        'departments' => $userDeps[$u] ?? [],
+        'items' => $byUser[$u] ?? [],
+      ];
+    }
+    // Quem tem mais conversas primeiro; depois em ordem alfabética.
+    usort($attendants, static fn($a, $b) => [count($b['items']), mb_strtolower($a['name'])] <=> [count($a['items']), mb_strtolower($b['name'])]);
+    $depList = [];
+    foreach ($deps as $id => $name) $depList[] = ['id' => $id, 'name' => $name];
+    return ['pending' => $pending, 'attendants' => $attendants, 'phone' => $phone, 'departments' => $depList, 'now' => date('Y-m-d H:i:s')];
+  }
+}
+
 if (!function_exists('whatsapp_att_phone_label')) {
   function whatsapp_att_phone_label(string $d): string {
     $d = whatsapp_bot_digits($d);
@@ -139,6 +191,7 @@ if (!function_exists('whatsapp_att_row')) {
       'last_direction' => (string)($r['last_direction'] ?? ''),
       'last_at' => (string)($r['last_message_at'] ?? ''),
       'queued_at' => (string)($r['queued_at'] ?? ''),
+      'accepted_at' => (string)($r['accepted_at'] ?? ''),
       'person_id' => (int)($r['person_id'] ?? 0),
       'contact_id' => (int)($r['contact_id'] ?? 0),
       'contact_role' => trim((string)($r['contact_role'] ?? '')),
@@ -285,7 +338,8 @@ if (!function_exists('whatsapp_att_messages')) {
     $v3 = whatsapp_chat_has_v3($pdo);
     $cols = 'm.id, m.direction, m.sender, m.user_id, m.message_id, m.msg_type, m.body, m.media_path, m.media_mime, m.media_name, m.media_size, m.send_ok, m.created_at, u.name AS user_name'
       . (whatsapp_chat_has_wa_status($pdo) ? ', m.wa_status' : ', NULL AS wa_status')
-      . ($v3 ? ', m.reply_to_id, m.quoted_message_id, m.forwarded, m.deleted_at, m.deleted_for_all, m.participant_phone, m.participant_name' : '');
+      . ($v3 ? ', m.reply_to_id, m.quoted_message_id, m.forwarded, m.deleted_at, m.deleted_for_all, m.participant_phone, m.participant_name' : '')
+      . (whatsapp_chat_has_v4($pdo) ? ', m.edited_at' : ', NULL AS edited_at');
     $join = 'LEFT JOIN users u ON u.company_id=m.company_id AND u.id=m.user_id';
     if ($afterId > 0) {
       $st = $pdo->prepare("SELECT $cols FROM whatsapp_bot_messages m $join WHERE m.company_id=? AND m.session_id=? AND m.id>? ORDER BY m.id LIMIT 300");
@@ -330,6 +384,8 @@ if (!function_exists('whatsapp_att_messages')) {
         'pname' => trim((string)($m['participant_name'] ?? '')),
         'pphone' => whatsapp_att_phone_label((string)($m['participant_phone'] ?? '')),
         'reply' => $quotes[(int)$m['id']] ?? null,
+        'uid' => (int)($m['user_id'] ?? 0),
+        'edited' => !empty($m['edited_at']),
       ];
       // Apagada: o conteúdo não aparece mais na tela (o registro fica no histórico).
       if (end($out)['del']) {
@@ -414,7 +470,7 @@ if (!function_exists('whatsapp_att_assert_owner')) {
     if ($status === 'BOT') throw new RuntimeException('O robô está atendendo esta conversa. Clique em Aceitar para responder.');
     if ($status === 'PENDENTE') throw new RuntimeException('Esta conversa está na fila e ainda não foi aceita. Clique em Aceitar para responder.');
     if ($status === 'FINALIZADO') throw new RuntimeException('Esta conversa foi finalizada. Clique em Aceitar para reabrir e responder.');
-    if ((int)$chat['user_id'] > 0) throw new RuntimeException('Esta conversa está com outro atendente.' . ($supervisor ? ' Clique em Assumir para responder.' : ''));
+    if ((int)$chat['user_id'] > 0) throw new RuntimeException('Esta conversa está com outro atendente.' . ($supervisor ? ' Para assumir, use Transferir.' : ''));
     throw new RuntimeException('Esta conversa está sendo respondida pelo celular. Clique em Aceitar para responder por aqui.');
   }
 }
@@ -422,16 +478,21 @@ if (!function_exists('whatsapp_att_assert_owner')) {
 if (!function_exists('whatsapp_att_accept')) {
   function whatsapp_att_accept(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor, bool $greet = true): array {
     if (($chat['status'] ?? '') === 'GRUPO') throw new RuntimeException('Grupos não precisam ser aceitos: é só escrever.');
-    if ($chat['status'] === 'ATENDIMENTO' && (int)$chat['user_id'] > 0 && (int)$chat['user_id'] !== $userId && !$supervisor) {
-      throw new RuntimeException('Esta conversa já foi aceita por outro atendente.');
-    }
+    // Conversa já aceita (está em "Meus" de outro atendente): ninguém aceita de novo, nem o supervisor.
+    // Para mudar de atendente, quem atende ou o supervisor usa Transferir.
+    $taken = static function () use ($pdo, $companyId, $chat): RuntimeException {
+      $cur = whatsapp_chat_get($pdo, $companyId, (int)$chat['id']) ?? $chat;
+      $who = (int)($cur['user_id'] ?? 0) > 0 ? whatsapp_bot_user_name($pdo, $companyId, (int)$cur['user_id']) : '';
+      return new RuntimeException('Esta conversa já foi aceita' . ($who !== '' ? ' por ' . $who : ' por outro atendente') . '. Para mudar o atendente, use Transferir.');
+    };
+    if ($chat['status'] === 'ATENDIMENTO' && (int)$chat['user_id'] > 0 && (int)$chat['user_id'] !== $userId) throw $taken();
     $now = date('Y-m-d H:i:s');
     $chatId = (int)$chat['id'];
-    // Evita dois atendentes aceitando a mesma conversa ao mesmo tempo.
+    // Evita dois atendentes aceitando a mesma conversa ao mesmo tempo (o UPDATE só passa se ninguém aceitou antes).
     $st = $pdo->prepare("UPDATE whatsapp_bot_sessions SET status='ATENDIMENTO', user_id=?, accepted_at=?, closed_at=NULL, unread=0, state='MENU', paused_until=NULL
-      WHERE company_id=? AND id=? AND (status<>'ATENDIMENTO' OR user_id IS NULL OR user_id=? OR ?=1)");
-    $st->execute([$userId, $now, $companyId, $chatId, $userId, $supervisor ? 1 : 0]);
-    if ($st->rowCount() === 0) throw new RuntimeException('Esta conversa já foi aceita por outro atendente.');
+      WHERE company_id=? AND id=? AND (status<>'ATENDIMENTO' OR user_id IS NULL OR user_id=0 OR user_id=?)");
+    $st->execute([$userId, $now, $companyId, $chatId, $userId]);
+    if ($st->rowCount() === 0) throw $taken();
     if (function_exists('whatsapp_painel_transition')) whatsapp_painel_transition($pdo, $companyId, $chatId, $chat, ['status' => 'ATENDIMENTO', 'user_id' => $userId], $now);
     $name = whatsapp_bot_user_name($pdo, $companyId, $userId) ?: 'Atendente';
     $previous = (int)$chat['user_id'] > 0 && (int)$chat['user_id'] !== $userId ? whatsapp_bot_user_name($pdo, $companyId, (int)$chat['user_id']) : '';
@@ -635,6 +696,53 @@ if (!function_exists('whatsapp_att_delete')) {
       ->execute([date('Y-m-d H:i:s'), $userId ?: null, $forAll, $companyId, $messageId]);
     whatsapp_chat_notify($companyId, (int)$chat['id'], ['deleted' => 1]);
     return $forAll ? 'Mensagem apagada para todos.' : 'Mensagem apagada no Nexa (no celular do cliente ela continua).';
+  }
+}
+
+if (!function_exists('whatsapp_att_edit_minutes')) {
+  /** O WhatsApp só aceita editar a mensagem até 15 minutos depois do envio. */
+  function whatsapp_att_edit_minutes(): int { return 15; }
+}
+
+if (!function_exists('whatsapp_att_edit')) {
+  /**
+   * Edita uma mensagem de texto enviada pelo Atendimento (por quem a enviou; o supervisor
+   * edita as de qualquer atendente). Muda também no celular do cliente (aparece "Editada").
+   */
+  function whatsapp_att_edit(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor, int $messageId, string $text): string {
+    if (!whatsapp_chat_has_v4($pdo)) throw new RuntimeException('Aplique "WhatsApp - Atendimento v4 (editar mensagens)" no Atualizador do Banco.');
+    $text = trim($text);
+    if ($text === '') throw new RuntimeException('Digite o texto da mensagem.');
+    if (mb_strlen($text) > 4000) throw new RuntimeException('Mensagem muito longa (máximo 4.000 caracteres).');
+    $chat = whatsapp_att_assert_owner($pdo, $companyId, $chat, $userId, $supervisor);
+    $m = whatsapp_att_message_get($pdo, $companyId, (int)$chat['id'], $messageId);
+    if (!$m) throw new RuntimeException('Mensagem não encontrada.');
+    if ($m['direction'] !== 'OUT' || ($m['sender'] ?? '') !== 'atendente') throw new RuntimeException('Só dá para editar mensagens enviadas pelo Atendimento.');
+    if ((string)($m['msg_type'] ?? 'text') !== 'text' || !empty($m['media_path'])) throw new RuntimeException('Só mensagens de texto podem ser editadas.');
+    if ((int)($m['user_id'] ?? 0) !== $userId && !$supervisor) throw new RuntimeException('Cada atendente edita só as próprias mensagens.');
+    if (trim((string)$m['message_id']) === '' || (int)$m['send_ok'] !== 1) throw new RuntimeException('Esta mensagem não chegou a ser enviada; envie de novo em vez de editar.');
+    if (strtotime((string)$m['created_at']) < time() - whatsapp_att_edit_minutes() * 60) throw new RuntimeException('O WhatsApp só permite editar até ' . whatsapp_att_edit_minutes() . ' minutos depois do envio.');
+    if ($text === (string)$m['body']) return 'Nada mudou na mensagem.';
+    $cfg = whatsapp_bot_config($pdo, $companyId);
+    $wire = $text;
+    // Mesma assinatura do envio ("*Nome:*" na 1ª linha), com o nome de quem enviou.
+    if ($cfg['sign_messages']) {
+      $name = whatsapp_bot_user_name($pdo, $companyId, (int)($m['user_id'] ?? 0) ?: $userId);
+      if ($name !== '') $wire = '*' . $name . ':*' . "\n" . $text;
+    }
+    $ctx = whatsapp_chat_ctx($pdo, $companyId, $chat);
+    $payload = ['company_id' => $ctx['sid'], 'message_id' => (string)$m['message_id'], 'message' => $wire];
+    if ($ctx['phone'] !== '') $payload['to'] = $ctx['phone']; else $payload['jid'] = $ctx['contact'];
+    try {
+      whatsapp_api_request(array_merge($ctx['wa'], ['timeout_seconds' => 30]), 'POST', '/edit', $payload);
+    } catch (Throwable $e) {
+      $msg = $e->getMessage();
+      if (preg_match('/\b404\b|not found|rota não encontrad|cannot post/iu', $msg)) throw new RuntimeException('O serviço de WhatsApp desta empresa ainda não permite editar mensagens (é preciso o motor novo do WhatsApp).');
+      throw new RuntimeException('Não foi possível editar no WhatsApp: ' . $msg);
+    }
+    whatsapp_chat_apply_edit($pdo, $companyId, $m, $text);
+    whatsapp_chat_notify($companyId, (int)$chat['id'], ['edited' => 1]);
+    return 'Mensagem editada.';
   }
 }
 

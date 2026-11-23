@@ -1133,6 +1133,8 @@ if (!function_exists('finance_payment_splits_from_data')) {
     $methodIds = $data['payment_method_id'] ?? [];
     $amounts = $data['payment_amount'] ?? [];
     $bankIds = $data['payment_bank_account_id'] ?? [];
+    $cardCounts = $data['payment_card_installments'] ?? [];
+    if (!is_array($cardCounts)) $cardCounts = [$cardCounts];
     if (!is_array($methodIds)) $methodIds = [$methodIds];
     if (!is_array($amounts)) $amounts = [$amounts];
     if (!is_array($bankIds)) $bankIds = [$bankIds];
@@ -1144,7 +1146,7 @@ if (!function_exists('finance_payment_splits_from_data')) {
       if ($methodId <= 0 && $amount <= 0) continue;
       if ($methodId <= 0) throw new RuntimeException('Selecione a forma de pagamento de todas as linhas informadas.');
       if ($amount <= 0) throw new RuntimeException('Informe um valor maior que zero para cada forma de pagamento.');
-      $requested[] = ['method_id'=>$methodId, 'amount'=>round($amount,2), 'bank_account_id'=>(int)($bankIds[$i] ?? 0) ?: null];
+      $requested[] = ['method_id'=>$methodId, 'amount'=>round($amount,2), 'bank_account_id'=>(int)($bankIds[$i] ?? 0) ?: null, 'card_installments'=>max(0, (int)($cardCounts[$i] ?? 0))];
     }
 
     if ($requested) {
@@ -1158,6 +1160,11 @@ if (!function_exists('finance_payment_splits_from_data')) {
       }
       $map = [];
       foreach ($rows as $r) $map[(int)$r['id']] = $r;
+      // Formas com Controle de Cartões ("Habilitar controle"): a baixa vira venda no cartão (ver finance_settle_card_split).
+      $cardEnabled = [];
+      if (finance_column_exists($pdo, 'finance_payment_methods', 'card_control_enabled')) {
+        foreach (finance_query_all($pdo, "SELECT id FROM finance_payment_methods WHERE company_id=? AND id IN ({$ph}) AND card_control_enabled=1", array_merge([$companyId], $ids)) as $r) $cardEnabled[(int)$r['id']] = true;
+      }
       $splits = [];
       $sum = 0.0;
       foreach ($requested as $r) {
@@ -1177,6 +1184,8 @@ if (!function_exists('finance_payment_splits_from_data')) {
           'payment_method' => trim((string)($m['name'] ?? '')),
           'bank_account_id' => $bankId,
           'amount' => $amount,
+          'card_control' => !empty($cardEnabled[$methodId]),
+          'card_installments' => (int)($r['card_installments'] ?? 0),
         ];
       }
       $sum = round($sum, 2);
@@ -1250,6 +1259,20 @@ if (!function_exists('finance_insert_settlement_payment')) {
   }
 }
 
+if (!function_exists('finance_settle_card_split')) {
+  /**
+   * Parte de uma baixa do Contas a Receber paga com cartão controlado: em vez do crédito no
+   * caixa/banco, lança a venda no Controle de Cartões (parcelas da operadora). Devolve true se tratou.
+   */
+  function finance_settle_card_split(PDO $pdo, int $companyId, string $originType, int $settlementId, array $title, array $split, float $amount, string $settlementDate): bool {
+    if (strtoupper($originType) !== 'RECEBER' || empty($split['card_control']) || $amount <= 0) return false;
+    require_once __DIR__ . '/card_control.php';
+    card_control_register_receivable_payment($pdo, $companyId, $settlementId, $title, $split, $amount, $settlementDate);
+    finance_insert_settlement_payment($pdo, $companyId, $settlementId, $split, $amount, null);
+    return true;
+  }
+}
+
 if (!function_exists('finance_settle_title')) {
   function finance_settle_title(PDO $pdo, int $companyId, string $originType, int $originId, array $data): void {
     $originType = strtoupper($originType);
@@ -1300,6 +1323,7 @@ if (!function_exists('finance_settle_title')) {
 
       $firstMovementId = 0;
       foreach ($splits as $split) {
+        if (finance_settle_card_split($pdo, $companyId, $originType, $settlementId, $title, $split, (float)$split['amount'], $settlementDate)) continue;
         $movementId = finance_create_split_movement($pdo, $companyId, $originType, $originId, $settlementDate, $title, $split, (float)$split['amount'], '', '', $notes);
         if ($firstMovementId <= 0 && $movementId > 0) $firstMovementId = $movementId;
         finance_insert_settlement_payment($pdo, $companyId, $settlementId, $split, (float)$split['amount'], $movementId);
@@ -1468,6 +1492,7 @@ if (!function_exists('finance_settle_titles_bulk')) {
       if ($separate) {
         foreach ($allocations as $a) {
           $ri=(int)$a['row_index'];$si=(int)$a['split_index'];$row=$inserted[$ri];$split=$splits[$si];$title=$row['title'];
+          if (finance_settle_card_split($pdo,$companyId,$originType,(int)$row['settlement_id'],$title,$split,(float)$a['amount'],$settlementDate)) continue;
           $movementId=finance_create_split_movement($pdo,$companyId,$originType,(int)$title['id'],$settlementDate,$title,$split,(float)$a['amount'],'','',$userNotes);
           finance_insert_settlement_payment($pdo,$companyId,(int)$row['settlement_id'],$split,(float)$a['amount'],$movementId);
           if ($originType === 'RECEBER' && function_exists('nexa_cash_cr_register_payment')) {
@@ -1478,6 +1503,7 @@ if (!function_exists('finance_settle_titles_bulk')) {
       } else {
         $movementIds=[];
         foreach ($splits as $si=>$split) {
+          if ($originType === 'RECEBER' && !empty($split['card_control'])) continue; // cartão controlado: lançado por título no Controle de Cartões
           $type = $originType === 'RECEBER' ? 'CREDITO' : 'DEBITO';
           $desc=$description . (trim((string)$split['payment_method'])!==''?' · '.trim((string)$split['payment_method']):'');
           $st=$pdo->prepare('INSERT INTO finance_movements (company_id, movement_date, type, person_id, chart_account_id, cost_center_id, bank_account_id, origin_type, origin_id, description, document_number, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)');
@@ -1486,6 +1512,7 @@ if (!function_exists('finance_settle_titles_bulk')) {
         }
         foreach ($allocations as $a) {
           $ri=(int)$a['row_index'];$si=(int)$a['split_index'];$row=$inserted[$ri];$split=$splits[$si];$movementId=(int)($movementIds[$si]??0);
+          if (finance_settle_card_split($pdo,$companyId,$originType,(int)$row['settlement_id'],$row['title'],$split,(float)$a['amount'],$settlementDate)) continue;
           finance_insert_settlement_payment($pdo,$companyId,(int)$row['settlement_id'],$split,(float)$a['amount'],$movementId);
           if ($originType === 'RECEBER' && function_exists('nexa_cash_cr_register_payment')) {
             nexa_cash_cr_register_payment($pdo, $companyId, (int)$row['settlement_id'], (int)$pdo->lastInsertId(), $movementId, (int)$row['title']['id'], $row['title'], $split, (float)$a['amount'], $data);
@@ -1601,12 +1628,19 @@ if (!function_exists('finance_reverse_settlement')) {
         if($mid>0 && $amount>0) $movementParts[$mid]=round(($movementParts[$mid]??0)+$amount,2);
       }
       $net=round((float)($settlement['amount']??0)+(float)($settlement['fine_amount']??0)+(float)($settlement['interest_amount']??0)-(float)($settlement['discount_amount']??0),2);
-      if (!$movementParts) {
+      // Parte paga com cartão controlado: não tem movimento no banco; cancela a venda no Controle de Cartões.
+      $cardTotal = 0.0;
+      if ($originType === 'RECEBER') {
+        $stage = 'cancelar venda no Controle de Cartões';
+        require_once __DIR__ . '/card_control.php';
+        $cardTotal = card_control_reverse_settlement($pdo, $companyId, $settlementId);
+      }
+      if (!$movementParts && $cardTotal <= 0) {
         $mid=(int)($settlement['movement_id']??0);
         if($mid>0 && $net>0) $movementParts[$mid]=$net;
       }
-      if (!$movementParts) throw new RuntimeException('A baixa não possui distribuição financeira suficiente para um estorno seguro.');
-      $partsTotal=round(array_sum($movementParts),2);
+      if (!$movementParts && $cardTotal <= 0) throw new RuntimeException('A baixa não possui distribuição financeira suficiente para um estorno seguro.');
+      $partsTotal=round(array_sum($movementParts)+$cardTotal,2);
       if (abs($partsTotal-$net)>0.01) {
         throw new RuntimeException('A distribuição financeira da baixa está inconsistente: baixa R$ ' . number_format($net,2,',','.') . ' x movimentos R$ ' . number_format($partsTotal,2,',','.') . '.');
       }

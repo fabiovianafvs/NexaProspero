@@ -620,6 +620,7 @@ async function sendContent(sid, to, jidHint, content, options = {}) {
     const jid = await resolveJid(state, to, jidHint);
     if (options.quoted) options.quoted.key.remoteJid = jid;
     if (content.delete && !content.delete.remoteJid) content.delete.remoteJid = jid;
+    if (content.edit && !content.edit.remoteJid) content.edit.remoteJid = jid;
     const sent = await state.sock.sendMessage(jid, content, options);
     rememberSent(state, sent);
     return { jid, id: String(sent?.key?.id || '') };
@@ -721,6 +722,14 @@ async function handleInbound(state, msg) {
   const proto0 = msg.message?.protocolMessage;
   if (proto0 && Number(proto0.type ?? -1) === 0 && proto0.key?.id) {
     deliverWebhook({ event: 'revoke', company_id: state.sid, message_id: String(proto0.key.id), reply_jid: remote });
+    return;
+  }
+  // Mensagem editada (pelo cliente ou pelo celular da empresa): o sistema troca o texto e mostra "Editada".
+  const protoEdit = (proto0 && Number(proto0.type ?? -1) === 14) ? proto0 : (msg.message?.editedMessage?.message?.protocolMessage || null);
+  if (protoEdit && protoEdit.key?.id) {
+    const em = unwrapMessage(protoEdit.editedMessage || {});
+    const text = String(em.conversation || em.extendedTextMessage?.text || em.imageMessage?.caption || em.videoMessage?.caption || em.documentMessage?.caption || '');
+    if (text) deliverWebhook({ event: 'edit', company_id: state.sid, message_id: String(protoEdit.key.id), text: text.slice(0, 4096), reply_jid: remote, from_me: Boolean(key.fromMe) });
     return;
   }
   // Mensagem própria: só interessa a digitada por uma pessoa no celular/WhatsApp
@@ -1016,6 +1025,18 @@ const routes = {
     if (!id || (!body.to && !body.jid)) return sendJson(res, 400, { ok: false, error: 'Mensagem e destino são obrigatórios.' });
     const to = normalizePhone(body.to);
     const sent = await sendContent(sid, to, body.jid, { delete: { remoteJid: '', fromMe: true, id } }, {});
+    sendJson(res, 200, { ok: true, company_id: sid, jid: sent.jid, message_id: id });
+  },
+
+  // Edita o texto de uma mensagem enviada pela empresa (o WhatsApp aceita até 15 minutos depois do envio).
+  'POST /edit': async (req, res, body) => {
+    const sid = safeId(body.company_id);
+    if (!isCompany(req, sid)) return denied(res);
+    const id = String(body.message_id || '').replace(/[^0-9A-Za-z_-]/g, '').slice(0, 80);
+    const message = String(body.message || '').trim().slice(0, 4096);
+    if (!id || !message || (!body.to && !body.jid)) return sendJson(res, 400, { ok: false, error: 'Mensagem, texto novo e destino são obrigatórios.' });
+    const to = normalizePhone(body.to);
+    const sent = await sendContent(sid, to, body.jid, { text: message, edit: { remoteJid: '', fromMe: true, id } }, {});
     sendJson(res, 200, { ok: true, company_id: sid, jid: sent.jid, message_id: id });
   },
 

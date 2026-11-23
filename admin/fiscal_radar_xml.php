@@ -160,6 +160,37 @@ try {
   }
 } catch (Throwable $e) {}
 
+// Status da entrada de cada NF-e (pela chave de acesso no XML importado e pelo preparo da IA):
+// Pendente = ainda não começou; Em andamento = XML aberto para conferir; Conferência IA = a IA
+// preparou e falta concluir; Realizada = entrada gerada (estoque/financeiro).
+$entryStatus = [];
+try {
+  $keys = array_values(array_unique(array_filter(array_map(static fn($r) => preg_replace('/\D/', '', (string)($r['access_key'] ?? '')), $dfeRows), static fn($k) => strlen($k) === 44)));
+  $imports = [];
+  foreach (array_chunk($keys, 200) as $chunk) {
+    $stImp = $pdo->prepare('SELECT id, access_key, status FROM fiscal_xml_imports WHERE company_id=? AND access_key IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')');
+    $stImp->execute(array_merge([$cid], $chunk));
+    foreach ($stImp->fetchAll(PDO::FETCH_ASSOC) ?: [] as $imp) $imports[(string)$imp['access_key']] = $imp;
+  }
+  $iaAll = $iaRuns;
+  $radarIdsAll = array_map(static fn($r) => (int)$r['id'], $dfeRows);
+  if (!$iaAll && $radarIdsAll && function_exists('ia_ready') && ia_ready($pdo)) {
+    $stIa2 = $pdo->prepare("SELECT ref_id, status, xml_import_id FROM ai_agent_runs WHERE company_id=? AND agent='entrada_notas' AND ref_type='radar' AND ref_id IN (" . implode(',', array_fill(0, count($radarIdsAll), '?')) . ')');
+    $stIa2->execute(array_merge([$cid], $radarIdsAll));
+    foreach ($stIa2->fetchAll(PDO::FETCH_ASSOC) ?: [] as $iaRow) $iaAll[(int)$iaRow['ref_id']] = $iaRow;
+  }
+  foreach ($dfeRows as $row) {
+    $imp = $imports[preg_replace('/\D/', '', (string)($row['access_key'] ?? ''))] ?? null;
+    $run = $iaAll[(int)$row['id']] ?? null;
+    if ($imp && strtoupper((string)$imp['status']) === 'ENTRADA_GERADA') $code = 'REALIZADA';
+    elseif ($run && in_array((string)$run['status'], ['PRONTA', 'REVISAR', 'PROCESSANDO'], true)) $code = 'IA';
+    elseif ($imp) $code = 'ANDAMENTO';
+    else $code = 'PENDENTE';
+    $entryStatus[(int)$row['id']] = ['code' => $code, 'xml_id' => $imp ? (int)$imp['id'] : (int)($run['xml_import_id'] ?? 0)];
+  }
+} catch (Throwable $e) {}
+$entryStatusLabels = ['PENDENTE' => 'Pendente', 'ANDAMENTO' => 'Em andamento', 'IA' => 'Conferência IA', 'REALIZADA' => 'Realizada'];
+
 $dfeKpis = ['total'=>count($dfeRows), 'novos'=>0, 'completos'=>0, 'valor'=>0.0];
 foreach ($dfeRows as $row) {
   if (in_array((string)($row['radar_status'] ?? ''), ['NOVO','ANALISADO'], true)) $dfeKpis['novos']++;
@@ -191,6 +222,7 @@ if ($err) echo '<div class="msg err">' . fiscal_h(trim($err)) . '</div>';
   .radar-dfe-action-buttons{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;width:auto;margin-left:auto}
   .radar-dfe-action-buttons form{display:inline-flex;margin:0}.radar-dfe-action-buttons .btn{white-space:nowrap}
   .radar-ia-btn{background:#f5f3ff!important;border-color:#c4b5fd!important;color:#5b21b6!important;font-weight:800}
+  .radar-entry-status{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:850;white-space:nowrap;text-decoration:none;border:1px solid transparent}.radar-entry-status.es-pendente{background:#fef2f2;color:#b91c1c;border-color:#fecaca}.radar-entry-status.es-andamento{background:#fffbeb;color:#92400e;border-color:#fde68a}.radar-entry-status.es-ia{background:#f5f3ff;color:#5b21b6;border-color:#ddd6fe}.radar-entry-status.es-realizada{background:#ecfdf5;color:#047857;border-color:#a7f3d0}a.radar-entry-status:hover{filter:brightness(.96);text-decoration:underline}
   .radar-ia-chip{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;background:#ede9fe;color:#5b21b6}.radar-ia-chip.ok{background:#dcfce7;color:#166534}.radar-ia-chip.warn{background:#fef3c7;color:#92400e}.radar-ia-chip.err{background:#fee2e2;color:#991b1b}
   @media(max-width:900px){.radar-filters{display:grid;grid-template-columns:1fr}.radar-filters label,.radar-filters .radar-search{min-width:0;width:100%}.radar-filter-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;margin-left:0}.radar-filter-actions .btn{width:100%}.radar-dfe-action-panel{align-items:stretch;flex-direction:column}.radar-dfe-action-title{width:100%;min-width:0}.radar-dfe-action-buttons{width:100%;margin-left:0}.radar-dfe-action-buttons .btn{flex:1 1 160px;justify-content:center}}
 </style>
@@ -262,8 +294,8 @@ function radarSolicitarJustificativa(form) {
 
 <div class="fiscal-card">
   <div class="fiscal-list-head"><h2>NF-e emitidas para o CNPJ</h2><span class="fiscal-list-count"><?= count($dfeRows) ?> registro(s)</span></div>
-  <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="table-wrap radar-dfe-wrap"><table class="fiscal-table radar-dfe-table"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_radar')?>><thead><tr><th>Documento</th><th>Fornecedor</th><th>Origem</th><th>Emissão</th><th>Total</th><th>Status</th></tr></thead><tbody>
-  <?php if (!$dfeRows): ?><tr><td colspan="6" style="text-align:center;color:#64748b">Nenhuma NF-e localizada no período informado.</td></tr><?php endif; ?>
+  <?php require_once __DIR__.'/../config/grid_preferences.php'; echo nexa_grid_assets(); ?><div class="table-wrap radar-dfe-wrap"><table class="fiscal-table radar-dfe-table"<?=nexa_grid_auto_attrs($pdo,'auto_fiscal_radar')?>><thead><tr><th>Documento</th><th>Fornecedor</th><th>Origem</th><th>Emissão</th><th>Total</th><th>Status</th><th>Status Entrada</th></tr></thead><tbody>
+  <?php if (!$dfeRows): ?><tr><td colspan="7" style="text-align:center;color:#64748b">Nenhuma NF-e localizada no período informado.</td></tr><?php endif; ?>
   <?php foreach ($dfeRows as $x): $kind = strtoupper((string)($x['dfe_kind'] ?? '')); $hasXml = trim((string)($x['xml_raw'] ?? '')) !== '' && !in_array($kind, ['RESNFE','RESEVENTO','EVENTO'], true) && stripos((string)($x['xml_raw'] ?? ''), '<NFe') !== false; ?>
     <tr class="radar-dfe-record-row">
       <td data-label="Documento" class="primary"><strong>Modelo <?= fiscal_h($x['model'] ?? '') ?> Série <?= fiscal_h($x['series'] ?? '') ?> / Nº <?= fiscal_h($x['document_number'] ?? '') ?></strong><div class="fiscal-muted" style="font-size:12px"><?= fiscal_h($x['access_key'] ?? '') ?></div></td>
@@ -272,9 +304,11 @@ function radarSolicitarJustificativa(form) {
       <td data-label="Emissão"><?= fiscal_h(fiscal_date_br(substr((string)($x['issue_datetime'] ?? ''),0,10))) ?></td>
       <td data-label="Total"><strong>R$ <?= number_format((float)($x['total_document'] ?? 0), 2, ',', '.') ?></strong></td>
       <td data-label="Status"><span class="fiscal-badge <?= ($x['radar_status'] ?? '') === 'IMPORTADO' ? '' : 'off' ?>"><?= fiscal_h($x['radar_status'] ?? '') ?></span><?php $iaRun = $iaRuns[(int)$x['id']] ?? null; if ($iaRun): [$iaLbl, $iaCls] = match ((string)$iaRun['status']) { 'PRONTA' => ['IA: pronta para conferir', 'ok'], 'REVISAR' => ['IA: conferir itens', 'warn'], 'PROCESSANDO' => ['IA: preparando…', ''], 'IGNORADA' => ['IA: já lançada', ''], default => ['IA: erro', 'err'] }; ?><div><span class="radar-ia-chip <?= $iaCls ?>" title="<?= fiscal_h($iaRun['summary'] ?? '') ?>"><?= fiscal_h($iaLbl) ?></span></div><?php endif; ?><?php if ($kind): ?><div class="fiscal-muted"><?= fiscal_h($kind) ?></div><?php endif; ?><?php if (!empty($x['manifest_status'])): ?><div class="fiscal-muted">Manifestação: <?= fiscal_h($x['manifest_status']) ?></div><?php endif; ?></td>
+      <?php $es = $entryStatus[(int)$x['id']] ?? ['code' => 'PENDENTE', 'xml_id' => 0]; $esLbl = $entryStatusLabels[$es['code']] ?? 'Pendente'; ?>
+      <td data-label="Status Entrada"><?php if ($es['xml_id'] > 0 && $es['code'] !== 'PENDENTE'): ?><a href="<?= fiscal_h(fiscal_v10_entry_context_url('fiscal_xml_entrada.php?id=' . (int)$es['xml_id'] . ($es['code'] === 'IA' ? '#iaEntrada' : ''))) ?>" class="radar-entry-status es-<?= strtolower($es['code']) ?>" title="Abrir a entrada desta nota"><?= fiscal_h($esLbl) ?></a><?php else: ?><span class="radar-entry-status es-<?= strtolower($es['code']) ?>"><?= fiscal_h($esLbl) ?></span><?php endif; ?></td>
     </tr>
     <tr class="radar-dfe-action-row">
-      <td colspan="6">
+      <td colspan="7">
         <div class="radar-dfe-action-panel">
           <span class="radar-dfe-action-title">Ações da NF-e modelo <?= fiscal_h($x['model'] ?? '') ?> série <?= fiscal_h($x['series'] ?? '') ?> / nº <?= fiscal_h($x['document_number'] ?? '') ?></span>
           <div class="radar-dfe-action-buttons">

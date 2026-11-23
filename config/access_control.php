@@ -73,8 +73,9 @@ if (!function_exists('access_permissions_catalog')) {
       'whatsapp_modelos' => ['label' => 'Modelo de Mensagens', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp_modelos.php'], 'nav' => ['whatsapp_modelos']],
       'whatsapp_fila' => ['label' => 'Fila de Envio', 'group' => 'WhatsApp', 'module' => '*', 'pages' => ['whatsapp_fila.php'], 'nav' => ['whatsapp_fila']],
       'whatsapp_atendimento' => ['label' => 'Atendimento (conversas)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_atendimento.php', 'whatsapp_atendimento_api.php', 'whatsapp_midia.php'], 'nav' => ['whatsapp_atendimento']],
-      'whatsapp_chatbot' => ['label' => 'Chatbot (configurar fluxo e setores; vê todas as conversas)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_chatbot.php', 'whatsapp_chatbot_fluxo.php'], 'nav' => ['whatsapp_chatbot']],
+      'whatsapp_chatbot' => ['label' => 'Chatbot (configurar fluxo e setores; vê todas as conversas)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_chatbot.php', 'whatsapp_chatbot_fluxo.php', 'whatsapp_ao_vivo.php'], 'nav' => ['whatsapp_chatbot', 'whatsapp_ao_vivo']],
       'whatsapp_painel' => ['label' => 'Painel do Atendimento (resultados de todos os atendentes)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_painel.php'], 'nav' => ['whatsapp_painel']],
+      'whatsapp_ao_vivo' => ['label' => 'Painel Ao Vivo (conversas com cada atendente agora)', 'group' => 'WhatsApp', 'module' => 'whatsapp_chatbot', 'pages' => ['whatsapp_ao_vivo.php'], 'nav' => ['whatsapp_ao_vivo']],
 
       // Compras: autorização individual por submenu e URL (sem liberação implícita).
       'compras_assistente' => ['label' => 'Assistente de Compras', 'group' => 'Compras', 'module' => 'compras', 'pages' => ['compras_assistente.php'], 'nav' => ['compras_assistente']],
@@ -522,7 +523,7 @@ if (!function_exists('access_admin_nav_allowed')) {
     if ($navKey === 'os_mobile' && !access_user_os_mobile_enabled($pdo, $companyId)) return false;
 
     $parentPermissions = [
-      'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila','whatsapp_atendimento','whatsapp_painel','whatsapp_chatbot'],
+      'whatsapp' => ['whatsapp','whatsapp_modelos','whatsapp_fila','whatsapp_atendimento','whatsapp_painel','whatsapp_ao_vivo','whatsapp_chatbot'],
       'ponto' => ['ponto_marcar','ponto_painel','ponto_marcacoes','ponto_tratamento','ponto_ocorrencias','ponto_banco_horas','ponto_fechamento','ponto_arquivos','ponto_acesso','ponto_biometria','ponto_tipos_ocorrencia','ponto_coletores','ponto_colaboradores','ponto_departamentos','ponto_cargos','ponto_estabelecimentos','ponto_jornadas','ponto_escalas','ponto_locais','ponto_feriados','ponto_auditoria','ponto_configuracoes'],
       'transporte' => ['cte_documentos','transp_veiculos','transp_motoristas','transp_configuracoes'],
       'orcamento' => ['orcamentos','orcamento_novo'],

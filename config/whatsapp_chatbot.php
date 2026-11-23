@@ -1723,6 +1723,65 @@ if (!function_exists('whatsapp_bot_revoke')) {
   }
 }
 
+if (!function_exists('whatsapp_chat_has_v4')) {
+  /** Coluna de mensagem editada (migração 20261123_whatsapp_atendimento_v4). */
+  function whatsapp_chat_has_v4(PDO $pdo): bool {
+    static $memo = null;
+    if ($memo !== null) return $memo;
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='whatsapp_bot_messages' AND column_name='edited_at'");
+      if ((int)$st->fetchColumn() === 1) return $memo = true;
+    } catch (Throwable $e) {}
+    try { $pdo->query('SELECT edited_at FROM whatsapp_bot_messages LIMIT 0'); return $memo = true; } catch (Throwable $e) { return $memo = false; }
+  }
+}
+
+if (!function_exists('whatsapp_chat_apply_edit')) {
+  /**
+   * Grava o texto novo de uma mensagem editada (guarda o texto original uma vez) e
+   * atualiza o resumo da conversa quando ela é a última. Retorna o id da conversa (0 = nada mudou).
+   */
+  function whatsapp_chat_apply_edit(PDO $pdo, int $companyId, array $m, string $text): int {
+    $text = mb_substr($text, 0, 4000);
+    if ($text === '' || $text === (string)($m['body'] ?? '')) return 0;
+    $pdo->prepare('UPDATE whatsapp_bot_messages SET edit_original=COALESCE(edit_original, body), body=?, edited_at=? WHERE company_id=? AND id=?')
+      ->execute([$text, date('Y-m-d H:i:s'), $companyId, (int)$m['id']]);
+    $sid = (int)($m['session_id'] ?? 0);
+    if ($sid > 0) {
+      $last = $pdo->prepare("SELECT MAX(id) FROM whatsapp_bot_messages WHERE company_id=? AND session_id=? AND sender<>'sistema'");
+      $last->execute([$companyId, $sid]);
+      if ((int)$last->fetchColumn() === (int)$m['id']) {
+        $pdo->prepare('UPDATE whatsapp_bot_sessions SET last_preview=? WHERE company_id=? AND id=?')
+          ->execute([mb_substr(preg_replace('/\s+/', ' ', $text) ?? '', 0, 200), $companyId, $sid]);
+      }
+    }
+    return $sid;
+  }
+}
+
+if (!function_exists('whatsapp_bot_edit')) {
+  /** Mensagem editada no WhatsApp (pelo cliente ou pelo celular da empresa). */
+  function whatsapp_bot_edit(PDO $pdo, array $payload): string {
+    if (!whatsapp_bot_ready($pdo) || !whatsapp_chat_has_v4($pdo)) return 'sem coluna';
+    $companyId = whatsapp_bot_company_by_session($pdo, whatsapp_bot_digits($payload['company_id'] ?? ''));
+    $messageId = substr((string)($payload['message_id'] ?? ''), 0, 80);
+    $text = trim((string)($payload['text'] ?? ''));
+    if ($companyId <= 0 || $messageId === '' || $text === '') return 'ignorado';
+    $st = $pdo->prepare('SELECT id, session_id, direction, body FROM whatsapp_bot_messages WHERE company_id=? AND message_id=? AND deleted_at IS NULL LIMIT 1');
+    $st->execute([$companyId, $messageId]);
+    $m = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$m) return 'sem mudança';
+    // Mensagem da empresa com assinatura ("*Nome:*" na 1ª linha): no Nexa o texto fica sem ela.
+    if ((string)$m['direction'] === 'OUT' && !preg_match('/^\*[^*\n]{1,80}:\*\n/u', (string)$m['body'])) {
+      $text = (string)preg_replace('/^\*[^*\n]{1,80}:\*\n/u', '', $text, 1);
+    }
+    $sid = whatsapp_chat_apply_edit($pdo, $companyId, $m, $text);
+    if ($sid <= 0) return 'sem mudança';
+    whatsapp_chat_notify($companyId, $sid, ['edited' => 1]);
+    return 'editada';
+  }
+}
+
 if (!function_exists('whatsapp_bot_handle')) {
   /**
    * Processa uma mensagem recebida do cliente (payload do motor).

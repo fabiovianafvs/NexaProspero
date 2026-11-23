@@ -102,6 +102,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-q{border-left:4px solid #06cf9c;background:rgba(0,0,0,.05);border-radius:6px;padding:4px 8px;margin:2px 0 4px;font-size:12.5px;cursor:pointer;white-space:normal;max-height:66px;overflow:hidden}.waa-q b{display:block;color:#008069;font-size:12px}.waa-b.out .waa-q{border-left-color:#53bdeb}
 .waa-fwd{font-size:12px;color:#667781;font-style:italic;margin-bottom:2px}
 .waa-delmsg{color:#667781;font-style:italic}
+.waa-edited{font-style:italic;margin-right:4px}
 .waa-part{font-size:12px;font-weight:800;margin-bottom:2px;color:#c2410c}
 .waa-replybar{background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:none;gap:10px;align-items:center}.waa-replybar.on{display:flex}.waa-replybar .waa-q{flex:1;margin:0;cursor:default}
 .waa-flash{animation:waaFlash 1.2s}@keyframes waaFlash{0%,60%{box-shadow:0 0 0 3px #53bdeb}100%{box-shadow:0 1px .5px rgba(11,20,26,.13)}}
@@ -123,14 +124,13 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     <div class="waa-tabs" id="waaTabs">
       <button class="waa-tab on" data-tab="fila">Fila</button>
       <button class="waa-tab" data-tab="meus">Meus</button>
-      <button class="waa-tab" data-tab="atendimento" title="Todas as conversas em atendimento">Atendendo</button>
       <button class="waa-tab" data-tab="robo" title="Conversas com o robô (o número conta as das últimas 24 horas)">Robô</button>
       <button class="waa-tab" data-tab="finalizados" title="Conversas finalizadas (o número conta as de hoje)">Finalizados</button>
       <button class="waa-tab" data-tab="grupos" title="Grupos do WhatsApp (o número conta os grupos com mensagens não lidas)" hidden>Grupos</button>
     </div>
     <div class="waa-grpbar" id="waaGrpBar" style="display:none"></div>
     <div class="waa-list" id="waaList"><div class="waa-empty">Carregando…</div></div>
-    <div class="waa-sidehead" style="justify-content:space-between"><span class="waa-rt" id="waaRt"></span><a class="waa-rt" href="whatsapp_chatbot.php">Configurar chatbot</a></div>
+    <div class="waa-sidehead" style="justify-content:space-between"><span class="waa-rt" id="waaRt"></span><span><?php if ($supervisor || access_has_permission($pdo, $cid, 'whatsapp_ao_vivo')): ?><a class="waa-rt" href="whatsapp_ao_vivo.php" title="Quem está atendendo cada conversa agora">Painel Ao Vivo</a> · <?php endif; ?><a class="waa-rt" href="whatsapp_chatbot.php">Configurar chatbot</a></span></div>
   </aside>
   <section class="waa-main" id="waaMain">
     <div class="waa-welcome" id="waaWelcome">
@@ -166,7 +166,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
         <button class="waa-send" type="button" id="waaMic" title="Gravar áudio" style="display:none">🎤</button>
         <button class="waa-send" type="submit" id="waaSend" title="Enviar">➤</button>
       </form>
-      <div class="waa-locked" id="waaLocked" style="display:none"><span>🔒</span><span id="waaLockedText" style="flex:1"></span><span class="waa-sub">Aceite a conversa para enviar mensagens.</span><button class="waa-btn g" type="button" id="waaLockedBtn">Aceitar</button></div>
+      <div class="waa-locked" id="waaLocked" style="display:none"><span>🔒</span><span id="waaLockedText" style="flex:1"></span><span class="waa-sub" id="waaLockedHint">Clique em Aceitar, no alto, para enviar mensagens.</span></div>
       <div class="waa-recbar" id="waaRecBar">
         <button class="waa-ico" type="button" id="waaRecCancel" title="Descartar áudio">🗑️</button>
         <span class="waa-recdot"></span><span id="waaRecTime">0:00</span><span class="waa-sub" style="flex:1">Gravando áudio…</span>
@@ -232,6 +232,12 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="fwGo">Encaminhar</button></div>
 </div></div>
 <div class="waa-mmenu" id="waaMMenu" role="menu"></div>
+<div class="waa-modal" id="mEdit"><div class="waa-card">
+  <h3>Editar mensagem</h3>
+  <div class="waa-sub">O texto muda também no WhatsApp do cliente, com a marca "Editada". O WhatsApp só permite editar até 15 minutos depois do envio.</div>
+  <textarea id="edText" rows="5" maxlength="4000"></textarea>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="edGo">Salvar</button></div>
+</div></div>
 <div class="waa-modal" id="mNew"><div class="waa-card">
   <h3>Nova conversa</h3>
   <div style="position:relative"><label>Buscar contato (nome, cliente, telefone)</label><input id="nSearch" autocomplete="off" placeholder="Digite para buscar no cadastro de contatos e pessoas"><div id="nResults" class="waa-cres"></div></div>
@@ -404,7 +410,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (m.sender === 'sistema') return html + '<div class="waa-sys">' + esc(m.body) + ' · ' + esc(hm(m.at)) + '</div>';
     const out = m.dir === 'OUT';
     const who = out ? (m.sender === 'robo' ? '🤖 Robô' : m.sender === 'celular' ? '📱 Celular' : m.sender === 'envio' ? '📤 Envio automático' + (m.origin ? ' · ' + m.origin : '') : (m.user || 'Atendente')) : '';
-    const menuBtn = V3 && !m.del ? '<button type="button" class="waa-mbtn" data-mid="' + m.id + '" title="Responder, encaminhar ou apagar" aria-label="Opções da mensagem">⌄</button>' : '';
+    const menuBtn = V3 && !m.del ? '<button type="button" class="waa-mbtn" data-mid="' + m.id + '" title="Responder, encaminhar, editar ou apagar" aria-label="Opções da mensagem">⌄</button>' : '';
     const cls = `waa-b ${out ? 'out' : 'in'}${m.sender === 'robo' ? ' bot' : ''}${m.sender === 'envio' ? ' auto' : ''}${m.ok ? '' : ' fail'}`;
     const part = !out && (m.pname || m.pphone) ? '<div class="waa-part">' + esc(m.pname || m.pphone) + (m.pname && m.pphone ? ' <span class="waa-sub">' + esc(m.pphone) + '</span>' : '') + '</div>' : '';
     if (m.del) {
@@ -436,7 +442,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     }
     const quote = m.reply ? '<div class="waa-q" data-goto="' + (m.reply.id || 0) + '"><b>' + esc(m.reply.who || 'Mensagem') + '</b>' + esc(m.reply.text) + '</div>' : '';
     const fwd = m.fwd ? '<div class="waa-fwd">↪ Encaminhada</div>' : '';
-    return html + `<div class="${cls}" data-mid="${m.id}">${menuBtn}${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${part}${fwd}${quote}${media}${body}<small>${esc(hm(m.at))}${out && !(chat && chat.status === 'GRUPO' && m.ok) ? tickHtml(m.ok ? (m.ws || 0) : -1) : ''}</small></div>`;
+    return html + `<div class="${cls}" data-mid="${m.id}">${menuBtn}${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${part}${fwd}${quote}${media}${body}<small>${m.edited ? '<span class="waa-edited">Editada</span>' : ''}${esc(hm(m.at))}${out && !(chat && chat.status === 'GRUPO' && m.ok) ? tickHtml(m.ok ? (m.ws || 0) : -1) : ''}</small></div>`;
   }
 
   function renderHead() {
@@ -453,9 +459,10 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     const mine = grp || (c.status === 'ATENDIMENTO' && c.user_id === ME);
     const other = !grp && c.status === 'ATENDIMENTO' && c.user_id > 0 && c.user_id !== ME;
     ['waaTransfer', 'waaFinish'].forEach((id) => { $(id).style.display = grp ? 'none' : ''; });
-    $('waaAccept').style.display = mine ? 'none' : '';
-    $('waaAccept').textContent = other ? 'Assumir' : 'Aceitar';
-    $('waaAccept').disabled = other && !SUP;
+    // Conversa aceita por outro atendente: ninguém aceita de novo (para mudar, Transferir).
+    $('waaAccept').style.display = mine || other ? 'none' : '';
+    $('waaAccept').textContent = 'Aceitar';
+    $('waaAccept').disabled = false;
     $('waaTransfer').disabled = other && !SUP;
     $('waaFinish').disabled = (other && !SUP) || c.status === 'FINALIZADO';
     $('waaCrm').style.display = c.crm_attendance_id || grp ? 'none' : '';
@@ -463,7 +470,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (c.crm_attendance_id) { $('waaCrmLink').href = 'crm_atendimento.php?id=' + c.crm_attendance_id; $('waaCrmLink').textContent = 'CRM nº ' + c.crm_attendance_id; }
     const b = $('waaBanner');
     if (grp) { b.style.display = 'none'; }
-    else if (other) { b.style.display = ''; b.textContent = 'Esta conversa está com ' + c.user + '.' + (SUP ? ' Como supervisor você pode assumir.' : ''); }
+    else if (other) { b.style.display = ''; b.textContent = 'Esta conversa está com ' + c.user + '.' + (SUP ? ' Para assumir, use Transferir.' : ''); }
     else if (c.status === 'PENDENTE') { b.style.display = ''; b.textContent = 'Cliente aguardando na fila' + (c.department ? ' de ' + c.department : '') + '. Clique em Aceitar para responder.'; }
     else if (c.status === 'BOT') { b.style.display = ''; b.textContent = 'O robô está atendendo. Para responder, clique em Aceitar (o robô para nesta conversa).'; }
     else if (c.status === 'FINALIZADO') { b.style.display = ''; b.textContent = 'Conversa finalizada. Para responder, clique em Aceitar.'; }
@@ -474,8 +481,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     $('waaForm').style.display = mine ? '' : 'none';
     $('waaLocked').style.display = mine ? 'none' : '';
     $('waaLockedText').textContent = other ? 'Conversa com ' + c.user + '.' : (c.status === 'BOT' ? 'O robô está atendendo.' : (c.status === 'PENDENTE' ? 'Aguardando na fila.' : (c.status === 'FINALIZADO' ? 'Conversa finalizada.' : 'Respondida pelo celular.')));
-    $('waaLockedBtn').textContent = other ? 'Assumir' : 'Aceitar';
-    $('waaLockedBtn').style.display = other && !SUP ? 'none' : '';
+    $('waaLockedHint').textContent = other ? (SUP ? 'Para assumir, use Transferir.' : '') : 'Clique em Aceitar, no alto, para enviar mensagens.';
     const ans = Array.isArray(c.answers) ? c.answers : [];
     $('waaAnswers').style.display = ans.length ? '' : 'none';
     $('waaAnswers').innerHTML = ans.length ? '<span>📝 Respostas do fluxo:</span>' + ans.map((a) => '<span><b>' + esc(a.label) + ':</b> ' + esc(a.value) + '</span>').join('') : '';
@@ -713,17 +719,22 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     if (d && rt) setReply(null);
   });
 
-  // Menu da mensagem (⌄): Responder, Encaminhar e Apagar.
+  // Menu da mensagem (⌄): Responder, Encaminhar, Editar e Apagar.
   const mmenu = $('waaMMenu');
   let mmTarget = null;
   function closeMMenu() { mmenu.classList.remove('on'); document.querySelectorAll('.waa-mbtn.on').forEach((b) => b.classList.remove('on')); mmTarget = null; }
   const canWrite = () => chat && $('waaForm').style.display !== 'none';
+  // Editar: texto enviado pelo Atendimento (o próprio; o supervisor edita qualquer um), até 15 minutos.
+  const EDIT_MIN = 15;
+  const canEdit = (m) => m && m.dir === 'OUT' && m.sender === 'atendente' && m.type === 'text' && !m.media && m.ok && m.wid && !m.del
+    && (m.uid === ME || SUP) && (Date.now() - new Date(String(m.at).replace(' ', 'T')).getTime()) < EDIT_MIN * 60000;
   function openMMenu(btn) {
     const m = msgCache.get(Number(btn.dataset.mid)); if (!m) return;
     mmTarget = m;
     const items = [];
     if (canWrite()) items.push('<button type="button" data-mm="reply">↩️ Responder</button>');
     items.push('<button type="button" data-mm="forward">↪️ Encaminhar</button>');
+    if (canWrite() && canEdit(m)) items.push('<button type="button" data-mm="edit">✏️ Editar</button>');
     if (canWrite()) items.push('<button type="button" class="r" data-mm="delete">🗑️ Apagar</button>');
     mmenu.innerHTML = items.join('');
     btn.classList.add('on');
@@ -764,6 +775,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     const m = mmTarget; closeMMenu();
     if (b.dataset.mm === 'reply') setReply(m);
     else if (b.dataset.mm === 'forward') openForward(m);
+    else if (b.dataset.mm === 'edit') { edMsg = m; $('edText').value = m.body || ''; $('mEdit').classList.add('on'); setTimeout(() => { $('edText').focus(); $('edText').setSelectionRange(9e9, 9e9); }, 0); }
     else if (b.dataset.mm === 'delete') {
       const forAll = m.dir === 'OUT' && m.wid && m.ok;
       if (!confirm(forAll ? 'Apagar para todos? A mensagem some também no celular do cliente.' : 'Apagar esta mensagem? Ela some só aqui no Nexa (no celular do cliente continua).')) return;
@@ -771,6 +783,17 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       catch (err) { fail(err); }
     }
   });
+  let edMsg = null;
+  async function saveEdit() {
+    if (!edMsg) return;
+    const t = $('edText').value.trim();
+    if (!t) { alert('Digite o texto da mensagem.'); return; }
+    $('edGo').disabled = true;
+    try { await api('edit', { id: chatId, message_id: edMsg.id, text: t }, true); $('mEdit').classList.remove('on'); edMsg = null; await openChat(chatId); scheduleList(); }
+    catch (err) { fail(err); } finally { $('edGo').disabled = false; }
+  }
+  $('edGo').addEventListener('click', saveEdit);
+  $('edText').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } else if (e.key === 'Escape') $('mEdit').classList.remove('on'); });
   // Encaminhar: escolhe até 5 conversas (ou um número).
   let fwMsg = null, fwTimer = 0, fwItems = [];
   const fwSel = new Set();
@@ -891,7 +914,6 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   const open = (id) => $(id).classList.add('on');
   document.querySelectorAll('.waa-modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.classList.remove('on'); }));
   $('waaAccept').addEventListener('click', () => act('accept'));
-  $('waaLockedBtn').addEventListener('click', () => act('accept'));
   $('waaTransfer').addEventListener('click', async () => {
     try {
       options = options || await api('options');
@@ -976,7 +998,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       if (!m || m.eventType !== 'whatsapp.chat.updated' || m.replay) return;
       if (!(m.payload && m.payload.ticks)) scheduleList();
       const p = m.payload || {};
-      if (Number(m.entityId) === chatId) { if (p.deleted) openChat(chatId); else refreshChat(); }
+      if (Number(m.entityId) === chatId) { if (p.deleted || p.edited) openChat(chatId); else refreshChat(); }
       if (p.new_message && p.status === 'PENDENTE' && document.hidden) beep();
     });
     ws.addEventListener('close', () => { $('waaRt').textContent = '● Tempo real desconectado — reconectando…'; setTimeout(() => connectRt(attempt + 1), Math.min(30000, 1000 * 2 ** Math.min(attempt + 1, 5))); });
