@@ -394,6 +394,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
     'Quando o atendente aceitar' => $cfg['accept_text'] !== '' ? $cfg['accept_text'] : '(não envia nada)',
     'Ao finalizar o atendimento' => $cfg['close_text'],
     'Nome do atendente nas mensagens' => $cfg['sign_messages'] ? 'Sim' : 'Não',
+    'Usuários podem editar mensagens' => $cfg['users_edit'] ? 'Sim — todos os atendentes (até 15 minutos depois do envio)' : 'Não — só o supervisor',
     'Respondeu pelo celular: o robô volta depois de' => (int)$cfg['pause_hours'] . ' hora(s) sem resposta',
     '2ª via com as empresas do Grupo Empresarial' => $cfg['group_receivables'] ? 'Sim — ' . implode(', ', $groupNames) : 'Não (só esta empresa)',
     'Mostrar envios nas conversas' => $cfg['show_sends'] ? 'Sim — boletos, pedidos, O.S., notas e mensagens automáticas aparecem no Atendimento' : 'Não',
@@ -441,6 +442,7 @@ admin_topbar('Chatbot do WhatsApp', 'whatsapp_chatbot');
   </div>
   <div class="wab-grid" style="margin-top:12px">
     <div class="wab-field"><label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600"><input type="checkbox" name="sign_messages" value="1" <?= $cfg['sign_messages'] ? 'checked' : '' ?>> Mostrar o nome do atendente nas mensagens</label></div>
+    <div class="wab-field"><label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600"><input type="checkbox" name="users_edit" value="1" <?= $cfg['users_edit'] ? 'checked' : '' ?>> Habilita usuários a editar conversa</label><div class="wab-muted" style="font-size:12px">Ligado: todos os atendentes podem editar as mensagens enviadas pelo Atendimento na conversa que estão atendendo (o WhatsApp só permite até 15 minutos depois do envio). Desligado: só o supervisor edita.</div></div>
     <div class="wab-field"><label>Respondeu pelo celular: o robô volta depois de quantas horas sem resposta?</label><input type="number" name="pause_hours" min="1" max="72" value="<?= (int)$cfg['pause_hours'] ?>"></div>
   </div>
   <div class="wab-field" style="margin-top:12px;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:10px 12px">

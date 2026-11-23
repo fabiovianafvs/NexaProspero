@@ -69,6 +69,8 @@ if (!function_exists('whatsapp_bot_defaults')) {
       'accept_text' => "Olá! Meu nome é *{atendente}* e vou continuar seu atendimento. 🙂",
       'close_text' => "Atendimento finalizado. Obrigado pelo contato! 👋\nSe precisar, é só mandar uma nova mensagem.",
       'sign_messages' => true,
+      // Editar mensagens no Atendimento: desligado = só o supervisor; ligado = todos os atendentes.
+      'users_edit' => false,
       'pause_hours' => 2,
       'crm_responsible_user_id' => 0,
       'crm_status_id' => 0,
@@ -199,6 +201,7 @@ if (!function_exists('whatsapp_bot_config')) {
     } catch (Throwable $e) {}
     $cfg['enabled'] = !empty($cfg['enabled']);
     $cfg['sign_messages'] = !empty($cfg['sign_messages']);
+    $cfg['users_edit'] = !empty($cfg['users_edit']);
     $cfg['group_receivables'] = !empty($cfg['group_receivables']);
     $cfg['group_whatsapp_shared'] = !empty($cfg['group_whatsapp_shared']);
     $cfg['show_sends'] = !empty($cfg['show_sends']);
@@ -263,6 +266,7 @@ if (!function_exists('whatsapp_bot_save_config')) {
       // Mensagem ao aceitar pode ficar vazia (não envia nada).
       $cfg['accept_text'] = mb_substr(trim((string)($input['accept_text'] ?? $cfg['accept_text'])), 0, 1000);
       $cfg['sign_messages'] = !empty($input['sign_messages']);
+      $cfg['users_edit'] = !empty($input['users_edit']);
       $cfg['group_receivables'] = !empty($input['group_receivables']);
       $cfg['group_whatsapp_shared'] = !empty($input['group_whatsapp_shared']);
       $cfg['show_sends'] = !empty($input['show_sends']);

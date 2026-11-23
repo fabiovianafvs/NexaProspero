@@ -706,8 +706,9 @@ if (!function_exists('whatsapp_att_edit_minutes')) {
 
 if (!function_exists('whatsapp_att_edit')) {
   /**
-   * Edita uma mensagem de texto enviada pelo Atendimento (por quem a enviou; o supervisor
-   * edita as de qualquer atendente). Muda também no celular do cliente (aparece "Editada").
+   * Edita uma mensagem de texto enviada pelo Atendimento. Quem pode: o supervisor sempre; os
+   * demais atendentes só com "Habilita usuários a editar conversa" ligado em WhatsApp > Chatbot
+   * (Robô e mensagens padrão). Muda também no celular do cliente (aparece "Editada").
    */
   function whatsapp_att_edit(PDO $pdo, int $companyId, array $chat, int $userId, bool $supervisor, int $messageId, string $text): string {
     if (!whatsapp_chat_has_v4($pdo)) throw new RuntimeException('Aplique "WhatsApp - Atendimento v4 (editar mensagens)" no Atualizador do Banco.');
@@ -719,11 +720,11 @@ if (!function_exists('whatsapp_att_edit')) {
     if (!$m) throw new RuntimeException('Mensagem não encontrada.');
     if ($m['direction'] !== 'OUT' || ($m['sender'] ?? '') !== 'atendente') throw new RuntimeException('Só dá para editar mensagens enviadas pelo Atendimento.');
     if ((string)($m['msg_type'] ?? 'text') !== 'text' || !empty($m['media_path'])) throw new RuntimeException('Só mensagens de texto podem ser editadas.');
-    if ((int)($m['user_id'] ?? 0) !== $userId && !$supervisor) throw new RuntimeException('Cada atendente edita só as próprias mensagens.');
+    $cfg = whatsapp_bot_config($pdo, $companyId);
+    if (!$supervisor && empty($cfg['users_edit'])) throw new RuntimeException('Editar mensagens está liberado só para o supervisor. Para liberar a todos, ligue "Habilita usuários a editar conversa" em WhatsApp > Chatbot > Robô e mensagens padrão.');
     if (trim((string)$m['message_id']) === '' || (int)$m['send_ok'] !== 1) throw new RuntimeException('Esta mensagem não chegou a ser enviada; envie de novo em vez de editar.');
     if (strtotime((string)$m['created_at']) < time() - whatsapp_att_edit_minutes() * 60) throw new RuntimeException('O WhatsApp só permite editar até ' . whatsapp_att_edit_minutes() . ' minutos depois do envio.');
     if ($text === (string)$m['body']) return 'Nada mudou na mensagem.';
-    $cfg = whatsapp_bot_config($pdo, $companyId);
     $wire = $text;
     // Mesma assinatura do envio ("*Nome:*" na 1ª linha), com o nome de quem enviou.
     if ($cfg['sign_messages']) {

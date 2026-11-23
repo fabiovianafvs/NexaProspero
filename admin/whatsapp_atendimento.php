@@ -308,6 +308,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   const CSRF = <?= json_encode($csrf) ?>;
   const ME = <?= (int)$uid ?>;
   const SUP = <?= $supervisor ? 'true' : 'false' ?>;
+  const EDIT_ALL = <?= ($ready && !empty(whatsapp_bot_config($pdo, $cid)['users_edit'])) ? 'true' : 'false' ?>;
   const RT = <?= json_encode(['enabled' => !empty($rt['enabled']), 'url' => (string)($rt['url'] ?? ''), 'token' => (string)($rt['token'] ?? ''), 'companyId' => $cid], JSON_UNESCAPED_SLASHES) ?>;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -724,10 +725,11 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   let mmTarget = null;
   function closeMMenu() { mmenu.classList.remove('on'); document.querySelectorAll('.waa-mbtn.on').forEach((b) => b.classList.remove('on')); mmTarget = null; }
   const canWrite = () => chat && $('waaForm').style.display !== 'none';
-  // Editar: texto enviado pelo Atendimento (o próprio; o supervisor edita qualquer um), até 15 minutos.
+  // Editar: texto enviado pelo Atendimento, até 15 minutos. Supervisor sempre; os demais com
+  // "Habilita usuários a editar conversa" ligado no Chatbot (Robô e mensagens padrão).
   const EDIT_MIN = 15;
   const canEdit = (m) => m && m.dir === 'OUT' && m.sender === 'atendente' && m.type === 'text' && !m.media && m.ok && m.wid && !m.del
-    && (m.uid === ME || SUP) && (Date.now() - new Date(String(m.at).replace(' ', 'T')).getTime()) < EDIT_MIN * 60000;
+    && (SUP || EDIT_ALL) && (Date.now() - new Date(String(m.at).replace(' ', 'T')).getTime()) < EDIT_MIN * 60000;
   function openMMenu(btn) {
     const m = msgCache.get(Number(btn.dataset.mid)); if (!m) return;
     mmTarget = m;
