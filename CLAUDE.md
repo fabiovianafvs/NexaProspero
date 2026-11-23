@@ -42,6 +42,7 @@ Sistema SaaS de gestão para varejo (PDV, pedidos, comandas, estoque, financeiro
 - Desde 01/11/2026 (Resolução CGSN 191/2026) ME/EPP do Simples emitem pelo Sistema Nacional; o Pronim rejeita (P3084). Provider por empresa em Configurações fiscais (`nfse_provider`).
 - Produção liberada no servidor por `NFSE_ENABLE_PRODUCTION=1` em `/etc/nexa/nfse.env`; a homologação força `0` no vhost.
 - Regras já tratadas no emissor Nacional (`config/nfse_emitter.php`): IM do prestador opcional (E0120); sem `pAliq` para ME/EPP com ISS pelo Simples e sem retenção (E0625); `pTotTribSN` no lugar de `indTotTrib` para ME/EPP (E0712), com o % guardado em `app_config` chave `nfse_nacional`.
+- DANFSe do Nexa (`config/nfse_danfse.php`, `config/nfse_document_pdf.php`): BC ISSQN, alíquota e ISSQN apurado vêm só do XML autorizado (`vBC`/`pAliqAplic`/`vISSQN`); sem eles (ME/EPP com ISS no Simples, sem retenção) mostram "-", como o DANFSe oficial. `total_iss` interno só é usado se não houver XML.
 - DPS rejeitada no Pronim e nunca autorizada é reenviada pelo Nacional com a mesma série/número (`nfse_provider_adopt_company_provider`).
 
 ## O que NÃO está no repositório (ver `.gitignore`)

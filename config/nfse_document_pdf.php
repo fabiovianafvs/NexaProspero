@@ -193,7 +193,8 @@ if (!function_exists('nfse_document_view_data')) {
         'iss'=>[
           'type'=>$tribIss,
           'retention'=>$retIss,
-          'rate'=>(float)($aliqDps!==''?$aliqDps:($aliq!==''?$aliq:0)),
+          // Sem alíquota na nota (ex.: ME/EPP com ISS no Simples, regra E0625): fica vazio e o DANFSe mostra "-".
+          'rate'=>$aliqDps!==''?(float)$aliqDps:($aliq!==''?(float)$aliq:null),
         ],
         'ibscbs'=>[
           'cst'=>$ibsCst,'class'=>$ibsClass,'operation_indicator'=>$operationIndicator,
@@ -210,9 +211,12 @@ if (!function_exists('nfse_document_view_data')) {
       'additional_info'=>$additionalInfo,
       'values'=>[
         'service'=>(float)($serviceValue !== '' ? $serviceValue : ($document['total_document'] ?? 0)),
-        'base'=>(float)($base !== '' ? $base : 0),
-        'iss_rate'=>(float)($aliq !== '' ? $aliq : 0),
-        'iss'=>(float)($iss !== '' ? $iss : ($document['total_iss'] ?? 0)),
+        // BC, alíquota e ISSQN apurado vêm só da NFS-e autorizada. Quando o Sistema Nacional não
+        // apura o ISSQN (ME/EPP do Simples sem retenção: o ISS vai no DAS), ficam vazios ("-"),
+        // igual ao DANFSe oficial. O valor calculado no Nexa só é usado se não houver XML da nota.
+        'base'=>$base !== '' ? (float)$base : null,
+        'iss_rate'=>$aliq !== '' ? (float)$aliq : null,
+        'iss'=>$iss !== '' ? (float)$iss : ($vals ? null : (float)($document['total_iss'] ?? 0)),
         'liquid'=>(float)($liquid !== '' ? $liquid : ($document['total_document'] ?? 0)),
         'ibs'=>(float)($ibsTotal !== '' ? $ibsTotal : 0),
         'cbs'=>(float)($cbsTotal !== '' ? $cbsTotal : 0),
@@ -342,7 +346,9 @@ if (!function_exists('nfse_document_pdf_build_v1')) {
 
     $ensure(27);$section('Tributação Municipal (ISSQN)');
     $row([['Tipo de Tributação',$issType],['Município de Incidência',$safe($d['city_service'])],['Regime Especial',$regEsp],['Retenção do ISSQN',$issRet]],[$pageW/4,$pageW/4,$pageW/4,$pageW/4]);
-    $row([['BC ISSQN',nfse_document_human_money($d['values']['base']),true],['Alíquota Aplicada',$pct($iss['rate']??$d['values']['iss_rate']),true],['ISSQN Apurado',nfse_document_human_money($d['values']['iss']),true]],[$pageW/3,$pageW/3,$pageW/3]);
+    $issRate=$d['values']['iss_rate']??($iss['rate']??null);
+    $moneyOrDash=static fn($v):string=>$v===null?'-':nfse_document_human_money($v);
+    $row([['BC ISSQN',$moneyOrDash($d['values']['base']),true],['Alíquota Aplicada',$issRate===null?'-':$pct($issRate),true],['ISSQN Apurado',$moneyOrDash($d['values']['iss']),true]],[$pageW/3,$pageW/3,$pageW/3]);
 
     $ensure(27);$section('Tributação IBS / CBS');
     $row([['CST / cClassTrib',$safe(trim((string)($ibs['cst']??'').(($ibs['class']??'')!==''?' / '.$ibs['class']:'')))],['Indicador Operação / IBGE / Município',$safe(trim((string)($ibs['operation_indicator']??'').' / '.(string)($ibs['incidence_code']??'').' / '.(string)($ibs['incidence_name']??''),' /'))],['Base de Cálculo',nfse_document_human_money($ibs['base']??0)]],[$pageW*.24,$pageW*.48,$pageW*.28]);

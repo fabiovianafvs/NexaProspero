@@ -236,7 +236,7 @@ if (!function_exists('nfse_danfse_layout')) {
       ['Número Processo Suspensão', $val($suspProc), 1],
       '|',
       ['BC ISSQN', $money($d['values']['base']), 1],
-      ['Alíquota Aplicada', $pct((string)($d['values']['iss_rate'] ?: ($d['tax']['iss']['rate'] ?? ''))), 1],
+      ['Alíquota Aplicada', $pct((string)($d['values']['iss_rate'] ?? ($d['tax']['iss']['rate'] ?? ''))), 1],
       ['Retenção do ISSQN', $retIssLabel, 1],
       ['ISSQN Apurado', $money($d['values']['iss']), 1],
     ])];
