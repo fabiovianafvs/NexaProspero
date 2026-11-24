@@ -66,6 +66,8 @@ if (!function_exists('access_permissions_catalog')) {
       'chat_interno' => ['label' => 'Chat interno (balão e menu)', 'group' => 'Geral', 'module' => '*', 'pages' => [], 'nav' => [], 'description' => 'Liberado por padrão. Desmarque para esconder o balão e o menu do Chat interno neste perfil.'],
       'suporte' => ['label' => 'Suporte', 'group' => 'Geral', 'module' => '*', 'pages' => [], 'nav' => ['suporte']],
       'importacao_produtos' => ['label' => 'Importação', 'group' => 'Integrações', 'module' => 'importacao_produtos', 'pages' => ['importacao.php'], 'nav' => ['importacao']],
+      // Menu Utilitários: opt-in, vale também para o administrador da empresa (só o dono da plataforma vê sempre).
+      'utilitarios' => ['label' => 'Mostrar o menu Utilitários', 'group' => 'Utilitários', 'module' => '*', 'pages' => [], 'nav' => [], 'description' => 'Desligado por padrão, inclusive para o administrador da empresa. Marque para mostrar o menu Utilitários a quem usa este perfil (cada ferramenta ainda segue a própria permissão).'],
       'manutencao_produtos' => ['label' => 'Manutenção de Produtos', 'group' => 'Utilitários', 'module' => '*', 'pages' => ['utilitarios_manutencao_produtos.php'], 'nav' => ['manutencao_produtos']],
 
       // WhatsApp
@@ -398,6 +400,28 @@ if (!function_exists('access_is_company_master')) {
     // Acessos multiempresa: Administrador nesta empresa ou perfil.
     if (access_multi_company_swap_active()) return MULTI_COMPANY_SWAP_IS_ADMIN === true;
     return in_array(auth_role(), ['company_admin', 'platform_admin'], true);
+  }
+}
+
+if (!function_exists('access_utilitarios_enabled')) {
+  /**
+   * Menu e telas de Utilitários: só com "Mostrar o menu Utilitários" marcado no perfil do
+   * usuário, inclusive para o administrador da empresa (o perfil é lido direto, porque
+   * para o administrador access_user_permissions devolve tudo). O dono da plataforma
+   * (platform_admin) sempre vê.
+   */
+  function access_utilitarios_enabled(PDO $pdo, int $companyId): bool {
+    if (function_exists('auth_role') && auth_role() === 'platform_admin') return true;
+    try {
+      $u = access_current_user($pdo);
+      if (!$u || (int)($u['is_active'] ?? 0) !== 1) return false;
+      $profileId = (int)($u['profile_id'] ?? 0);
+      $profileCompany = (int)($u['company_id'] ?? 0) ?: $companyId;
+      if ($profileId <= 0) return false;
+      return in_array('utilitarios', access_profile_permissions($pdo, $profileCompany, $profileId), true);
+    } catch (Throwable $e) {
+      return false;
+    }
   }
 }
 

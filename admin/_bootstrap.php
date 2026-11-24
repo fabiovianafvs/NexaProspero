@@ -32,6 +32,13 @@ if (isset($pdo) && $pdo instanceof PDO && is_file(__DIR__ . '/../config/ponto_ac
   ponto_acesso_guard($pdo, (int)COMPANY_ID, $pageLower);
 }
 
+// Utilitários: só aparece/abre com "Mostrar o menu Utilitários" marcado no perfil do usuário
+// (vale também para o administrador da empresa; o dono da plataforma sempre pode).
+if (strpos($pageLower, 'utilitarios_') === 0 && isset($pdo) && $pdo instanceof PDO
+    && function_exists('access_utilitarios_enabled') && !access_utilitarios_enabled($pdo, (int)COMPANY_ID)) {
+  access_render_denied('O menu Utilitários não está liberado para o seu perfil. Peça para marcar "Mostrar o menu Utilitários" em Tabelas > Perfis de usuário.');
+}
+
 // Utilitarios: ativacao fiscal sensivel, exclusivamente pela empresa do login.
 // Nao permitir perfil comum ou empresa selecionada pelo F11.
 if ($pageLower === 'utilitarios_regularizacao_nfe.php' || $pageLower === 'utilitarios_financeiro_sem_banco.php') {

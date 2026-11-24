@@ -504,6 +504,8 @@ function admin_topbar(string $title, string $active=''): void {
               $children[$childKey] = $child;
             }
           } elseif ((string)$key === 'utilitarios') {
+            // Menu Utilitários só com a opção marcada no perfil (inclusive administrador).
+            if (!function_exists('access_utilitarios_enabled') || !access_utilitarios_enabled($pdoAdmin, (int)COMPANY_ID)) continue;
             // V11.36.3: novas manutenções em lote reutilizam a permissão já existente
             // Manutenção de Produtos. No F11 somente as páginas novas, já homologadas
             // com company_id operacional, são expostas; a manutenção antiga permanece

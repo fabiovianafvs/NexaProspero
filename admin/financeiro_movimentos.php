@@ -633,7 +633,7 @@ finance_flash(); if($err): ?><div class="msg err"><?= finance_h($err) ?></div><?
     <?php endforeach; ?>
     </tbody>
   </table>
-  <?php if ($temExtra): ?><div class="finance-muted" style="font-size:12px;margin-top:4px">As linhas em destaque entram no total de "Todos", mas não aparecem quando você filtra um banco. Clique em "Sem Caixa/Banco informado" para ver os lançamentos<?php if (!$financeCrossContext && function_exists('access_is_company_master') && access_is_company_master()): ?> ou corrija de uma vez em <a href="utilitarios_financeiro_sem_banco.php">Utilitários &gt; Lançamentos sem Caixa/Banco</a><?php endif; ?>.</div><?php endif; ?>
+  <?php if ($temExtra): ?><div class="finance-muted" style="font-size:12px;margin-top:4px">As linhas em destaque entram no total de "Todos", mas não aparecem quando você filtra um banco. Clique em "Sem Caixa/Banco informado" para ver os lançamentos<?php if (!$financeCrossContext && function_exists('access_is_company_master') && access_is_company_master() && function_exists('access_utilitarios_enabled') && access_utilitarios_enabled($pdo, (int)COMPANY_ID)): ?> ou corrija de uma vez em <a href="utilitarios_financeiro_sem_banco.php">Utilitários &gt; Lançamentos sem Caixa/Banco</a><?php endif; ?>.</div><?php endif; ?>
 </details>
 <?php endif; ?>
 
