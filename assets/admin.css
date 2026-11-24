@@ -431,6 +431,14 @@ textarea{
   }
 }
 
+/* Telas de altura total (Chat interno, Atendimento, Ao Vivo) usam calc(100dvh / var(--nexa-zoom,1)):
+   com o zoom de 80%, 100dvh ocupa só 80% da tela e sobra um espaço vazio embaixo. */
+@supports (zoom:1){
+  @media (min-width:1024px) and (max-width:1500px) and (max-height:820px){
+    html{--nexa-zoom:.80;}
+  }
+}
+
 /* Fallback para navegadores sem suporte ao CSS zoom. */
 @supports not (zoom:1){
   @media (min-width:1024px) and (max-width:1500px) and (max-height:820px){

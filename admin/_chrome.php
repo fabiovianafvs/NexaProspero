@@ -684,10 +684,19 @@ function admin_topbar(string $title, string $active=''): void {
       $links = $filtered;
       try {
         require_once __DIR__ . '/../config/chat_interno.php';
-        if (chat_ready($pdoAdmin) && !isset($links['chat_interno']) && chat_user_allowed($pdoAdmin, (int)COMPANY_ID)) {
-          $chatPos = array_search('inicio', array_keys($links), true);
-          $chatPos = $chatPos === false ? 0 : $chatPos + 1;
-          $links = array_slice($links, 0, $chatPos, true) + ['chat_interno' => ['Chat interno', 'chat.php']] + array_slice($links, $chatPos, null, true);
+        // Chat interno fica dentro do menu WhatsApp. Quem não vê o WhatsApp (sem módulo ou
+        // sem permissão) ganha o menu WhatsApp só com o Chat interno.
+        if (chat_ready($pdoAdmin) && chat_user_allowed($pdoAdmin, (int)COMPANY_ID)) {
+          $chatItem = ['Chat interno', 'chat.php'];
+          if (isset($links['whatsapp'][2]) && is_array($links['whatsapp'][2])) {
+            $links['whatsapp'][2]['chat_interno'] = $chatItem;
+          } else {
+            $keys = array_keys($links);
+            $chatPos = array_search('clientes', $keys, true);
+            if ($chatPos === false) $chatPos = array_search('inicio', $keys, true);
+            $chatPos = $chatPos === false ? 0 : $chatPos + 1;
+            $links = array_slice($links, 0, $chatPos, true) + ['whatsapp' => ['WhatsApp', 'chat.php', ['chat_interno' => $chatItem]]] + array_slice($links, $chatPos, null, true);
+          }
         }
       } catch (Throwable $e) {
       }
@@ -795,7 +804,7 @@ function admin_topbar(string $title, string $active=''): void {
 <!doctype html><html lang="pt-br"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title>
-<link rel="stylesheet" href="/assets/admin.css?v=27">
+<link rel="stylesheet" href="/assets/admin.css?v=28">
 <script defer src="/assets/admin.js?v=17"></script>
 <!-- LGPD: nas buscas, CPF/CNPJ aparece só com os 3 primeiros e os 3 últimos dígitos. -->
 <script>window.nexaMaskDoc=function(v){v=String(v==null?'':v);var d=v.replace(/\D/g,'');if(d.length<7)return v;var i=0,n=d.length;return v.replace(/\d/g,function(c){var k=i++;return(k<3||k>=n-3)?c:'*'});};</script>

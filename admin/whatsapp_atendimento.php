@@ -26,7 +26,7 @@ function waa_h($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UT
 admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 ?>
 <style>
-.waa{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;display:grid;grid-template-columns:var(--side,clamp(300px,28vw,420px)) 1fr;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:var(--txt);margin-top:10px}
+.waa{--g:#00a884;--bg:#f0f2f5;--line:#e9edef;--txt:#111b21;--mut:#667781;display:grid;grid-template-columns:var(--side,clamp(300px,28vw,420px)) 1fr;height:calc(100vh / var(--nexa-zoom,1) - 150px);height:calc(100dvh / var(--nexa-zoom,1) - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:var(--txt);margin-top:10px}
 .waa *{box-sizing:border-box}
 .waa-side{display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;min-height:0;position:relative}
 .waa-split{position:absolute;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;z-index:4;touch-action:none}.waa-split::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:2px;background:transparent;transition:background .15s}

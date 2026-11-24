@@ -31,7 +31,7 @@ if ($embed) {
 }
 ?>
 <style>
-.ci{--g:#2454d6;--bg:#f0f2f5;--line:#e9edef;--mut:#667781;display:grid;grid-template-columns:clamp(260px,28vw,360px) 1fr;height:calc(100dvh - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:#111b21}
+.ci{--g:#2454d6;--bg:#f0f2f5;--line:#e9edef;--mut:#667781;display:grid;grid-template-columns:clamp(260px,28vw,360px) 1fr;height:calc(100vh / var(--nexa-zoom,1) - 150px);height:calc(100dvh / var(--nexa-zoom,1) - 150px);min-height:420px;border:1px solid #d1d7db;border-radius:16px;overflow:hidden;background:#fff;color:#111b21}
 .ci *{box-sizing:border-box}
 .ci.embed{height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;min-height:0}
 .ci.embed.open .ci-side,.ci:not(.embed) .ci-back{display:none}.ci.embed:not(.open) .ci-main{display:none}
@@ -358,6 +358,31 @@ if ($embed) {
   const start = Number(new URLSearchParams(location.search).get('c') || 0);
   loadList().then(() => { if (start) openConv(start); });
   connect();
+})();
+</script>
+<?php endif; ?>
+<?php if (!$embed): ?>
+<script>
+// A tela ocupa toda a altura que sobra na janela, em qualquer resolução e zoom
+// (o painel usa zoom de 80% em notebooks 1366x768): mede a escala real e ajusta.
+(function () {
+  const box = document.getElementById('ci'); if (!box) return;
+  const fit = () => {
+    if (document.fullscreenElement) { box.style.height = ''; return; }
+    const want = window.innerHeight - 12;
+    let css = parseFloat(box.style.height) || box.offsetHeight;
+    for (let i = 0; i < 3; i++) {
+      const r = box.getBoundingClientRect();
+      const scale = r.height > 0 && css > 0 ? r.height / css : 1;
+      const diff = want - (r.top + r.height);
+      if (Math.abs(diff) < 1.5) break;
+      css = Math.max(420, css + diff / scale);
+      box.style.height = Math.floor(css) + 'px';
+    }
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  document.addEventListener('fullscreenchange', () => setTimeout(fit, 50));
 })();
 </script>
 <?php endif; ?>

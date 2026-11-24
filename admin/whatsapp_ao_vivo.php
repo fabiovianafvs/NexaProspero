@@ -43,9 +43,9 @@ if (function_exists('nexa_realtime_browser_config')) {
 admin_topbar('Painel Ao Vivo', 'whatsapp_ao_vivo');
 ?>
 <style>
-.wlv{--red:#dc2626;--ok:#16a34a;--off:#ef4444;--line:#e2e8f0;--mut:#64748b;--txt:#0f172a;margin-top:10px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:18px;padding:12px;color:var(--txt);display:flex;flex-direction:column;gap:12px;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px}
+.wlv{--red:#dc2626;--ok:#16a34a;--off:#ef4444;--line:#e2e8f0;--mut:#64748b;--txt:#0f172a;margin-top:10px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:18px;padding:12px;color:var(--txt);display:flex;flex-direction:column;gap:12px;height:calc(100vh / var(--nexa-zoom,1) - 150px);height:calc(100dvh / var(--nexa-zoom,1) - 150px);min-height:420px}
 .wlv *{box-sizing:border-box}
-.wlv:fullscreen{height:100vh;border-radius:0;border:0;padding:16px}
+.wlv:fullscreen{height:calc(100vh / var(--nexa-zoom,1));border-radius:0;border:0;padding:16px}
 .wlv-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px}
 .wlv-title{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:900;color:#0b1f5b;margin:0}
 .wlv-total{min-width:28px;height:28px;border-radius:999px;background:#0b1f5b;color:#fff;font-size:14px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;padding:0 9px;font-variant-numeric:tabular-nums}
@@ -257,6 +257,29 @@ admin_topbar('Painel Ao Vivo', 'whatsapp_ao_vivo');
   window.addEventListener('focus', schedule);
   load();
   connectRt();
+})();
+</script>
+<script>
+// A tela ocupa toda a altura que sobra na janela, em qualquer resolução e zoom
+// (o painel usa zoom de 80% em notebooks 1366x768): mede a escala real e ajusta.
+(function () {
+  const box = document.getElementById('wlv'); if (!box) return;
+  const fit = () => {
+    if (document.fullscreenElement) { box.style.height = ''; return; }
+    const want = window.innerHeight - 12;
+    let css = parseFloat(box.style.height) || box.offsetHeight;
+    for (let i = 0; i < 3; i++) {
+      const r = box.getBoundingClientRect();
+      const scale = r.height > 0 && css > 0 ? r.height / css : 1;
+      const diff = want - (r.top + r.height);
+      if (Math.abs(diff) < 1.5) break;
+      css = Math.max(420, css + diff / scale);
+      box.style.height = Math.floor(css) + 'px';
+    }
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  document.addEventListener('fullscreenchange', () => setTimeout(fit, 50));
 })();
 </script>
 <?php endif; ?>
