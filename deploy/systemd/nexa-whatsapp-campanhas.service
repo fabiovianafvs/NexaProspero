@@ -1,0 +1,15 @@
+[Unit]
+Description=Nexa Próspero - agendador das campanhas do WhatsApp
+After=network.target mysql.service mariadb.service
+
+[Service]
+# Disparado pelo nexa-whatsapp-campanhas.timer; confere as campanhas e termina.
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/nexa
+ExecStart=/usr/bin/php /var/www/nexa/workers/whatsapp_campanhas_worker.php
+TimeoutStartSec=10min
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true

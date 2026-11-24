@@ -1,0 +1,11 @@
+[Unit]
+Description=Nexa Próspero - confere as campanhas do WhatsApp a cada minuto
+
+[Timer]
+OnCalendar=*-*-* *:*:05
+AccuracySec=5s
+Persistent=true
+Unit=nexa-whatsapp-campanhas.service
+
+[Install]
+WantedBy=timers.target

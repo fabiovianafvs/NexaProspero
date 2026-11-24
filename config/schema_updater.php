@@ -820,6 +820,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'd574d5f8c9fcdd7d4a2e743ea3a6245ef901a31b949a4d197bfccc0aa29c965a',
         'order' => 202611230200,
       ],
+      [
+        'id' => '20261124_whatsapp_campanhas_v1',
+        'module' => 'whatsapp_campanhas',
+        'version' => 202611240100,
+        'label' => 'WhatsApp - Campanhas v1',
+        'description' => 'Cria as tabelas das campanhas do WhatsApp (envio programado para aniversariantes, quem comprou ou não compra há algum tempo, e aniversário automático), a lista de quem recebe e os números que pediram para não receber (PARAR). Não altera tabelas existentes.',
+        'file' => __DIR__ . '/../db/20261124_whatsapp_campanhas_v1.sql',
+        'sha256' => 'a3d35e64606d47435c60d5ba00dabdb5ed46fa0249712ed13928d01c163d2645',
+        'order' => 202611240100,
+      ],
     ];
   }
 }

@@ -1829,6 +1829,18 @@ if (!function_exists('whatsapp_bot_handle')) {
       unset($media['media_error']);
       if (!whatsapp_chat_log($pdo, $companyId, $chat, 'IN', 'cliente', $body, array_merge($media, ['message_id' => $messageId, 'type' => $type, 'quoted_message_id' => (string)($payload['quoted_id'] ?? '')]))) return 'repetida';
 
+      // Campanhas: "PARAR" (mensagem inteira) descadastra o número das campanhas e responde.
+      $camPhone = $phone !== '' ? $phone : (string)($chat['phone'] ?? '');
+      if ($type === 'text' && $camPhone !== '' && is_file(__DIR__ . '/whatsapp_campanhas.php')) {
+        require_once __DIR__ . '/whatsapp_campanhas.php';
+        $optReply = wa_camp_optout_from_message($pdo, $companyId, $camPhone, $text);
+        if ($optReply !== null) {
+          whatsapp_chat_send_text($pdo, $companyId, whatsapp_chat_ctx($pdo, $companyId, $chat), $optReply);
+          whatsapp_chat_notify($companyId, (int)$chat['id'], ['new_message' => true]);
+          return 'descadastrado das campanhas';
+        }
+      }
+
       $now = time();
       $status = (string)$chat['status'];
       // Respondida pelo celular há mais tempo que o configurado e sem atendente na tela: volta ao robô.
