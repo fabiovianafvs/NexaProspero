@@ -318,6 +318,43 @@ if (!function_exists('orc_next_number')) {
   }
 }
 
+if (!function_exists('orc_quote_label')) {
+  /** Número do orçamento como aparece nas telas (#001055). */
+  function orc_quote_label($quoteNumber): string { return '#' . str_pad((string)(int)$quoteNumber, 6, '0', STR_PAD_LEFT); }
+}
+
+if (!function_exists('orc_order_links')) {
+  /**
+   * Pedidos gerados a partir de orçamentos (orcamentos.converted_order_id), para mostrar
+   * "Faturado no pedido nº X" e os outros orçamentos lidos na mesma venda (o Checkout
+   * permite ler vários orçamentos numa venda só). Retorna
+   * [pedido_id => ['number' => nº exibido, 'exists' => bool, 'quotes' => [['id','number'], ...]]].
+   */
+  function orc_order_links(PDO $pdo, int $companyId, array $orderIds): array {
+    $orderIds = array_values(array_unique(array_filter(array_map('intval', $orderIds), static fn($v) => $v > 0)));
+    if (!$orderIds || !orc_schema_has_column($pdo, 'orcamentos', 'converted_order_id')) return [];
+    $ph = implode(',', array_fill(0, count($orderIds), '?'));
+    $out = [];
+    foreach ($orderIds as $oid) $out[$oid] = ['number' => (string)$oid, 'exists' => false, 'quotes' => []];
+    try {
+      $st = $pdo->prepare("SELECT * FROM pedidos WHERE company_id=? AND id IN ($ph)");
+      $st->execute(array_merge([$companyId], $orderIds));
+      if (!function_exists('company_sequence_display') && is_file(__DIR__ . '/company_sequences.php')) require_once __DIR__ . '/company_sequences.php';
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $o) {
+        $num = function_exists('company_sequence_display') ? (string)company_sequence_display($o, 'pedidos') : (string)($o['numero_pedido'] ?? $o['id']);
+        $out[(int)$o['id']]['number'] = $num !== '' ? $num : (string)$o['id'];
+        $out[(int)$o['id']]['exists'] = true;
+      }
+      $st = $pdo->prepare("SELECT id, quote_number, converted_order_id FROM orcamentos WHERE company_id=? AND converted_order_id IN ($ph) ORDER BY quote_number, id");
+      $st->execute(array_merge([$companyId], $orderIds));
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $q) {
+        $out[(int)$q['converted_order_id']]['quotes'][] = ['id' => (int)$q['id'], 'number' => (int)$q['quote_number']];
+      }
+    } catch (Throwable $e) {}
+    return $out;
+  }
+}
+
 if (!function_exists('orc_statuses')) {
   function orc_statuses(): array { return ['ABERTO'=>'Aberto','APROVADO'=>'Aprovado','FATURADO'=>'Faturado','RECUSADO'=>'Recusado','CANCELADO'=>'Cancelado']; }
 }

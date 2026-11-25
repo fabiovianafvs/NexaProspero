@@ -802,6 +802,21 @@ admin_topbar('Editar pedido #' . $pedidoNumero, 'pedidos');
       <?= implode('', array_map(static fn($x) => '<span>' . $x . '</span>', $fiscalStatusChips)) ?>
     </div>
   <?php endif; ?>
+  <?php
+    // Orçamentos que viraram este pedido (o Checkout pode juntar vários numa venda).
+    $pedidoOrigemOrcamentos = [];
+    try {
+      $stOrc = $pdo->prepare('SELECT id, quote_number FROM orcamentos WHERE company_id=? AND converted_order_id=? ORDER BY quote_number, id');
+      $stOrc->execute([(int)COMPANY_ID, (int)$id]);
+      $pedidoOrigemOrcamentos = $stOrc->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) { $pedidoOrigemOrcamentos = []; }
+  ?>
+  <?php if ($pedidoOrigemOrcamentos): ?>
+    <div class="card" style="border-radius:16px;padding:11px 14px;margin:8px 0 14px;background:#f0fdf4;border:1px solid #bbf7d0;color:#14532d;font-weight:800">
+      Origem: <?= count($pedidoOrigemOrcamentos) === 1 ? 'orçamento' : 'orçamentos' ?>
+      <?= implode(', ', array_map(static fn($q) => '<a href="orcamento_editar.php?id=' . (int)$q['id'] . '">#' . h(str_pad((string)(int)$q['quote_number'], 6, '0', STR_PAD_LEFT)) . '</a>', $pedidoOrigemOrcamentos)) ?>
+    </div>
+  <?php endif; ?>
   <?php if ($ok): ?><div class="card edit-alert-success"><?= h($ok) ?></div><?php endif; ?>
   <?php if ($erro): ?><div class="card edit-alert-error"><?= h($erro) ?></div><?php endif; ?>
   <?php if ($pedidoFinalizadoReadOnly): ?>

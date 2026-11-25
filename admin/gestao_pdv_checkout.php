@@ -4290,6 +4290,23 @@ body:has(.pdv-checkout-mode) .container{width:100%!important;max-width:none!impo
       const warnings=[];
       datasets.forEach(d=>(d.warnings||[]).forEach(w=>warnings.push(w)));
       if(warnings.length && !await checkoutConfirm('• '+warnings.join('\n• ')+'\n\nDeseja continuar?','Atenção ao importar orçamento','warning','Continuar')) return false;
+      // Orçamentos de clientes diferentes numa venda só: a venda fica num único cliente e
+      // todos os orçamentos ficam "Faturado" neste pedido. Pede confirmação antes de juntar.
+      {
+        const pad=n=>'#'+String(n||'').padStart(6,'0');
+        const norm=v=>String(v||'').trim().toLocaleLowerCase('pt-BR').replace(/\s+/g,' ');
+        const quoteCustomers=datasets.map(d=>{ const q=d.quote||{}, c=d.customer||{}; const id=Number(c.id||q.person_id||0); const name=String(c.name||q.person_name_snapshot||'').trim(); return {label:pad(q.quote_number||q.id), key:id>0?'id:'+id:(name?'nome:'+norm(name):''), id, name}; });
+        const keys=new Set(quoteCustomers.map(x=>x.key).filter(Boolean));
+        const selId=Number(selectedCustomer?.id||0);
+        const differsFromSelected=selId>0 && quoteCustomers.some(x=>x.id>0 && x.id!==selId);
+        if(keys.size>1 || differsFromSelected){
+          const lines=quoteCustomers.map(x=>'• Orçamento '+x.label+' — '+(x.name||'sem cliente')).join('\n');
+          const saleName=selectedCustomer?.name ? String(selectedCustomer.name) : 'o cliente escolhido no Checkout';
+          const msg='Os orçamentos são de clientes diferentes:\n'+lines+(selId>0?'\n\nCliente já escolhido no Checkout: '+saleName:'')
+            +'\n\nA venda fica em um único cliente ('+saleName+') e todos esses orçamentos serão marcados como Faturados neste pedido.\n\nDeseja juntar mesmo assim?';
+          if(!await checkoutConfirm(msg,'Clientes diferentes','warning','Juntar mesmo assim')) return false;
+        }
+      }
       let added=0; const customerIds=[], adjustmentDatasets=[];
       datasets.forEach(data=>{
         const quote=data.quote||{}, customer=data.customer||{}, items=Array.isArray(data.items)?data.items:[];

@@ -234,7 +234,20 @@ orc_page_start($order?'Orçamento #'.$order['quote_number']:'Novo Orçamento',$i
 <div class="orc-head"><h1><?=$order?'Orçamento #'.str_pad((string)$order['quote_number'],6,'0',STR_PAD_LEFT):'Novo Orçamento'?></h1><div class="orc-spacer"></div><?php if($order&&$showQuoteMargins):?><button type="button" class="orc-btn success" id="orcOpenNegotiation">Negociação / Margens</button><?php endif;?><?php if($order):?><a class="orc-btn" target="_blank" href="orcamento_imprimir.php?id=<?=$id?>">Imprimir</a><?php endif;?><a class="orc-btn" href="orcamentos.php">← Lista</a></div>
 <?php if($ok!==''&&!($step===2&&strpos($ok,'Item ')===0)):?><div class="orc-alert ok"><?=orc_e($ok)?></div><?php endif;?><?php if($error!==''):?><div class="orc-alert err"><?=orc_e($error)?></div><?php endif;?>
 <?php if($osQuoteLink):?><div class="orc-alert ok"><b>Orçamento convertido em O.S.</b> Este documento está preservado como origem e não pode mais ser alterado. <a class="orc-btn sm success" style="margin-left:8px" href="os_editar.php?id=<?=(int)$osQuoteLink['os_order_id']?>">Abrir O.S. #<?=str_pad((string)(int)$osQuoteLink['os_number'],6,'0',STR_PAD_LEFT)?></a></div><?php endif;?>
-<?php if($isFaturadoReadOnly):?><div class="orc-alert ok orc-readonly-banner"><b>✓ Orçamento FATURADO — somente leitura.</b> Você pode consultar as etapas, margens, imprimir e enviar o documento, mas não pode alterar dados, incluir/remover produtos, mudar valores, pagamentos ou entrega.</div><?php endif;?>
+<?php if($isFaturadoReadOnly):?><div class="orc-alert ok orc-readonly-banner"><b>✓ Orçamento FATURADO — somente leitura.</b> Você pode consultar as etapas, margens, imprimir e enviar o documento, mas não pode alterar dados, incluir/remover produtos, mudar valores, pagamentos ou entrega.</div>
+<?php
+  // Onde este orçamento foi faturado (o Checkout pode juntar vários orçamentos numa venda).
+  $orcConvertedOrderId=(int)($order['converted_order_id']??0);
+  $orcOrderLink=$orcConvertedOrderId>0?(orc_order_links($pdo,$companyId,[$orcConvertedOrderId])[$orcConvertedOrderId]??null):null;
+  if($orcOrderLink):
+    $orcOthers=array_values(array_filter($orcOrderLink['quotes'],static fn($q)=>(int)$q['id']!==(int)$id));
+?>
+<div class="orc-alert ok"><b>Faturado no pedido nº <?=orc_e($orcOrderLink['number'])?></b><?php if($orcOthers):?> — na mesma venda <?=count($orcOthers)===1?'do orçamento':'dos orçamentos'?> <?=implode(', ',array_map(static fn($q)=>'<a href="orcamento_editar.php?id='.(int)$q['id'].'">'.orc_e(orc_quote_label($q['number'])).'</a>',$orcOthers))?> (o cliente e o vendedor do pedido são os escolhidos no Checkout)<?php endif;?>.
+<?php if($orcOrderLink['exists']):?> <a class="orc-btn sm" href="pedido_editar.php?id=<?=$orcConvertedOrderId?>">Abrir pedido</a><?php else:?> O pedido não foi encontrado (pode ter sido excluído).<?php endif;?></div>
+<?php elseif($orcConvertedOrderId<=0):?>
+<div class="orc-alert warn"><b>Este orçamento está como Faturado, mas não tem pedido vinculado</b> (o status foi alterado manualmente).</div>
+<?php endif;?>
+<?php endif;?>
 <?php orc_steps($id,$step,$deliveryEnabled); ?>
 
 <?php if($step===1): ?>
