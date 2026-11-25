@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/_bootstrap.php';
+require_once __DIR__ . '/config/catalogo_status.php';
+catalogo_status_exigir($pdo, $company, $biz, 'pedidos'); // Catálogo de Pedidos desativado na tela de início = manutenção
 products_send_dynamic_catalog_headers();
 require_once __DIR__ . '/config/product_options.php';
 require_once __DIR__ . '/config/product_half_pizza.php';

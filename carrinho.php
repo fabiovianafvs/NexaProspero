@@ -2,6 +2,8 @@
 declare(strict_types=1);
 session_start();
 require __DIR__ . '/_bootstrap.php';
+require_once __DIR__ . '/config/catalogo_status.php';
+catalogo_status_exigir($pdo, $company, $biz, 'pedidos'); // Catálogo de Pedidos desativado na tela de início = manutenção
 require_once __DIR__ . '/config/pdo.php';
 require_once __DIR__ . '/config/product_options.php';
 

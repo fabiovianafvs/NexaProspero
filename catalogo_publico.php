@@ -114,6 +114,8 @@ define('COMPANY_CUSTOM_DOMAIN', (string)($company['custom_domain'] ?? ''));
 $app = load_app_config(COMPANY_ID);
 $biz = load_business_config(COMPANY_ID);
 require_once __DIR__ . '/config/products_repository.php';
+require_once __DIR__ . '/config/catalogo_status.php';
+catalogo_status_exigir($pdo, $company, $biz, 'produtos'); // Catálogo de Produtos desativado na tela de início = manutenção
 products_send_dynamic_catalog_headers();
 app_apply_company_timezone($pdo, (string)($biz['timezone'] ?? 'America/Sao_Paulo'));
 

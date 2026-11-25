@@ -209,6 +209,7 @@ if (!function_exists('access_permissions_catalog')) {
 
       // Configurações gerais
       'configuracoes' => ['label' => 'Configurações gerais', 'group' => 'Configurações', 'module' => '*', 'pages' => ['parametros.php'], 'nav' => ['params']],
+      'catalogo_status' => ['label' => 'Ativar/desativar os catálogos (Pedidos e Produtos) na tela de início', 'group' => 'Configurações', 'module' => '*', 'pages' => [], 'nav' => []],
       'ia_configuracoes' => ['label' => 'Agentes de IA', 'group' => 'Configurações', 'module' => 'ia_agentes', 'pages' => ['ia_configuracoes.php'], 'nav' => ['ia_configuracoes']],
       'backup_empresa' => ['label' => 'Backup da Empresa', 'group' => 'Configurações', 'module' => 'backup_empresa', 'pages' => ['backup_empresa.php'], 'nav' => ['backup_empresa']],
       'cte_documentos' => ['label' => 'CT-e: emitir, transmitir e consultar', 'group' => 'Transporte (CT-e/MDF-e)', 'module' => 'cte', 'pages' => ['cte.php', 'cte_editar.php', 'cte_api.php', 'cte_arquivo.php'], 'nav' => ['cte_documentos']],
