@@ -392,6 +392,88 @@ $isContingencyPrint = $emissionType !== '' && $emissionType !== 'NORMAL';
 $contingencyReasonPrint = trim((string)($doc['contingency_reason'] ?? ''));
 $contingencyStartedPrint = nfce_print_date_br($doc['contingency_started_at'] ?? '');
 
+// NF-e (modelo 55): DANFE no leiaute da NT 2026.010 (Reforma Tributária), o mesmo PDF
+// enviado por e-mail/WhatsApp, montado só com o XML armazenado. Se o PDF não puder ser
+// gerado (XML ausente ou biblioteca antiga no servidor), cai no DANFE em HTML abaixo.
+$nfePdfFallbackError = '';
+if ($model === '55' && trim($xml) !== '' && (string)($_GET['html'] ?? '') !== '1') {
+  $nfePdf = null;
+  try {
+    require_once __DIR__ . '/../config/fiscal_document_pdf.php';
+    $docForPdf = $doc;
+    if (function_exists('fiscal_company_report_identity')) $docForPdf['_issuer_identity'] = fiscal_company_report_identity($pdo, $cid);
+    $nfePdf = fiscal_document_pdf_build($docForPdf);
+  } catch (Throwable $e) {
+    $nfePdfFallbackError = $e->getMessage();
+    error_log('[Nexa][DANFE NF-e] doc ' . $docId . ': ' . $e->getMessage());
+  }
+  if (is_array($nfePdf) && (string)($nfePdf['content'] ?? '') !== '') {
+    $nfePdfName = (string)($nfePdf['filename'] ?? ('DANFE-NFE-' . $docId . '.pdf'));
+    $docNumberPdf = str_pad((string)(int)($doc['number'] ?? 0), 9, '0', STR_PAD_LEFT);
+?>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DANFE NF-e <?= nfce_print_h($docNumberPdf) ?></title>
+<style>
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:Arial,Helvetica,sans-serif;background:#e5e7eb;margin:0;padding:12px;color:#111827;display:flex;flex-direction:column;gap:10px}
+  .actions{width:min(980px,100%);margin:0 auto;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+  .actions .info{margin-right:auto;font-size:13px;font-weight:700;color:#334155}
+  .btn{border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:8px 12px;font-weight:700;cursor:pointer;text-decoration:none;color:#111827;font-size:14px}
+  .primary{background:#1e3a8a;color:#fff;border-color:#1e3a8a}
+  .whatsapp{background:#25D366;color:#fff;border-color:#1ebe57}
+  .viewer{flex:1;width:min(980px,100%);margin:0 auto;min-height:70vh;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+  .viewer iframe{width:100%;height:100%;min-height:70vh;border:0;border-radius:8px;display:block}
+  .nopdf{padding:40px 16px;text-align:center;color:#334155;font-size:15px}.nopdf .btn{display:inline-block;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="actions">
+  <span class="info">DANFE NF-e nº <?= nfce_print_h($docNumberPdf) ?> · série <?= nfce_print_h($doc['series'] ?? '') ?></span>
+  <a class="btn whatsapp" href="<?= nfce_print_h($waShareLink) ?>">💬 WhatsApp</a>
+  <a class="btn" href="<?= nfce_print_h($emailShareLink) ?>">✉ E-mail</a>
+  <a class="btn" id="nfeDownload" href="#" download="<?= nfce_print_h($nfePdfName) ?>">⬇ Baixar PDF</a>
+  <button class="btn primary" type="button" id="nfePrint">🖨 Imprimir</button>
+  <a class="btn" href="<?= nfce_print_h($returnTo) ?>">↩ Sair</a>
+</div>
+<div class="viewer"><iframe id="nfeFrame" title="DANFE NF-e"></iframe></div>
+<script>
+(function(){
+  const b64 = <?= json_encode(base64_encode((string)$nfePdf['content'])) ?>;
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
+  const frame = document.getElementById('nfeFrame');
+  // Celulares não mostram PDF dentro da página: oferece abrir o DANFE.
+  const semVisor = navigator.pdfViewerEnabled === false;
+  if (semVisor) {
+    frame.parentNode.innerHTML = '<div class="nopdf"><p>Este navegador não mostra o PDF dentro da página.</p><a class="btn primary" href="' + url + '" target="_blank" rel="noopener">Abrir DANFE (PDF)</a></div>';
+  } else {
+    frame.src = url;
+  }
+  document.getElementById('nfeDownload').href = url;
+  document.getElementById('nfePrint').addEventListener('click', function(){
+    if (semVisor) { window.open(url, '_blank'); return; }
+    try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+    catch (e) { window.open(url, '_blank'); }
+  });
+  const returnTo = <?= json_encode($returnTo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && returnTo) { e.preventDefault(); window.location.href = returnTo; }
+  });
+})();
+</script>
+</body>
+</html>
+<?php
+    exit;
+  }
+}
+
 if ($model === '55'):
   $barcodeImage = nfce_print_barcode_data_uri($accessKey);
   $docNumber = str_pad((string)(int)($doc['number'] ?? 0), 9, '0', STR_PAD_LEFT);
@@ -425,6 +507,7 @@ if ($model === '55'):
 <div class="actions"><a class="btn whatsapp" title="Enviar PDF por WhatsApp" aria-label="Enviar PDF por WhatsApp" href="<?= nfce_print_h($waShareLink) ?>"><span class="btn-icon" aria-hidden="true">💬</span><span class="btn-label">WhatsApp</span></a><a class="btn" title="Enviar por e-mail" aria-label="Enviar por e-mail" href="<?= nfce_print_h($emailShareLink) ?>"><span class="btn-icon" aria-hidden="true">✉</span><span class="btn-label">E-mail</span></a><button class="btn primary" type="button" title="Imprimir NF-e" aria-label="Imprimir NF-e" onclick="window.print()"><span class="btn-icon" aria-hidden="true">🖨</span><span class="btn-label">Imprimir</span></button><a class="btn" title="Sair" aria-label="Sair" href="<?= nfce_print_h($returnTo) ?>"><span class="btn-icon" aria-hidden="true">↩</span><span class="btn-label">Sair</span></a></div>
 <div class="danfe">
   <?php if ($amb !== 'PRODUCAO'): ?><div class="homolog">NF-e EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL</div><?php endif; ?>
+  <?php if ($nfePdfFallbackError !== ''): ?><div class="homolog" style="background:#fee2e2">Visualização simplificada: o DANFE oficial (PDF) não pôde ser gerado — <?= nfce_print_h($nfePdfFallbackError) ?></div><?php elseif (trim($xml) === ''): ?><div class="homolog" style="background:#fee2e2">Visualização simplificada: esta nota ainda não tem XML gerado.</div><?php endif; ?>
   <?php if ($isContingencyPrint): ?><div class="homolog">NF-e EMITIDA EM CONTINGÊNCIA <?= nfce_print_h(str_replace(['SVCAN','SVCRS'],['SVC-AN','SVC-RS'],$emissionType)) ?><?php if ($contingencyReasonPrint !== ''): ?><div class="small">Motivo: <?= nfce_print_h($contingencyReasonPrint) ?><?= $contingencyStartedPrint !== '' ? ' — ' . nfce_print_h($contingencyStartedPrint) : '' ?></div><?php endif; ?></div><?php endif; ?>
   <div class="header">
     <div class="box emitente">

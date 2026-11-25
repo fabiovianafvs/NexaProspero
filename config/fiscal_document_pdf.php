@@ -79,6 +79,25 @@ if (!function_exists('fiscal_document_pdf_prepare_xml')) {
     }
 }
 
+if (!function_exists('fiscal_document_pdf_logo_path')) {
+    /** Logo da empresa (Configurações > logo) para o quadro do emitente do DANFE; '' = sem logo. */
+    function fiscal_document_pdf_logo_path(int $companyId): string
+    {
+        if ($companyId <= 0 || !function_exists('load_business_config')) return '';
+        try {
+            $biz = (array)load_business_config($companyId);
+            $logo = (array)($biz['logo'] ?? []);
+            if (array_key_exists('enabled', $logo) && empty($logo['enabled'])) return '';
+            $file = basename(trim((string)($logo['file'] ?? '')));
+            if ($file === '' || !preg_match('/\.(png|jpe?g)$/i', $file)) return '';
+            $path = dirname(__DIR__) . '/uploads/logos/' . $file;
+            return (is_file($path) && is_readable($path) && @getimagesize($path)) ? $path : '';
+        } catch (Throwable $e) {
+            return '';
+        }
+    }
+}
+
 /**
  * Gera o PDF oficial do DANFE/DANFCE a partir do XML armazenado no documento fiscal.
  *
@@ -110,11 +129,32 @@ function fiscal_document_pdf_build(array $document): array
 
     try {
         if ($model === '55') {
-            if (!class_exists(\NFePHP\DA\NFe\Danfe::class)) {
-                throw new RuntimeException('Classe de geração do DANFE NF-e não encontrada.');
+            // NT 2026.010 (DANFE da Reforma Tributária, obrigatória a partir de 01/12/2026):
+            // DanfeRtc do sped-da. A Danfe clássica fica só como reserva se a biblioteca
+            // instalada no servidor ainda for a versão antiga (composer install pendente).
+            $makeDanfe = static function () use ($xml, $document) {
+                $rtcClass = '\\NFePHP\\DA\\NFe\\DanfeRtc';
+                if (class_exists($rtcClass)) {
+                    $renderer = new $rtcClass($xml);
+                } elseif (class_exists(\NFePHP\DA\NFe\Danfe::class)) {
+                    $renderer = new \NFePHP\DA\NFe\Danfe($xml);
+                } else {
+                    throw new RuntimeException('Classe de geração do DANFE NF-e não encontrada.');
+                }
+                if (method_exists($renderer, 'setDefaultFont')) $renderer->setDefaultFont('arial');
+                if (method_exists($renderer, 'creditsIntegratorFooter')) $renderer->creditsIntegratorFooter('Nexa Próspero', false);
+                if (strtoupper((string)($document['status'] ?? '')) === 'CANCELADA' && method_exists($renderer, 'setCancelFlag')) {
+                    $renderer->setCancelFlag(true);
+                }
+                return $renderer;
+            };
+            $logoPath = fiscal_document_pdf_logo_path((int)($document['company_id'] ?? 0));
+            $content = '';
+            if ($logoPath !== '') {
+                // Logo com problema (formato/tamanho) nunca impede o DANFE: refaz sem logo.
+                try { $content = $makeDanfe()->render($logoPath); } catch (Throwable $logoError) { $content = ''; }
             }
-            $renderer = new \NFePHP\DA\NFe\Danfe($xml);
-            $content = $renderer->render();
+            if (!is_string($content) || $content === '') $content = $makeDanfe()->render();
             $label = 'NF-e';
             $prefix = 'DANFE-NFE';
         } else {

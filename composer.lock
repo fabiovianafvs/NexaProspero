@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9e64e72407b5984c8fb48d4ec0c956a2",
+    "content-hash": "8d872999da25f366929aa513cb809baa",
     "packages": [
         {
             "name": "justinrainbow/json-schema",
@@ -238,16 +238,16 @@
         },
         {
             "name": "nfephp-org/sped-da",
-            "version": "v1.1.6",
+            "version": "dev-master",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nfephp-org/sped-da.git",
-                "reference": "93ae550adcf5dd0c43598f27e323a8af84ceba22"
+                "reference": "75bc2452d9d1c95bd647a2386267fe70dc9cafac"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nfephp-org/sped-da/zipball/93ae550adcf5dd0c43598f27e323a8af84ceba22",
-                "reference": "93ae550adcf5dd0c43598f27e323a8af84ceba22",
+                "url": "https://api.github.com/repos/nfephp-org/sped-da/zipball/75bc2452d9d1c95bd647a2386267fe70dc9cafac",
+                "reference": "75bc2452d9d1c95bd647a2386267fe70dc9cafac",
                 "shasum": ""
             },
             "require": {
@@ -309,9 +309,10 @@
             ],
             "support": {
                 "issues": "https://github.com/nfephp-org/sped-da/issues",
-                "source": "https://github.com/nfephp-org/sped-da/tree/v1.1.6"
+                "source": "https://github.com/nfephp-org/sped-da/tree/master"
             },
-            "time": "2024-05-07T19:32:22+00:00"
+            "time": "2026-11-24T00:00:00+00:00",
+            "default-branch": true
         },
         {
             "name": "nfephp-org/sped-gtin",
@@ -787,6 +788,7 @@
     "minimum-stability": "stable",
     "stability-flags": {
         "nfephp-org/sped-cte": 20,
+        "nfephp-org/sped-da": 20,
         "nfephp-org/sped-mdfe": 20
     },
     "prefer-stable": false,

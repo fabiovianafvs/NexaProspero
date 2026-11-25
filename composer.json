@@ -12,7 +12,7 @@
     "ext-soap": "*",
     "ext-zlib": "*",
     "nfephp-org/sped-cte": "dev-master#6e8bca42c51644cae3c0508a0c4dafefffe40009",
-    "nfephp-org/sped-da": "^1.1",
+    "nfephp-org/sped-da": "dev-master#75bc2452d9d1c95bd647a2386267fe70dc9cafac",
     "nfephp-org/sped-mdfe": "dev-master#0831983a55ea0ab86d656cd36dc3cbd1794e57fa",
     "nfephp-org/sped-nfe": "^5.2"
   },
