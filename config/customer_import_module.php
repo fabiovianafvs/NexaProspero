@@ -55,6 +55,7 @@ if (!function_exists('customer_import_aliases')) {
   function customer_import_aliases(): array {
     return [
       'source_code' => ['CODIGO','COD_CLIENTE','CODIGO_CLIENTE','ID','ID_CLIENTE','NUMERO','NUMERO_CADASTRO','COD_PESSOA'],
+      'integration_code' => ['CODIGO_INTEGRACAO','CODIGO_DE_INTEGRACAO','COD_INTEGRACAO','ID_INTEGRACAO','CODIGO_EXTERNO','COD_EXTERNO'],
       'name' => ['NOME','RAZAO_SOCIAL','NOME_RAZAO_SOCIAL','CLIENTE','NOME_CLIENTE','NOME_PESSOA'],
       'fantasy_name' => ['NOME_FANTASIA','FANTASIA','APELIDO'],
       'document' => ['CNPJ_CPF','CPF_CNPJ','CNPJCPF','CPFCNPJ','CPF','CNPJ','DOCUMENTO','DOCUMENTO_FISCAL'],
@@ -86,6 +87,7 @@ if (!function_exists('customer_import_field_labels')) {
   function customer_import_field_labels(): array {
     return [
       'source_code'=>'Código / nº de origem',
+      'integration_code'=>'Código integração',
       'name'=>'Nome / Razão social *',
       'fantasy_name'=>'Nome fantasia',
       'document'=>'CPF / CNPJ',
@@ -542,6 +544,9 @@ if (!function_exists('customer_import_execute')) {
     $ignoredCodes=customer_import_ignored_codes($options['ignore_source_codes']??'');
     $unknownAction=(string)($options['unknown_type_action']??'AUTO_DOCUMENTO');
     $hasNumero=company_sequence_has_column($pdo,'pessoas');
+    // Coluna "Código integração" (migração Pessoas - Código integração v1).
+    $hasIntegration=false;
+    try{$hasIntegration=(bool)$pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='finance_people' AND column_name='integration_code'")->fetchColumn();}catch(Throwable $e){$hasIntegration=false;}
     $rows=(array)($analysis['matrix']['rows']??[]);$dataStart=(int)$analysis['header_index']+1;$total=count($rows);$dataTotal=max(0,$total-$dataStart);
     $offset=max(0,(int)($options['offset']??0));if($offset>$dataTotal)$offset=$dataTotal;
     $maxRows=max(0,(int)($options['max_rows']??0));$maxSeconds=max(0.0,(float)($options['max_seconds']??0));$startedAt=microtime(true);$processed=0;
@@ -567,6 +572,8 @@ if (!function_exists('customer_import_execute')) {
       if(!$existing && $document!==''){
         $st=$pdo->prepare('SELECT * FROM finance_people WHERE company_id=? AND document=? ORDER BY active DESC,id ASC LIMIT 1');$st->execute([$companyId,$document]);$existing=$st->fetch(PDO::FETCH_ASSOC)?:null;if($existing)$matchOrigin='DOCUMENTO';
       }
+      $integrationCode=$hasIntegration?customer_import_clean_text(customer_import_value($source,$mapping,'integration_code'),60):'';
+      if(!$existing && $integrationCode!==''){$st=$pdo->prepare('SELECT * FROM finance_people WHERE company_id=? AND integration_code=? ORDER BY active DESC,id ASC LIMIT 1');$st->execute([$companyId,$integrationCode]);$existing=$st->fetch(PDO::FETCH_ASSOC)?:null;if($existing)$matchOrigin='INTEGRACAO';}
       if(!$existing && $sourceSystem!=='CPLUS4' && $hasNumero && $sourceNumber>0){$st=$pdo->prepare('SELECT * FROM finance_people WHERE company_id=? AND numero_cadastro=? LIMIT 1');$st->execute([$companyId,$sourceNumber]);$existing=$st->fetch(PDO::FETCH_ASSOC)?:null;if($existing)$matchOrigin='NUMERO';}
       if($existing){
         $existingDoc=customer_import_digits((string)($existing['document']??''),30);
@@ -618,7 +625,7 @@ if (!function_exists('customer_import_execute')) {
         if(!$pdo->inTransaction())$pdo->beginTransaction();
         if($existing){
           $sets=['is_customer=1','active=1','person_type=?','updated_at=NOW()'];$params=[$personType];
-          $fields=['name'=>$name,'fantasy_name'=>$fantasy,'document'=>$document,'state_registration'=>$stateReg,'municipal_registration'=>$municipal,'identity_document'=>$identity,'identity_issuer'=>$issuer,'identity_state'=>$identityState,'birth_opening_date'=>$birth,'email'=>$email,'phone'=>$phone,'whatsapp'=>$whatsapp,'zip_code'=>$zip,'address'=>$address,'number'=>$number,'complement'=>$complement,'district'=>$district,'city'=>$city,'city_ibge'=>$cityIbge,'state'=>$state,'notes'=>$notes];
+          $fields=['integration_code'=>$hasIntegration?$integrationCode:'','name'=>$name,'fantasy_name'=>$fantasy,'document'=>$document,'state_registration'=>$stateReg,'municipal_registration'=>$municipal,'identity_document'=>$identity,'identity_issuer'=>$issuer,'identity_state'=>$identityState,'birth_opening_date'=>$birth,'email'=>$email,'phone'=>$phone,'whatsapp'=>$whatsapp,'zip_code'=>$zip,'address'=>$address,'number'=>$number,'complement'=>$complement,'district'=>$district,'city'=>$city,'city_ibge'=>$cityIbge,'state'=>$state,'notes'=>$notes];
           foreach($fields as $col=>$val){if($val===null||$val==='')continue;$sets[]="`{$col}`=?";$params[]=$val;}
           $params[]=$companyId;$params[]=(int)$existing['id'];
           $pdo->prepare('UPDATE finance_people SET '.implode(',',$sets).' WHERE company_id=? AND id=?')->execute($params);
@@ -637,6 +644,7 @@ if (!function_exists('customer_import_execute')) {
             'email'=>$email?:null,'phone'=>$phone?:null,'whatsapp'=>$whatsapp?:null,'zip_code'=>$zip?:null,'address'=>$address?:null,'number'=>$number?:null,'complement'=>$complement?:null,
             'district'=>$district?:null,'city'=>$city?:null,'city_ibge'=>$cityIbge?:null,'state'=>$state?:null,'is_customer'=>1,'is_supplier'=>0,'is_seller'=>0,'is_employee'=>0,'is_professional'=>0,'is_carrier'=>0,'active'=>1,'notes'=>$notes?:null,
           ];
+          if($hasIntegration && $integrationCode!=='')$insert['integration_code']=$integrationCode;
           foreach($insert as $col=>$val){$cols[]=$col;$vals[]='?';$params[]=$val;}
           if($createdAt!==null){$cols[]='created_at';$vals[]='?';$params[]=$createdAt;}
           $sql='INSERT INTO finance_people ('.implode(',',$cols).') VALUES ('.implode(',',$vals).')';

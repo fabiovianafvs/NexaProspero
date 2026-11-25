@@ -850,6 +850,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'a35f49c6169c8c48ae660dae96ba08fe23af47e21b18f881cb70c1a55e271526',
         'order' => 202611250200,
       ],
+      [
+        'id' => '20261125_pessoas_codigo_integracao_v1',
+        'module' => 'pessoas_codigo_integracao',
+        'version' => 202611250300,
+        'label' => 'Pessoas - Código integração v1',
+        'description' => 'Cria o campo "Código integração" no cadastro de Pessoas (código da pessoa em outro sistema), usado na tela, na pesquisa e na importação de clientes por planilha.',
+        'file' => __DIR__ . '/../db/20261125_pessoas_codigo_integracao_v1.sql',
+        'sha256' => '04552ac637be8ce5713488e793c1b0a7927e659ae349417f20032fee8833f4b9',
+        'order' => 202611250300,
+      ],
     ];
   }
 }

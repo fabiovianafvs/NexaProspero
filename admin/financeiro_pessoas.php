@@ -40,6 +40,8 @@ $err = '';
 company_sequence_ensure_schema($pdo, true);
 commercial_ensure_schema($pdo);
 $hasPessoaNumero = company_sequence_has_column($pdo, 'pessoas');
+// Código da pessoa em outro sistema (migração "Pessoas - Código integração v1").
+$hasIntegrationCode = finance_column_exists($pdo, 'finance_people', 'integration_code');
 
 
 if (!function_exists('fp_grid_user_id')) {
@@ -409,6 +411,13 @@ try {
       throw new RuntimeException('Marque pelo menos um papel: cliente, fornecedor, vendedor, colaborador, profissional ou transportadora.');
     }
 
+    $integrationCodePosted = $hasIntegrationCode && array_key_exists('integration_code', $_POST);
+    $integrationCode = $integrationCodePosted ? mb_substr(trim((string)$_POST['integration_code']), 0, 60, 'UTF-8') : '';
+    if ($integrationCode !== '') {
+      $dupIntegration = finance_query_one($pdo, 'SELECT id, name FROM finance_people WHERE company_id=? AND integration_code=? AND id<>? AND active=1 LIMIT 1', [$cid, $integrationCode, $id]);
+      if ($dupIntegration) throw new RuntimeException('O código integração ' . $integrationCode . ' já está no cadastro de ' . (string)$dupIntegration['name'] . '.');
+    }
+
     if ($id > 0) {
       $sql = 'UPDATE finance_people SET name=?, fantasy_name=?, document=?, state_registration=?, municipal_registration=?, identity_document=?, identity_issuer=?, identity_state=?, person_type=?, birth_opening_date=?, email=?, phone=?, whatsapp=?, zip_code=?, address=?, number=?, complement=?, district=?, city=?, city_ibge=?, state=?, is_customer=?, is_supplier=?, is_seller=?, is_employee=?, is_professional=?, is_carrier=?, notes=?, updated_at=NOW() WHERE company_id=? AND id=?';
       $params = array_values($data);
@@ -436,6 +445,10 @@ try {
 
     $pdo->prepare('UPDATE finance_people SET seller_commission_percent=?, credit_limit=?, updated_at=NOW() WHERE company_id=? AND id=?')
       ->execute([$sellerCommission, $creditLimit, $cid, $personIdSaved]);
+    if ($integrationCodePosted) {
+      $pdo->prepare('UPDATE finance_people SET integration_code=? WHERE company_id=? AND id=?')
+        ->execute([$integrationCode !== '' ? $integrationCode : null, $cid, $personIdSaved]);
+    }
 
     // V12 ST: classificação informativa do regime da pessoa jurídica.
     // O campo NÃO altera o cálculo tributário por si só.
@@ -536,6 +549,7 @@ if ($didSearchPeople) {
   $params = [$cid];
   if($q!==''){
     $searchParts = ['name LIKE ?', 'fantasy_name LIKE ?', 'document LIKE ?', 'state_registration LIKE ?', 'municipal_registration LIKE ?', 'identity_document LIKE ?', 'identity_issuer LIKE ?', 'email LIKE ?', 'phone LIKE ?', 'whatsapp LIKE ?', 'address LIKE ?', 'district LIKE ?', 'city LIKE ?'];
+    if ($hasIntegrationCode) $searchParts[] = 'integration_code LIKE ?';
     $like = nexa_search_like($q);$searchParams = array_fill(0, count($searchParts), $like);$qDigits = preg_replace('/\D+/', '', $q);
     if ($hasPessoaNumero && $qDigits !== '') {$searchParts[] = 'numero_cadastro = ?';$searchParams[] = (int)$qDigits;} elseif ($hasPessoaNumero) {$searchParts[] = 'CAST(numero_cadastro AS CHAR) LIKE ?';$searchParams[] = $like;}
     $where[] = '(' . implode(' OR ', $searchParts) . ')';$params = array_merge($params, $searchParams);
@@ -602,7 +616,7 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
   </tr></thead><tbody>
   <?php foreach($rows as $idx=>$r):$numeroPessoa=company_sequence_display($r,'pessoas');$phone=trim((string)($r['whatsapp']??''))?:trim((string)($r['phone']??''));$addr=fp_address_full($r);$birth=(($r['person_type']??'')==='FISICA')?fp_date_br($r['birth_opening_date']??''):'—';$editUrl='financeiro_pessoas.php?edit='.(int)$r['id'].($customerCrossContext?($financePersonCrossContext?'&role=supplier&mc_finance=1':'&role=customer&mc_customer=1'):'');$canBirthday=(($r['person_type']??'')==='FISICA'&&trim((string)($r['birth_opening_date']??''))!==''&&$phone!==''); ?>
     <tr data-fp-row="<?=(int)$r['id']?>">
-      <td data-col="codigo" data-sort="<?=(int)$numeroPessoa?>"><strong>#<?=(int)$numeroPessoa?></strong></td>
+      <td data-col="codigo" data-sort="<?=(int)$numeroPessoa?>"><strong>#<?=(int)$numeroPessoa?></strong><?php if(trim((string)($r['integration_code']??''))!==''):?><br><span class="finance-muted" style="font-size:11px" title="Código integração">Int.: <?=finance_h((string)$r['integration_code'])?></span><?php endif;?></td>
       <td data-col="nome" data-sort="<?=finance_h(mb_strtolower((string)$r['name'],'UTF-8'))?>"><strong><?=finance_h($r['name'])?></strong><?php if(trim((string)($r['fantasy_name']??''))!==''):?><br><span class="finance-muted"><?=finance_h($r['fantasy_name'])?></span><?php endif;?></td>
       <td data-col="nascimento" data-sort="<?=finance_h((string)($r['birth_opening_date']??''))?>"><?=$birth?></td>
       <td data-col="documento"><?=finance_h($r['document']??'')?><?php if(!empty($r['state_registration'])):?><br><span class="finance-muted">IE: <?=finance_h($r['state_registration'])?></span><?php endif;?></td>
@@ -725,6 +739,12 @@ if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><?php endif; ?>
             <label id="birthOpeningLabel">Data de abertura</label>
             <input type="date" name="birth_opening_date" id="personBirthOpeningDate" value="<?= finance_h($edit['birth_opening_date'] ?? '') ?>">
           </div>
+          <?php if ($hasIntegrationCode): ?>
+          <div>
+            <label>Código integração</label>
+            <input name="integration_code" id="personIntegrationCode" maxlength="60" value="<?= finance_h($edit['integration_code'] ?? '') ?>" placeholder="Código em outro sistema (opcional)">
+          </div>
+          <?php endif; ?>
         </div>
       </div>
 
