@@ -298,6 +298,11 @@ function admin_topbar(string $title, string $active=''): void {
       'crm_atendimentos' => ['Atendimento', 'crm_atendimentos.php'],
       'crm_kanban' => ['Kanban', 'crm_kanban.php'],
       'crm_atendimento_mobile' => ['Atendimento Mobile', 'crm_atendimento_mobile.php'],
+      'crm_implantacao' => ['Trilha de Implantação', 'implantacao.php'],
+      'crm_implantacao_acompanhamento' => ['↳ Acompanhamento', 'implantacao_acompanhamento.php'],
+      'crm_implantacao_relatorios' => ['↳ Relatórios', 'implantacao_relatorios.php'],
+      'crm_implantacao_documentacao' => ['↳ Documentação', 'implantacao_documentacao.php'],
+      'crm_implantacao_cadastros' => ['↳ Cadastros', 'implantacao_cadastros.php'],
     ]],
     'controle_entregas' => ['Entregas','delivery_control.php', [
       'delivery_control' => ['Controle de Entregas', 'delivery_control.php'],

@@ -860,6 +860,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '04552ac637be8ce5713488e793c1b0a7927e659ae349417f20032fee8833f4b9',
         'order' => 202611250300,
       ],
+      [
+        'id' => '20261125_crm_implantacao_v1',
+        'module' => 'crm_implantacao',
+        'version' => 202611250400,
+        'label' => 'CRM - Trilha de Implantação v1',
+        'description' => 'Cria as tabelas da Trilha de Implantação (menu CRM): etapas, status com cor, tarefas, trilhas, implantações por cliente, relatórios de atendimento técnico com assinatura e fotos dos equipamentos instalados. Não altera tabelas existentes.',
+        'file' => __DIR__ . '/../db/20261125_crm_implantacao_v1.sql',
+        'sha256' => 'c6df5694efc26fb49743a3fc2a97817ee3bfcd88c6d207b18c15b93535c3297b',
+        'order' => 202611250400,
+      ],
     ];
   }
 }

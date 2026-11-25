@@ -100,6 +100,10 @@ if (!function_exists('access_permissions_catalog')) {
       // CRM
       'crm_atendimentos' => ['label' => 'Atendimento', 'group' => 'CRM', 'module' => 'crm', 'pages' => ['crm_atendimentos.php','crm_atendimento.php','crm_atendimento_mobile.php','crm_atendimento_mobile_lista.php','crm_tramitar.php','crm_ajax.php','crm_grid_preferences.php','crm_kanban.php','crm_proposta.php','crm_proposta_imprimir.php','crm_anexo.php'], 'nav' => ['crm_atendimentos','crm_kanban','crm_atendimento_mobile']],
       'crm_configuracoes' => ['label' => 'Status e tipos de atendimento', 'group' => 'CRM', 'module' => 'crm', 'pages' => ['crm_configuracoes.php'], 'nav' => []],
+      'crm_implantacao' => ['label' => 'Trilha de Implantação (quadro, marcar tarefas e acompanhamento)', 'group' => 'CRM', 'module' => 'crm', 'pages' => ['implantacao.php','implantacao_acompanhamento.php','implantacao_api.php','implantacao_arquivo.php'], 'nav' => ['crm_implantacao','crm_implantacao_acompanhamento']],
+      'crm_implantacao_relatorios' => ['label' => 'Implantação: relatórios de atendimento técnico', 'group' => 'CRM', 'module' => 'crm', 'pages' => ['implantacao_relatorios.php','implantacao_relatorio.php','implantacao_relatorio_imprimir.php','implantacao_api.php','implantacao_arquivo.php'], 'nav' => ['crm_implantacao_relatorios']],
+      'crm_implantacao_documentacao' => ['label' => 'Implantação: documentação (relatório de conclusão e fotos)', 'group' => 'CRM', 'module' => 'crm', 'pages' => ['implantacao_documentacao.php','implantacao_conclusao.php','implantacao_arquivo.php'], 'nav' => ['crm_implantacao_documentacao']],
+      'crm_implantacao_cadastros' => ['label' => 'Implantação: cadastros (etapas, status, tarefas e trilhas)', 'group' => 'CRM', 'module' => 'crm', 'pages' => ['implantacao_cadastros.php'], 'nav' => ['crm_implantacao_cadastros']],
 
       // Controle de Entregas
       'delivery_control' => ['label' => 'Controle de Entregas', 'group' => 'Entregas', 'module' => 'controle_entregas', 'pages' => ['delivery_control.php','delivery_control_view.php'], 'nav' => ['controle_entregas','delivery_control']],
