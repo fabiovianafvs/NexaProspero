@@ -145,6 +145,7 @@ admin_topbar('Campanhas do WhatsApp', 'whatsapp_campanhas');
     <div class="wcp-btns">
       <a class="btn btn-primary" href="whatsapp_campanhas.php?nova=UNICA">+ Envio programado</a>
       <a class="btn" href="whatsapp_campanhas.php?nova=ANIVERSARIO">+ Aniversário automático</a>
+      <?php if (access_is_company_master() || access_has_permission($pdo, $cid, 'whatsapp_cobrancas')): ?><a class="btn" href="whatsapp_cobrancas.php">Régua de cobrança</a><?php endif; ?>
     </div>
   </div>
   <nav class="wcp-tabs">

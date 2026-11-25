@@ -830,6 +830,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'a3d35e64606d47435c60d5ba00dabdb5ed46fa0249712ed13928d01c163d2645',
         'order' => 202611240100,
       ],
+      [
+        'id' => '20261125_whatsapp_cobrancas_v1',
+        'module' => 'whatsapp_cobrancas',
+        'version' => 202611250100,
+        'label' => 'WhatsApp - Cobranças v1',
+        'description' => 'Cria o histórico da régua de cobrança pelo WhatsApp (lembretes do Contas a Receber antes, no dia e depois do vencimento), que impede mandar o mesmo lembrete duas vezes. Aplicar depois de "WhatsApp - Campanhas v1". Não altera tabelas existentes.',
+        'file' => __DIR__ . '/../db/20261125_whatsapp_cobrancas_v1.sql',
+        'sha256' => '3079c75166b885a63d7a480f5b584609a8e4f9ae1526175b20fac8529b4956ac',
+        'order' => 202611250100,
+      ],
     ];
   }
 }

@@ -661,6 +661,24 @@ if (!function_exists('wa_camp_cancel')) {
 
 /* ------------------------------------------------------------------ envio */
 
+if (!function_exists('wa_camp_next_slot')) {
+  /**
+   * Primeiro horário livre para a próxima mensagem em massa da empresa: depois da última
+   * campanha/cobrança que ainda está na fila, para as duas não saírem juntas (o intervalo vale para o total).
+   */
+  function wa_camp_next_slot(PDO $pdo, int $companyId, array $cfg, array $tipos = ['campanha', 'cobranca']): int {
+    $at = time() + 5;
+    try {
+      $tipos = array_values(array_filter($tipos, static fn($t) => in_array($t, ['campanha', 'cobranca'], true))) ?: ['campanha'];
+      $st = $pdo->prepare("SELECT MAX(next_attempt_at) FROM whatsapp_outbox WHERE company_id=? AND status='PENDENTE' AND tipo IN (" . implode(',', array_fill(0, count($tipos), '?')) . ")");
+      $st->execute(array_merge([$companyId], $tipos));
+      $last = (string)($st->fetchColumn() ?: '');
+      if ($last !== '' && strtotime($last) >= $at) $at = strtotime($last) + (int)$cfg['interval'];
+    } catch (Throwable $e) {}
+    return $at;
+  }
+}
+
 if (!function_exists('wa_camp_enqueue')) {
   /**
    * Põe na fila do WhatsApp a lista PREVISTO de uma execução, com horários espaçados.
@@ -695,7 +713,7 @@ if (!function_exists('wa_camp_enqueue')) {
     $optouts = wa_camp_optout_phones($pdo, $companyId);
     $ins = $pdo->prepare("INSERT INTO whatsapp_outbox (company_id, pedido_id, tipo, destino, mensagem, status, next_attempt_at, created_at) VALUES (?, NULL, 'campanha', ?, ?, 'PENDENTE', ?, ?)");
     $link = $pdo->prepare("UPDATE whatsapp_campaign_recipients SET status='NA_FILA', outbox_id=?, queued_at=?, reason=NULL WHERE company_id=? AND id=?");
-    $at = time() + 5;
+    $at = wa_camp_next_slot($pdo, $companyId, $cfg);
     foreach ($rows as $r) {
       if (wa_camp_is_optout($optouts, (string)$r['phone'])) {
         $setStatus->execute(['IGNORADO', 'Pediu para não receber campanhas.', $now, $companyId, (int)$r['id']]);
@@ -793,7 +811,7 @@ if (!function_exists('wa_camp_dispatch')) {
     wa_camp_sync($pdo, $onlyCompany);
     if (!wa_camp_simulated() && whatsapp_outbox_ready($pdo)) {
       try {
-        $stalled = (int)$pdo->query("SELECT COUNT(*) FROM whatsapp_outbox WHERE status='PENDENTE' AND tipo='campanha' AND next_attempt_at < (NOW() - INTERVAL 3 MINUTE)")->fetchColumn();
+        $stalled = (int)$pdo->query("SELECT COUNT(*) FROM whatsapp_outbox WHERE status='PENDENTE' AND tipo IN ('campanha','cobranca') AND next_attempt_at < (NOW() - INTERVAL 3 MINUTE)")->fetchColumn();
         if ($stalled > 0 && whatsapp_outbox_active($pdo)) whatsapp_outbox_signal();
       } catch (Throwable $e) {}
     }
