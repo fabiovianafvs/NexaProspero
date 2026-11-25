@@ -26,6 +26,7 @@ $analysis=null;$mapping=[];$typeStats=[];$typeMap=[];$preview=[];$duplicateDocs=
 $unknownAction=strtoupper(trim((string)($_POST['unknown_type_action'] ?? 'AUTO_DOCUMENTO')));
 $ignoreSourceCodes=trim((string)($_POST['ignore_source_codes'] ?? ''));
 $sourceMapReady=customer_import_source_map_ready($pdo);
+$hasIntegrationColumn=customer_import_has_integration_column($pdo);
 if(!in_array($unknownAction,['AUTO_DOCUMENTO','FISICA','JURIDICA','IGNORAR'],true))$unknownAction='AUTO_DOCUMENTO';
 
 try{
@@ -114,6 +115,7 @@ gestao_tabs('gestao_clientes');
 <?php if($msg!==''):?><div class="ci-msg ok"><?=customer_import_h($msg)?></div><?php endif;?>
 <?php if($err!==''):?><div class="ci-msg err"><?=customer_import_h($err)?></div><?php endif;?>
 <?php if($crossContext):?><div class="ci-msg warn"><strong>Empresa selecionada pelo F11:</strong> <?=customer_import_h($companyName)?>. A importação será gravada somente nesta empresa.</div><?php endif;?>
+<?php if(!$hasIntegrationColumn):?><div class="ci-msg err"><strong>Código integração indisponível:</strong> aplique a atualização <strong>"Pessoas - Código integração v1"</strong> no Atualizador do Banco. Sem ela o Nexa não tem onde gravar o Código integração; se a planilha tiver essa coluna, a importação fica bloqueada até a atualização ser aplicada.</div><?php endif;?>
 <?php if(!$sourceMapReady):?><div class="ci-msg err"><strong>Migration V11.45 pendente:</strong> aplique a atualização pelo Atualizador do Banco antes de executar a importação final. A prévia continua disponível, mas o mapa de códigos antigos precisa existir para vincular corretamente o Contas a Receber.</div><?php endif;?>
 
 <section class="ci-card">
@@ -159,9 +161,9 @@ gestao_tabs('gestao_clientes');
 <section class="ci-card">
   <h2>4. Prévia</h2>
   <p class="ci-muted">Primeiras linhas após aplicar o vínculo atual. O código IBGE é preenchido automaticamente quando o município/UF existe no catálogo fiscal do Nexa.</p>
-  <div class="ci-scroll"><table class="ci-table"><thead><tr><th>Linha</th><th>Código</th><th>Nome / Razão</th><th>Fantasia</th><th>CPF/CNPJ</th><th>Tipo</th><th>Telefone</th><th>WhatsApp</th><th>Cidade/UF</th><th>IBGE</th></tr></thead><tbody>
-  <?php if(!$preview):?><tr><td colspan="10">Nenhuma linha válida para prévia com o vínculo atual.</td></tr><?php endif;?>
-  <?php foreach($preview as $row):?><tr><td><?= (int)$row['line']?></td><td><?=customer_import_h($row['source_code'])?></td><td><strong><?=customer_import_h($row['name'])?></strong></td><td><?=customer_import_h($row['fantasy_name'])?></td><td><?=customer_import_h($row['document'])?></td><td><?=customer_import_h($row['person_type']==='JURIDICA'?'Jurídica':($row['person_type']==='FISICA'?'Física':'Ignorar'))?></td><td><?=customer_import_h($row['phone'])?></td><td><?=customer_import_h($row['whatsapp'])?></td><td><?=customer_import_h(trim($row['city'].' / '.$row['state'],' /'))?></td><td><?=customer_import_h($row['city_ibge'])?></td></tr><?php endforeach;?>
+  <div class="ci-scroll"><table class="ci-table"><thead><tr><th>Linha</th><th>Código</th><th>Cód. integração</th><th>Nome / Razão</th><th>Fantasia</th><th>CPF/CNPJ</th><th>Tipo</th><th>Telefone</th><th>WhatsApp</th><th>Cidade/UF</th><th>IBGE</th></tr></thead><tbody>
+  <?php if(!$preview):?><tr><td colspan="11">Nenhuma linha válida para prévia com o vínculo atual.</td></tr><?php endif;?>
+  <?php foreach($preview as $row):?><tr><td><?= (int)$row['line']?></td><td><?=customer_import_h($row['source_code'])?></td><td><?=customer_import_h($row['integration_code']??'')?></td><td><strong><?=customer_import_h($row['name'])?></strong></td><td><?=customer_import_h($row['fantasy_name'])?></td><td><?=customer_import_h($row['document'])?></td><td><?=customer_import_h($row['person_type']==='JURIDICA'?'Jurídica':($row['person_type']==='FISICA'?'Física':'Ignorar'))?></td><td><?=customer_import_h($row['phone'])?></td><td><?=customer_import_h($row['whatsapp'])?></td><td><?=customer_import_h(trim($row['city'].' / '.$row['state'],' /'))?></td><td><?=customer_import_h($row['city_ibge'])?></td></tr><?php endforeach;?>
   </tbody></table></div>
 </section>
 
@@ -169,7 +171,7 @@ gestao_tabs('gestao_clientes');
   <h2>5. Importar</h2>
   <div class="ci-grid three">
     <label class="ci-check"><input type="checkbox" name="create_new" value="1" <?= !isset($_POST['create_new'])||!empty($_POST['create_new'])?'checked':''?>><span><strong>Criar clientes novos</strong><br><small class="ci-muted">Inclui documentos/códigos ainda inexistentes.</small></span></label>
-    <label class="ci-check"><input type="checkbox" name="update_existing" value="1" <?= !isset($_POST['update_existing'])||!empty($_POST['update_existing'])?'checked':''?>><span><strong>Atualizar existentes</strong><br><small class="ci-muted">Localiza primeiro por CPF/CNPJ e depois pelo código/nº de cadastro.</small></span></label>
+    <label class="ci-check"><input type="checkbox" name="update_existing" value="1" <?= !isset($_POST['update_existing'])||!empty($_POST['update_existing'])?'checked':''?>><span><strong>Atualizar existentes</strong><br><small class="ci-muted">Localiza pelo Código já importado, CPF/CNPJ, Código integração e nº de cadastro. Marque para completar o Código integração de quem já foi importado.</small></span></label>
     <label class="ci-check"><input type="checkbox" name="use_source_number" value="1" <?= !isset($_POST['use_source_number'])||!empty($_POST['use_source_number'])?'checked':''?>><span><strong>Usar Código como nº do cadastro</strong><br><small class="ci-muted">Quando o número estiver livre. O código original com zeros fica preservado no mapa de origem; o nº visível ainda é inteiro.</small></span></label>
   </div>
   <div class="ci-grid" style="margin-top:12px"><div class="ci-field"><label>Códigos de origem a ignorar</label><input type="text" name="ignore_source_codes" value="<?=customer_import_h($ignoreSourceCodes)?>" placeholder="Ex.: 000002, 000015"><small class="ci-muted">Opcional. Informe códigos separados por vírgula, espaço ou ponto e vírgula. Eles não serão criados nem atualizados e também não entrarão no mapa de códigos antigos.</small></div></div>
@@ -181,7 +183,7 @@ gestao_tabs('gestao_clientes');
     <small id="customerImportProgressText">0%</small>
   </div>
   <div id="customerImportResult" style="display:none;margin-top:14px;margin-bottom:0"></div>
-  <?php if($result):?><div class="ci-msg <?= (int)$result['errors']>0?'warn':'ok'?>" style="margin-top:14px;margin-bottom:0"><strong>Resultado:</strong> <?= (int)$result['inserted']?> incluído(s), <?= (int)$result['updated']?> atualizado(s), <?= (int)$result['skipped']?> ignorado(s), <?= (int)($result['mapped']??0)?> código(s) de origem mapeado(s), <?= (int)($result['ignored_code']??0)?> código(s) excluído(s), <?= (int)$result['errors']?> erro(s). Tipos processados: <?= (int)$result['fisica']?> Física(s) e <?= (int)$result['juridica']?> Jurídica(s).<?php if(!empty($result['messages'])):?><br><small><?=customer_import_h(implode(' | ',array_slice((array)$result['messages'],0,8)))?></small><?php endif;?></div><?php endif;?>
+  <?php if($result):?><div class="ci-msg <?= (int)$result['errors']>0?'warn':'ok'?>" style="margin-top:14px;margin-bottom:0"><strong>Resultado:</strong> <?= (int)$result['inserted']?> incluído(s), <?= (int)$result['updated']?> atualizado(s), <?= (int)$result['skipped']?> ignorado(s), <?= (int)($result['mapped']??0)?> código(s) de origem mapeado(s), <?= (int)($result['integration']??0)?> código(s) integração gravado(s), <?= (int)($result['ignored_code']??0)?> código(s) excluído(s), <?= (int)$result['errors']?> erro(s). Tipos processados: <?= (int)$result['fisica']?> Física(s) e <?= (int)$result['juridica']?> Jurídica(s).<?php if(!empty($result['messages'])):?><br><small><?=customer_import_h(implode(' | ',array_slice((array)$result['messages'],0,8)))?></small><?php endif;?></div><?php endif;?>
 </section>
 </form>
 <?php endif;?>
@@ -198,7 +200,7 @@ gestao_tabs('gestao_clientes');
   const bar=document.getElementById('customerImportProgressBar');
   const resultBox=document.getElementById('customerImportResult');
   let running=false;
-  const totals={inserted:0,updated:0,skipped:0,ignored_code:0,mapped:0,errors:0,fisica:0,juridica:0};
+  const totals={inserted:0,updated:0,skipped:0,ignored_code:0,mapped:0,integration:0,errors:0,fisica:0,juridica:0};
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   function update(r){
     const total=Math.max(1,Number(r.data_total||1));
@@ -248,7 +250,7 @@ gestao_tabs('gestao_clientes');
       }
       title.textContent='Importação concluída.';bar.style.width='100%';text.textContent='100% · todos os lotes processados.';
       resultBox.className='ci-msg '+(totals.errors>0?'warn':'ok');
-      resultBox.innerHTML='<strong>Resultado acumulado:</strong> '+totals.inserted+' incluído(s), '+totals.updated+' atualizado(s), '+totals.skipped+' ignorado(s), '+totals.mapped+' código(s) mapeado(s), '+totals.ignored_code+' código(s) excluído(s) e '+totals.errors+' erro(s).';
+      resultBox.innerHTML='<strong>Resultado acumulado:</strong> '+totals.inserted+' incluído(s), '+totals.updated+' atualizado(s), '+totals.skipped+' ignorado(s), '+totals.mapped+' código(s) mapeado(s), '+totals.integration+' código(s) integração gravado(s), '+totals.ignored_code+' código(s) excluído(s) e '+totals.errors+' erro(s).';
       resultBox.style.display='block';
     }catch(e){
       progress.className='ci-msg err';title.textContent='Importação interrompida.';text.textContent=e&&e.message?e.message:String(e);

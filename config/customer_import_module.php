@@ -515,6 +515,21 @@ if (!function_exists('customer_import_code_is_ignored')) {
   }
 }
 
+if (!function_exists('customer_import_has_integration_column')) {
+  /** Coluna finance_people.integration_code (migração "Pessoas - Código integração v1"). */
+  function customer_import_has_integration_column(PDO $pdo): bool {
+    static $cache = [];
+    $key = spl_object_id($pdo);
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    try {
+      $st = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='finance_people' AND column_name='integration_code'");
+      return $cache[$key] = (bool)($st ? $st->fetchColumn() : false);
+    } catch (Throwable $e) {
+      return $cache[$key] = false;
+    }
+  }
+}
+
 if (!function_exists('customer_import_preview')) {
   function customer_import_preview(PDO $pdo,int $companyId,array $analysis,array $mapping,array $typeMap,string $unknownAction='AUTO_DOCUMENTO',int $limit=30): array {
     $rows=(array)($analysis['matrix']['rows']??[]);$start=(int)$analysis['header_index']+1;$out=[];
@@ -526,7 +541,7 @@ if (!function_exists('customer_import_preview')) {
       $type=customer_import_resolve_type(customer_import_value($source,$mapping,'person_type'),$doc,$typeMap,$unknownAction);
       $city=customer_import_value($source,$mapping,'city');$uf=strtoupper(substr(customer_import_value($source,$mapping,'state'),0,2));
       $out[]=[
-        'line'=>$i+1,'source_code'=>customer_import_value($source,$mapping,'source_code'),'name'=>$name,'fantasy_name'=>customer_import_value($source,$mapping,'fantasy_name'),
+        'line'=>$i+1,'source_code'=>customer_import_value($source,$mapping,'source_code'),'integration_code'=>customer_import_clean_text(customer_import_value($source,$mapping,'integration_code'),60),'name'=>$name,'fantasy_name'=>customer_import_value($source,$mapping,'fantasy_name'),
         'document'=>$doc,'person_type'=>$type,'phone'=>customer_import_digits(customer_import_value($source,$mapping,'phone'),30),'whatsapp'=>customer_import_digits(customer_import_value($source,$mapping,'whatsapp'),30),
         'city'=>$city,'state'=>$uf,'city_ibge'=>customer_import_city_ibge($pdo,$city,$uf,customer_import_value($source,$mapping,'city_ibge')),
       ];
@@ -545,13 +560,15 @@ if (!function_exists('customer_import_execute')) {
     $unknownAction=(string)($options['unknown_type_action']??'AUTO_DOCUMENTO');
     $hasNumero=company_sequence_has_column($pdo,'pessoas');
     // Coluna "Código integração" (migração Pessoas - Código integração v1).
-    $hasIntegration=false;
-    try{$hasIntegration=(bool)$pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='finance_people' AND column_name='integration_code'")->fetchColumn();}catch(Throwable $e){$hasIntegration=false;}
+    $hasIntegration=customer_import_has_integration_column($pdo);
+    // Coluna "Código integração" vinculada mas o banco ainda sem o campo: bloqueia em vez de
+    // importar e perder o código sem avisar.
+    if(isset($mapping['integration_code']) && !$hasIntegration)throw new RuntimeException('O campo "Código integração" ainda não existe neste banco. Aplique a atualização "Pessoas - Código integração v1" no Atualizador do Banco e importe de novo (ou marque "Não importar" no vínculo do Código integração).');
     $rows=(array)($analysis['matrix']['rows']??[]);$dataStart=(int)$analysis['header_index']+1;$total=count($rows);$dataTotal=max(0,$total-$dataStart);
     $offset=max(0,(int)($options['offset']??0));if($offset>$dataTotal)$offset=$dataTotal;
     $maxRows=max(0,(int)($options['max_rows']??0));$maxSeconds=max(0.0,(float)($options['max_seconds']??0));$startedAt=microtime(true);$processed=0;
     $start=$dataStart+$offset;
-    $result=['inserted'=>0,'updated'=>0,'skipped'=>0,'ignored_code'=>0,'mapped'=>0,'errors'=>0,'messages'=>[],'fisica'=>0,'juridica'=>0,'offset'=>$offset,'processed'=>0,'next_offset'=>$offset,'data_total'=>$dataTotal,'done'=>false];
+    $result=['inserted'=>0,'updated'=>0,'skipped'=>0,'ignored_code'=>0,'mapped'=>0,'integration'=>0,'errors'=>0,'messages'=>[],'fisica'=>0,'juridica'=>0,'offset'=>$offset,'processed'=>0,'next_offset'=>$offset,'data_total'=>$dataTotal,'done'=>false];
     for($i=$start;$i<$total;$i++){
       if($maxRows>0 && $processed>=$maxRows)break;
       if($maxSeconds>0 && $processed>0 && (microtime(true)-$startedAt)>=$maxSeconds)break;
@@ -574,6 +591,8 @@ if (!function_exists('customer_import_execute')) {
       }
       $integrationCode=$hasIntegration?customer_import_clean_text(customer_import_value($source,$mapping,'integration_code'),60):'';
       if(!$existing && $integrationCode!==''){$st=$pdo->prepare('SELECT * FROM finance_people WHERE company_id=? AND integration_code=? ORDER BY active DESC,id ASC LIMIT 1');$st->execute([$companyId,$integrationCode]);$existing=$st->fetch(PDO::FETCH_ASSOC)?:null;if($existing)$matchOrigin='INTEGRACAO';}
+      // Planilha refeita: o Código antigo (de uma importação anterior) virou o Código integração.
+      if(!$existing && $integrationCode!==''){$existing=customer_import_source_map_person($pdo,$companyId,$sourceSystem,$integrationCode);if($existing)$matchOrigin='MAPA_INTEGRACAO';}
       if(!$existing && $sourceSystem!=='CPLUS4' && $hasNumero && $sourceNumber>0){$st=$pdo->prepare('SELECT * FROM finance_people WHERE company_id=? AND numero_cadastro=? LIMIT 1');$st->execute([$companyId,$sourceNumber]);$existing=$st->fetch(PDO::FETCH_ASSOC)?:null;if($existing)$matchOrigin='NUMERO';}
       if($existing){
         $existingDoc=customer_import_digits((string)($existing['document']??''),30);
@@ -629,7 +648,7 @@ if (!function_exists('customer_import_execute')) {
           foreach($fields as $col=>$val){if($val===null||$val==='')continue;$sets[]="`{$col}`=?";$params[]=$val;}
           $params[]=$companyId;$params[]=(int)$existing['id'];
           $pdo->prepare('UPDATE finance_people SET '.implode(',',$sets).' WHERE company_id=? AND id=?')->execute($params);
-          $personId=(int)$existing['id'];$result['updated']++;
+          $personId=(int)$existing['id'];$result['updated']++;if($hasIntegration&&$integrationCode!=='')$result['integration']++;
         }else{
           $cols=['company_id'];$vals=['?'];$params=[$companyId];
           if($hasNumero){
@@ -648,7 +667,7 @@ if (!function_exists('customer_import_execute')) {
           foreach($insert as $col=>$val){$cols[]=$col;$vals[]='?';$params[]=$val;}
           if($createdAt!==null){$cols[]='created_at';$vals[]='?';$params[]=$createdAt;}
           $sql='INSERT INTO finance_people ('.implode(',',$cols).') VALUES ('.implode(',',$vals).')';
-          $pdo->prepare($sql)->execute($params);$personId=(int)$pdo->lastInsertId();$result['inserted']++;
+          $pdo->prepare($sql)->execute($params);$personId=(int)$pdo->lastInsertId();$result['inserted']++;if($hasIntegration&&$integrationCode!=='')$result['integration']++;
         }
         if($sourceCode!==''){customer_import_source_map_upsert($pdo,$companyId,$sourceSystem,$sourceCode,$personId,$document,$name);$result['mapped']++;}
         // Mantém o endereço principal disponível também no seletor de endereços, quando a estrutura já existir.
