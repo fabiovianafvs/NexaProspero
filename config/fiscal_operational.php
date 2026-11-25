@@ -4782,6 +4782,77 @@ if (!function_exists('fiscal_nfce_ibpt_document_totals')) {
   }
 }
 
+if (!function_exists('fiscal_nfe_devolucao_item_refs')) {
+  /**
+   * NF-e de devolução (finNFe=4) — NT 2025.002-RTC, regra VC02-14 / rejeição 321
+   * "[nItem: N]": a SEFAZ exige o documento devolvido em CADA item, no grupo
+   * det/DFeReferenciado (chaveAcesso + nItem do item na nota original), e não aceita
+   * o mesmo documento também no NFref do cabeçalho.
+   *
+   * Descobre, para cada item da devolução (na ordem do XML), qual item da nota original
+   * ele devolve: pelos itens da nota emitida pelo Nexa (fiscal_documents, mesma ordem do
+   * XML original) ou da NF-e importada (fiscal_xml_items.item_number); casa por produto
+   * e, sem produto, pelo código. Retorna [posição 1..n => ['key' => chave, 'nItem' => n]]
+   * ou [] se algum item não puder ser identificado (aí fica o NFref do cabeçalho).
+   */
+  function fiscal_nfe_devolucao_item_refs(PDO $pdo, int $companyId, array $items, array $referenceKeys): array {
+    $candidates = [];
+    foreach ($referenceKeys as $key) {
+      $key = preg_replace('/\D+/', '', (string)$key);
+      if (strlen($key) !== 44) continue;
+      $found = false;
+      try {
+        $st = $pdo->prepare("SELECT id FROM fiscal_documents WHERE company_id=? AND access_key=? AND model IN ('55','65') ORDER BY id DESC LIMIT 1");
+        $st->execute([$companyId, $key]);
+        $origId = (int)($st->fetchColumn() ?: 0);
+        if ($origId > 0) {
+          $it = $pdo->prepare('SELECT product_id, product_code, unit_value FROM fiscal_document_items WHERE company_id=? AND fiscal_document_id=? ORDER BY item_number ASC, id ASC');
+          $it->execute([$companyId, $origId]);
+          $pos = 0;
+          foreach (($it->fetchAll(PDO::FETCH_ASSOC) ?: []) as $r) {
+            $pos++;
+            $candidates[] = ['key' => $key, 'nItem' => $pos, 'product_id' => (int)($r['product_id'] ?? 0), 'code' => trim((string)($r['product_code'] ?? '')), 'unit' => (float)($r['unit_value'] ?? 0)];
+            $found = true;
+          }
+        }
+      } catch (Throwable $e) {}
+      if ($found) continue;
+      try {
+        $st = $pdo->prepare('SELECT xi.item_number, xi.product_id, xi.product_code, xi.unit_value FROM fiscal_xml_imports x JOIN fiscal_xml_items xi ON xi.company_id=x.company_id AND xi.xml_import_id=x.id WHERE x.company_id=? AND x.access_key=? ORDER BY xi.item_number ASC, xi.id ASC');
+        $st->execute([$companyId, $key]);
+        foreach (($st->fetchAll(PDO::FETCH_ASSOC) ?: []) as $r) {
+          $n = (int)($r['item_number'] ?? 0);
+          if ($n <= 0) continue;
+          $candidates[] = ['key' => $key, 'nItem' => $n, 'product_id' => (int)($r['product_id'] ?? 0), 'code' => trim((string)($r['product_code'] ?? '')), 'unit' => (float)($r['unit_value'] ?? 0)];
+        }
+      } catch (Throwable $e) {}
+    }
+    if (!$candidates || !$items) return [];
+
+    $out = [];
+    $used = [];
+    $pos = 0;
+    foreach ($items as $row) {
+      $pos++;
+      $pid = (int)($row['product_id'] ?? 0);
+      $code = trim((string)($row['product_code'] ?? ''));
+      $unit = (float)($row['unit_value'] ?? 0);
+      $best = null; $bestScore = null;
+      foreach ($candidates as $ci => $c) {
+        $match = ($pid > 0 && $c['product_id'] > 0) ? $c['product_id'] === $pid : ($code !== '' && $c['code'] !== '' && strcasecmp($c['code'], $code) === 0);
+        if (!$match) continue;
+        // Prefere item ainda não usado e com o mesmo preço unitário.
+        $score = (isset($used[$ci]) ? 1000000 : 0) + abs($c['unit'] - $unit);
+        if ($bestScore === null || $score < $bestScore) { $best = $ci; $bestScore = $score; }
+      }
+      if ($best === null) return [];
+      $used[$best] = true;
+      $out[$pos] = ['key' => $candidates[$best]['key'], 'nItem' => $candidates[$best]['nItem']];
+    }
+    return $out;
+  }
+}
+
 if (!function_exists('fiscal_nfce_build_draft_xml')) {
   function fiscal_nfce_build_draft_xml(PDO $pdo, int $companyId, int $docId): string {
     $st = $pdo->prepare('SELECT * FROM fiscal_documents WHERE company_id=? AND id=? LIMIT 1');
@@ -4909,7 +4980,16 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
       $add($ide, 'xJust', fiscal_nfce_safe_xml_text($contReason, 255));
     }
     $referenceInfoLines = [];
+    // NF-e de devolução: o documento devolvido vai em cada item (det/DFeReferenciado),
+    // sem repetir no NFref do cabeçalho. Se algum item não for identificado na nota
+    // original, mantém o NFref do cabeçalho como antes.
+    $devolucaoItemRefs = ($model === '55' && $finNFe === '4' && $referenceKeys)
+      ? fiscal_nfe_devolucao_item_refs($pdo, $companyId, $items, array_values($referenceKeys))
+      : [];
+    $itemLevelKeys = [];
+    foreach ($devolucaoItemRefs as $itemRef) $itemLevelKeys[$itemRef['key']] = true;
     foreach ($referenceKeys as $refKey) {
+      if (isset($itemLevelKeys[$refKey])) continue;
       $refModel = substr($refKey, 20, 2);
       if ($refModel === '55') {
         $nfref = $add($ide, 'NFref', '');
@@ -5219,6 +5299,12 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
       $rtcItemTotal = round($rtcItemTotal, 2);
       $add($det, 'vItem', $fmt($rtcItemTotal));
       $rtcTotalItems += $rtcItemTotal;
+      // Devolução: nota e item devolvidos (último grupo do det no leiaute PL_010).
+      if (isset($devolucaoItemRefs[$i])) {
+        $dfeRef = $add($det, 'DFeReferenciado', '');
+        $add($dfeRef, 'chaveAcesso', $devolucaoItemRefs[$i]['key']);
+        $add($dfeRef, 'nItem', (string)(int)$devolucaoItemRefs[$i]['nItem']);
+      }
     }
 
     $totalIcmsBaseXml = 0.0;
