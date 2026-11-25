@@ -401,6 +401,8 @@ body{background:var(--bg)}
   <?php else: ?>
     <nav class="cats<?= $horizontalCategoryMenu ? ' cat-tile-menu' : '' ?>" aria-label="Categorias de produtos">
       <?php foreach (array_keys($groups) as $cat):
+        // Categoria só com números (ex.: "2024") vira chave inteira no PHP: volta para texto.
+        $cat = (string)$cat;
         $catSlug = public_catalog_category_slug($cat);
       ?>
         <?php if ($horizontalCategoryMenu):
@@ -424,6 +426,7 @@ body{background:var(--bg)}
     </nav>
 
     <?php foreach ($groups as $cat => $list):
+      $cat = (string)$cat;
       $catSlug = public_catalog_category_slug($cat);
     ?>
       <section id="<?= e($catSlug) ?>" class="cat-section">

@@ -12,9 +12,36 @@ if (!function_exists('comanda_public_phone_digits')) {
   function comanda_public_phone_digits(string $value): string { return preg_replace('/\D+/', '', $value) ?: ''; }
 }
 
+if (!function_exists('comanda_public_hidden_categories')) {
+  /**
+   * Categorias ocultas no Catálogo de Produtos ("Ocultar categoria no catálogo de produtos"),
+   * que o QR Code das mesas também esconde. Mesma regra do catálogo
+   * (products_filter_visible_catalog_categories_db com 'product'): a categoria só fica
+   * oculta quando TODOS os produtos ativos dela estão marcados. Retorna [categoria => true].
+   * O app do garçom e o PDV continuam mostrando tudo.
+   */
+  function comanda_public_hidden_categories(PDO $pdo, int $companyId): array {
+    static $memo = [];
+    if (isset($memo[$companyId])) return $memo[$companyId];
+    if (!comanda_column_exists($pdo, 'produtos', 'category_hide_product_catalog')) return $memo[$companyId] = [];
+    $st = $pdo->prepare("SELECT COALESCE(TRIM(categoria),'') AS cat, COUNT(*) AS total,
+        SUM(CASE WHEN COALESCE(category_hide_product_catalog,0) <> 0 THEN 1 ELSE 0 END) AS hidden_count
+      FROM produtos WHERE company_id = ? AND COALESCE(ativo,1) = 1 GROUP BY COALESCE(TRIM(categoria),'')");
+    $st->execute([$companyId]);
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+      $total = (int)($r['total'] ?? 0);
+      if ($total > 0 && (int)($r['hidden_count'] ?? 0) >= $total) $out[(string)$r['cat']] = true;
+    }
+    return $memo[$companyId] = $out;
+  }
+}
+
 if (!function_exists('comanda_public_catalog_data')) {
   function comanda_public_catalog_data(PDO $pdo, int $companyId): array {
-    $products = comanda_products($pdo, $companyId);
+    // QR Code das mesas: só o que aparece no Catálogo de Produtos.
+    $hidden = comanda_public_hidden_categories($pdo, $companyId);
+    $products = array_values(array_filter(comanda_products($pdo, $companyId), static fn(array $p): bool => empty($hidden[trim((string)($p['categoria'] ?? ''))])));
     $ids = array_values(array_filter(array_map(static fn(array $p): int => (int)($p['id'] ?? 0), $products)));
     $options = $ids ? product_options_load_map($pdo, $companyId, $ids, true) : [];
     return ['products' => $products, 'options' => $options];
@@ -35,6 +62,9 @@ if (!function_exists('comanda_public_validate_product_item')) {
     $st->execute([$companyId, $productId]);
     $product = $st->fetch(PDO::FETCH_ASSOC) ?: null;
     if (!$product) throw new RuntimeException('Um produto selecionado não está mais disponível. Atualize a página e tente novamente.');
+    if (!empty(comanda_public_hidden_categories($pdo, $companyId)[trim((string)($product['categoria'] ?? ''))])) {
+      throw new RuntimeException('O produto “' . (string)$product['nome'] . '” não está disponível para pedido pela mesa. Atualize a página e tente novamente.');
+    }
 
     $groups = product_options_load($pdo, $companyId, $productId, true);
     $selectionRaw = (array)($raw['options'] ?? []);
