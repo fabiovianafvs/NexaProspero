@@ -103,6 +103,15 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 .waa-fwd{font-size:12px;color:#667781;font-style:italic;margin-bottom:2px}
 .waa-delmsg{color:#667781;font-style:italic}
 .waa-edited{font-style:italic;margin-right:4px}
+.waa-schedmark{margin-right:4px;color:#0369a1}
+.waa-schedbar{background:#e0f2fe;border-top:1px solid #bae6fd;padding:7px 12px;display:none;gap:10px;align-items:center;font-size:13px;color:#075985}.waa-schedbar.on{display:flex}
+.waa-schedbar span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.waa-sdq{display:flex;gap:6px;flex-wrap:wrap}.waa-sdq button{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;color:#0b1f5b;cursor:pointer}.waa-sdq button:hover{border-color:#00a884;color:#008069}
+.waa-sdl{display:grid;gap:6px;max-height:260px;overflow:auto}.waa-sdl:empty{display:none}
+.waa-sdi{border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;font-size:13px;display:grid;gap:4px}.waa-sdi.done{background:#f8fafc;color:#64748b}
+.waa-sdi-top{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}.waa-sdi-top b{color:#0b1f5b}
+.waa-sdi p{margin:0;white-space:pre-wrap;word-break:break-word}.waa-sdi .acts{display:flex;gap:6px}
+.waa-st{font-size:11px;font-weight:800;border-radius:6px;padding:1px 7px;background:#e0f2fe;color:#075985}.waa-st.ENVIADA{background:#dcfce7;color:#166534}.waa-st.FALHOU{background:#fee2e2;color:#991b1b}.waa-st.CANCELADA,.waa-st.SIMULADA{background:#f1f5f9;color:#475569}
 .waa-part{font-size:12px;font-weight:800;margin-bottom:2px;color:#c2410c}
 .waa-replybar{background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:none;gap:10px;align-items:center}.waa-replybar.on{display:flex}.waa-replybar .waa-q{flex:1;margin:0;cursor:default}
 .waa-flash{animation:waaFlash 1.2s}@keyframes waaFlash{0%,60%{box-shadow:0 0 0 3px #53bdeb}100%{box-shadow:0 1px .5px rgba(11,20,26,.13)}}
@@ -154,6 +163,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
       <div class="waa-banner" id="waaBanner" style="display:none"></div>
       <div class="waa-answers" id="waaAnswers" style="display:none"></div>
       <div class="waa-msgs" id="waaMsgs"></div>
+      <div class="waa-schedbar" id="waaSchedBar"><span id="waaSchedText"></span><button class="waa-btn" type="button" id="waaSchedSee">Ver</button></div>
       <div class="waa-replybar" id="waaReplyBar"><div class="waa-q" id="waaReplyQ"></div><button class="waa-btn" type="button" id="waaReplyCancel" title="Cancelar resposta">✕</button></div>
       <div class="waa-filebar" id="waaFileBar"><img id="waaFileThumb" class="waa-fthumb" alt="" hidden><span id="waaFileName"></span><input id="waaCaption" placeholder="Legenda (opcional)"><button class="waa-btn g" type="button" id="waaFileSend">Enviar</button><button class="waa-btn" type="button" id="waaFileCancel">✕</button></div>
       <form class="waa-compose" id="waaForm">
@@ -162,11 +172,12 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
         <button class="waa-ico" type="button" id="waaQuickBtn" title="Mensagens rápidas (ou digite / no início da mensagem)">⚡</button>
         <button class="waa-ico" type="button" id="waaAttach" title="Anexar arquivo (ou cole um print com Ctrl+V)">📎</button>
         <button class="waa-ico" type="button" id="waaContactBtn" title="Enviar um contato">👤</button>
+        <button class="waa-ico" type="button" id="waaSchedBtn" title="Programar mensagem (escolha o dia e a hora e ela sai sozinha)" style="display:none">🕒</button>
         <textarea id="waaText" rows="1" placeholder="Digite uma mensagem ou / para mensagens rápidas" title="Enter envia; Shift+Enter quebra a linha; / abre as mensagens rápidas"></textarea>
         <button class="waa-send" type="button" id="waaMic" title="Gravar áudio" style="display:none">🎤</button>
         <button class="waa-send" type="submit" id="waaSend" title="Enviar">➤</button>
       </form>
-      <div class="waa-locked" id="waaLocked" style="display:none"><span>🔒</span><span id="waaLockedText" style="flex:1"></span><span class="waa-sub" id="waaLockedHint">Clique em Aceitar, no alto, para enviar mensagens.</span></div>
+      <div class="waa-locked" id="waaLocked" style="display:none"><span>🔒</span><span id="waaLockedText" style="flex:1"></span><span class="waa-sub" id="waaLockedHint">Clique em Aceitar, no alto, para enviar mensagens.</span><button class="waa-btn" type="button" id="waaSchedLocked" title="Programar uma mensagem para sair sozinha no dia e na hora escolhidos" style="display:none">🕒 Programar mensagem</button></div>
       <div class="waa-recbar" id="waaRecBar">
         <button class="waa-ico" type="button" id="waaRecCancel" title="Descartar áudio">🗑️</button>
         <span class="waa-recdot"></span><span id="waaRecTime">0:00</span><span class="waa-sub" style="flex:1">Gravando áudio…</span>
@@ -237,6 +248,17 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
   <div class="waa-sub">O texto muda também no WhatsApp do cliente, com a marca "Editada". O WhatsApp só permite editar até 15 minutos depois do envio.</div>
   <textarea id="edText" rows="5" maxlength="4000"></textarea>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" data-close>Cancelar</button><button class="waa-btn g" type="button" id="edGo">Salvar</button></div>
+</div></div>
+<div class="waa-modal" id="mSched"><div class="waa-card wide">
+  <div class="waa-pf-top"><div style="flex:1"><h3 id="sdTitle">Programar mensagem</h3><div class="waa-sub">A mensagem sai sozinha no dia e na hora escolhidos, em seu nome — mesmo que a conversa esteja no robô ou finalizada.</div></div><button class="waa-btn" type="button" data-close>✕</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div><label>Dia</label><input type="date" id="sdDate"></div>
+    <div><label>Hora</label><input type="time" id="sdTime"></div>
+  </div>
+  <div class="waa-sdq" id="sdQuickWhen"><button type="button" data-when="1h">Daqui a 1 hora</button><button type="button" data-when="t9">Amanhã às 9h</button><button type="button" data-when="t14">Amanhã às 14h</button><button type="button" data-when="mon9">Segunda às 9h</button></div>
+  <div><label>Mensagem</label><select id="sdQuick" style="margin-bottom:6px"><option value="">Usar uma mensagem rápida…</option></select><textarea id="sdText" rows="4" maxlength="4000" placeholder="Ex.: Olá, bom dia!"></textarea></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="waa-btn" type="button" id="sdReset" style="display:none">Nova mensagem</button><button class="waa-btn g" type="button" id="sdGo">Programar</button></div>
+  <div><label id="sdListTitle" style="display:none">Mensagens programadas nesta conversa</label><div class="waa-sdl" id="sdList"></div></div>
 </div></div>
 <div class="waa-modal" id="mNew"><div class="waa-card">
   <h3>Nova conversa</h3>
@@ -443,7 +465,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     }
     const quote = m.reply ? '<div class="waa-q" data-goto="' + (m.reply.id || 0) + '"><b>' + esc(m.reply.who || 'Mensagem') + '</b>' + esc(m.reply.text) + '</div>' : '';
     const fwd = m.fwd ? '<div class="waa-fwd">↪ Encaminhada</div>' : '';
-    return html + `<div class="${cls}" data-mid="${m.id}">${menuBtn}${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${part}${fwd}${quote}${media}${body}<small>${m.edited ? '<span class="waa-edited">Editada</span>' : ''}${esc(hm(m.at))}${out && !(chat && chat.status === 'GRUPO' && m.ok) ? tickHtml(m.ok ? (m.ws || 0) : -1) : ''}</small></div>`;
+    return html + `<div class="${cls}" data-mid="${m.id}">${menuBtn}${who ? '<div class="waa-who">' + esc(who) + '</div>' : ''}${part}${fwd}${quote}${media}${body}<small>${m.sched ? '<span class="waa-schedmark" title="Mensagem programada">🕒 Programada ·</span>' : ''}${m.edited ? '<span class="waa-edited">Editada</span>' : ''}${esc(hm(m.at))}${out && !(chat && chat.status === 'GRUPO' && m.ok) ? tickHtml(m.ok ? (m.ws || 0) : -1) : ''}</small></div>`;
   }
 
   function renderHead() {
@@ -499,7 +521,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     try {
       const d = await api('chat', { id });
       if (chatId !== id) return;
-      chat = d.chat; renderHead();
+      chat = d.chat; renderHead(); setSched(d);
       $('waaMsgs').innerHTML = d.messages.map(bubble).join('') || '<div class="waa-sys">Sem mensagens.</div>';
       if (d.messages.length) lastId = d.messages[d.messages.length - 1].id;
       $('waaMsgs').scrollTop = $('waaMsgs').scrollHeight;
@@ -521,7 +543,7 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
     busy = true;
     try {
       const d = await api('chat', { id: chatId, after: lastId });
-      chat = d.chat; renderHead();
+      chat = d.chat; renderHead(); setSched(d);
       applyTicks(d.ticks);
       if (d.messages.length) {
         const box = $('waaMsgs');
@@ -914,6 +936,97 @@ admin_topbar('Atendimento WhatsApp', 'whatsapp_atendimento');
 
   // Ações
   const open = (id) => $(id).classList.add('on');
+
+  // Mensagens programadas (🕒): escolhe o dia e a hora; o agendador envia sozinho.
+  let schedReady = false, schedCan = false, schedItems = [], sdEditId = 0;
+  const fmtAt = (s) => { s = String(s || ''); return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) + ' às ' + s.slice(11, 16); };
+  const pad = (n) => String(n).padStart(2, '0');
+  const setWhen = (d) => { $('sdDate').value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); $('sdTime').value = pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  function setSched(d) {
+    schedReady = !!d.sched_ready; schedCan = !!d.sched_can; schedItems = Array.isArray(d.sched) ? d.sched : [];
+    $('waaSchedBtn').style.display = schedReady ? '' : 'none';
+    $('waaSchedLocked').style.display = schedReady && schedCan ? '' : 'none';
+    const n = schedItems.length, bar = $('waaSchedBar');
+    bar.classList.toggle('on', n > 0);
+    if (n) {
+      const nx = schedItems[0];
+      $('waaSchedText').textContent = '🕒 ' + (n === 1 ? '1 mensagem programada' : n + ' mensagens programadas') + ' · ' + (n === 1 ? '' : 'próxima ') + fmtAt(nx.at) + ' — ' + String(nx.text).replace(/\s+/g, ' ');
+    }
+  }
+  function sdForm(item) {
+    sdEditId = item ? item.id : 0;
+    $('sdTitle').textContent = item ? 'Alterar mensagem programada' : 'Programar mensagem';
+    $('sdGo').textContent = item ? 'Salvar alteração' : 'Programar';
+    $('sdReset').style.display = item ? '' : 'none';
+    $('sdQuick').value = '';
+    if (item) { $('sdDate').value = item.at.slice(0, 10); $('sdTime').value = item.at.slice(11, 16); $('sdText').value = item.text; }
+    else {
+      const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(9, 0, 0, 0); setWhen(t);
+      $('sdText').value = text.value.trim();
+    }
+  }
+  function sdRender(items) {
+    $('sdListTitle').style.display = items.length ? '' : 'none';
+    $('sdList').innerHTML = items.map((it) => {
+      const done = !['AGENDADA', 'ENVIANDO'].includes(it.status);
+      return '<div class="waa-sdi' + (done ? ' done' : '') + '"><div class="waa-sdi-top"><span><b>' + esc(fmtAt(it.at)) + '</b> <span class="waa-st ' + esc(it.status) + '">' + esc(it.label) + '</span>' + (it.user ? ' <span class="waa-sub">por ' + esc(it.user) + '</span>' : '') + '</span>'
+        + (it.can_edit ? '<span class="acts"><button class="waa-btn" type="button" data-sd-edit="' + it.id + '">Alterar</button><button class="waa-btn r" type="button" data-sd-cancel="' + it.id + '">Cancelar envio</button></span>' : '') + '</div>'
+        + '<p>' + fmtWa(it.text) + '</p>' + (it.error && it.status !== 'ENVIADA' ? '<div class="waa-sub">' + esc(it.error) + '</div>' : '') + '</div>';
+    }).join('');
+    sdRender.items = items;
+  }
+  async function sdLoad() {
+    try { const d = await api('sched', { id: chatId }); sdRender(d.items || []); return d; }
+    catch (e) { $('sdList').innerHTML = '<div class="waa-sub">' + esc(e.message) + '</div>'; return null; }
+  }
+  async function openSched() {
+    if (!chatId) return;
+    if (!schedReady) { alert('Peça ao administrador da plataforma para aplicar "WhatsApp - Mensagens programadas v1" no Atualizador do Banco.'); return; }
+    closeQuick();
+    sdForm(null); $('sdList').innerHTML = ''; open('mSched'); $('sdText').focus();
+    const q = await loadQuick();
+    $('sdQuick').innerHTML = '<option value="">' + ((q && q.items && q.items.length) ? 'Usar uma mensagem rápida…' : 'Nenhuma mensagem rápida cadastrada') + '</option>'
+      + ((q && q.items) || []).map((it, i) => '<option value="' + i + '">/' + esc(it.shortcut) + ' — ' + esc(it.title) + '</option>').join('');
+    const d = await sdLoad();
+    if (d && !d.can) { $('sdGo').disabled = true; $('sdGo').title = 'Esta conversa está com outro atendente.'; } else { $('sdGo').disabled = false; $('sdGo').title = ''; }
+  }
+  $('waaSchedBtn').addEventListener('click', openSched);
+  $('waaSchedLocked').addEventListener('click', openSched);
+  $('waaSchedSee').addEventListener('click', openSched);
+  $('sdQuick').addEventListener('change', () => { const it = quick && quick.items && quick.items[+$('sdQuick').value]; if ($('sdQuick').value !== '' && it) $('sdText').value = fillVars(it.text); });
+  $('sdQuickWhen').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-when]'); if (!b) return;
+    const d = new Date(), w = b.dataset.when;
+    if (w === '1h') { d.setHours(d.getHours() + 1); d.setSeconds(0, 0); }
+    else if (w === 'mon9') { d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7)); d.setHours(9, 0, 0, 0); }
+    else { d.setDate(d.getDate() + 1); d.setHours(w === 't14' ? 14 : 9, 0, 0, 0); }
+    setWhen(d);
+  });
+  $('sdReset').addEventListener('click', () => { sdForm(null); $('sdText').value = ''; $('sdText').focus(); });
+  $('sdGo').addEventListener('click', async () => {
+    const v = $('sdText').value.trim();
+    if (!v) { alert('Digite a mensagem.'); $('sdText').focus(); return; }
+    if (!$('sdDate').value || !$('sdTime').value) { alert('Escolha o dia e a hora do envio.'); return; }
+    $('sdGo').disabled = true;
+    try {
+      await api('sched_save', { id: chatId, sched_id: sdEditId, date: $('sdDate').value, time: $('sdTime').value, text: v }, true);
+      // O texto que estava na caixa de mensagem foi programado: limpa a caixa.
+      if (!sdEditId && text.value.trim() === v) { text.value = ''; resize(); toggleSend(); }
+      $('mSched').classList.remove('on');
+      await refreshChat();
+    } catch (e) { fail(e); } finally { $('sdGo').disabled = false; }
+  });
+  $('sdList').addEventListener('click', async (e) => {
+    const ed = e.target.closest('[data-sd-edit]'), cn = e.target.closest('[data-sd-cancel]');
+    const items = sdRender.items || [];
+    if (ed) { const it = items.find((x) => x.id === +ed.dataset.sdEdit); if (it) { sdForm(it); $('sdText').focus(); } return; }
+    if (!cn) return;
+    const it = items.find((x) => x.id === +cn.dataset.sdCancel);
+    if (!it || !confirm('Cancelar o envio programado para ' + fmtAt(it.at) + '?')) return;
+    cn.disabled = true;
+    try { await api('sched_cancel', { id: chatId, sched_id: it.id }, true); if (sdEditId === it.id) sdForm(null); await sdLoad(); await refreshChat(); }
+    catch (err) { fail(err); cn.disabled = false; }
+  });
   document.querySelectorAll('.waa-modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.classList.remove('on'); }));
   $('waaAccept').addEventListener('click', () => act('accept'));
   $('waaTransfer').addEventListener('click', async () => {

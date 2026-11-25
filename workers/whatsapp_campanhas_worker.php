@@ -8,7 +8,8 @@ declare(strict_types=1);
  *  - campanhas programadas que chegaram na hora: põe a lista conferida na fila de envio;
  *  - campanha automática de aniversário: uma vez por dia, a partir da hora marcada;
  *  - régua de cobrança: uma vez por dia, a partir da hora marcada (config/whatsapp_cobrancas.php);
- *  - traz da fila o resultado de cada envio e encerra as campanhas que terminaram.
+ *  - traz da fila o resultado de cada envio e encerra as campanhas que terminaram;
+ *  - mensagens programadas no Atendimento (config/whatsapp_programadas.php): envia na hora.
  * O envio em si é feito pelo processo da fila (nexa-whatsapp-outbox), espaçado.
  *
  * Uso manual: php workers/whatsapp_campanhas_worker.php
@@ -24,15 +25,18 @@ require_once $root . '/config/nexa_env.php';
 require $root . '/config/pdo.php';
 require_once $root . '/config/whatsapp_campanhas.php';
 require_once $root . '/config/whatsapp_cobrancas.php';
+require_once $root . '/config/whatsapp_programadas.php';
 app_apply_company_timezone($pdo, 'America/Sao_Paulo');
 
 $lock = fopen(sys_get_temp_dir() . '/nexa_whatsapp_campanhas.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) exit(0);
 
-if (!wa_camp_ready($pdo)) exit(0); // migração ainda não aplicada
-
 try {
-    foreach (array_merge(wa_camp_dispatch($pdo), wa_cob_dispatch($pdo)) as $item) {
+    $items = [];
+    // Mensagens programadas no Atendimento (botão 🕒): saem na hora marcada.
+    if (whatsapp_sched_ready($pdo)) $items = whatsapp_sched_dispatch($pdo);
+    if (wa_camp_ready($pdo)) $items = array_merge($items, wa_camp_dispatch($pdo), wa_cob_dispatch($pdo));
+    foreach ($items as $item) {
         echo '[' . date('c') . '] ' . json_encode($item, JSON_UNESCAPED_UNICODE) . "\n";
     }
 } catch (Throwable $e) {

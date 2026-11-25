@@ -840,6 +840,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => '3079c75166b885a63d7a480f5b584609a8e4f9ae1526175b20fac8529b4956ac',
         'order' => 202611250100,
       ],
+      [
+        'id' => '20261125_whatsapp_mensagens_programadas_v1',
+        'module' => 'whatsapp_mensagens_programadas',
+        'version' => 202611250200,
+        'label' => 'WhatsApp - Mensagens programadas v1',
+        'description' => 'Cria a lista de mensagens programadas do Atendimento do WhatsApp (botão 🕒 na conversa: o atendente escolhe o dia e a hora e a mensagem sai sozinha). Não altera tabelas existentes.',
+        'file' => __DIR__ . '/../db/20261125_whatsapp_mensagens_programadas_v1.sql',
+        'sha256' => 'a35f49c6169c8c48ae660dae96ba08fe23af47e21b18f881cb70c1a55e271526',
+        'order' => 202611250200,
+      ],
     ];
   }
 }

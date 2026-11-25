@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/whatsapp_chatbot.php';
 require_once __DIR__ . '/person_contacts.php';
+require_once __DIR__ . '/whatsapp_programadas.php';
 
 if (!function_exists('whatsapp_att_scope')) {
   /**
@@ -392,6 +393,12 @@ if (!function_exists('whatsapp_att_messages')) {
         $k = array_key_last($out);
         $out[$k]['body'] = ''; $out[$k]['media'] = false; $out[$k]['contacts'] = []; $out[$k]['name'] = ''; $out[$k]['reply'] = null;
       }
+    }
+    // Mensagens que saíram por programação (botão 🕒): marca no balão.
+    if ($out && function_exists('whatsapp_sched_marks')) {
+      $ids = array_map(static fn($m) => $m['dir'] === 'OUT' && $m['sender'] === 'atendente' ? $m['id'] : 0, $out);
+      $marks = whatsapp_sched_marks($pdo, $companyId, $chatId, $ids);
+      foreach ($out as $k => $m) $out[$k]['sched'] = isset($marks[$m['id']]);
     }
     return $out;
   }

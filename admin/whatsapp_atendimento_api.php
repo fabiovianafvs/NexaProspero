@@ -44,7 +44,7 @@ $loadChat = static function () use ($pdo, $cid, $uid, $supervisor, $chatId, $out
 };
 
 // Ações que gravam só por POST (com o token CSRF conferido acima).
-if (!$isPost && !in_array($action, ['list', 'targets', 'chat', 'options', 'profile', 'people', 'quick', 'contacts'], true)) {
+if (!$isPost && !in_array($action, ['list', 'targets', 'chat', 'options', 'profile', 'people', 'quick', 'contacts', 'sched'], true)) {
   $out(['ok' => false, 'error' => 'Use POST para esta ação.'], 405);
 }
 
@@ -81,7 +81,13 @@ try {
       if ((int)$chat['unread'] > 0 && ((int)$chat['user_id'] === $uid || (int)$chat['user_id'] === 0)) {
         whatsapp_chat_update($pdo, $cid, $chatId, ['unread' => 0]);
       }
-      $out(['ok' => true, 'chat' => whatsapp_att_chat_info($pdo, $cid, $chatId), 'messages' => whatsapp_att_messages($pdo, $cid, $chatId, $after), 'ticks' => whatsapp_att_ticks($pdo, $cid, $chatId), 'me' => $uid, 'supervisor' => $supervisor]);
+      $out(['ok' => true, 'chat' => whatsapp_att_chat_info($pdo, $cid, $chatId), 'messages' => whatsapp_att_messages($pdo, $cid, $chatId, $after), 'ticks' => whatsapp_att_ticks($pdo, $cid, $chatId), 'me' => $uid, 'supervisor' => $supervisor,
+        // Mensagens programadas que ainda vão sair (barra acima da caixa de mensagem).
+        'sched' => whatsapp_sched_list($pdo, $cid, $chatId, $uid, $supervisor, true), 'sched_ready' => whatsapp_sched_ready($pdo), 'sched_can' => whatsapp_sched_can_write($chat, $uid, $supervisor)]);
+
+    case 'sched':
+      $chat = $loadChat();
+      $out(['ok' => true, 'ready' => whatsapp_sched_ready($pdo), 'can' => whatsapp_sched_can_write($chat, $uid, $supervisor), 'items' => whatsapp_sched_list($pdo, $cid, $chatId, $uid, $supervisor)]);
 
     case 'options':
       $st = $pdo->prepare('SELECT id, name FROM users WHERE ' . (function_exists('access_company_users_sql') ? access_company_users_sql($pdo) : '(company_id = ?)') . ' AND is_active=1 ORDER BY name, id');
@@ -200,6 +206,14 @@ try {
 
     case 'groups_sync':
       $out(['ok' => true, 'groups' => whatsapp_att_groups_sync($pdo, $cid)]);
+
+    case 'sched_save':
+      $id = whatsapp_sched_save($pdo, $cid, $loadChat(), $uid, $supervisor, (int)($_POST['sched_id'] ?? 0), (string)($_POST['date'] ?? ''), (string)($_POST['time'] ?? ''), (string)($_POST['text'] ?? ''));
+      $out(['ok' => true, 'sched_id' => $id]);
+
+    case 'sched_cancel':
+      whatsapp_sched_cancel($pdo, $cid, $loadChat(), $uid, $supervisor, (int)($_POST['sched_id'] ?? 0));
+      $out(['ok' => true]);
 
     case 'new':
       $id = whatsapp_att_new_chat($pdo, $cid, $uid, (string)($_POST['phone'] ?? ''), (string)($_POST['text'] ?? ''));
