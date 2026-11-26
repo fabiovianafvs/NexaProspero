@@ -94,6 +94,11 @@ $blank = [
   'cfop_entry_interstate' => '2102',
   'cfop_entry_interstate_desc' => 'COMPRA PARA COMERCIALIZAÇÃO',
   'notes' => '',
+  'seletivo_cst' => '',
+  'seletivo_class_code' => '',
+  'seletivo_rate' => '0',
+  'seletivo_rate_specific' => '0',
+  'seletivo_unit' => '',
 ];
 $current = $blank;
 require_once __DIR__ . '/../config/fiscal_tax_transfer.php';
@@ -120,7 +125,7 @@ if (!function_exists('fiscal_tributacoes_values_equal')) {
     $decimalFields = [
       'iss_rate','irrf_rate','csll_rate','inss_rate','municipal_differentiated_rate','municipal_reduction_base_percent',
       'icms_rate','icms_reduction_rate','icms_st_rate','ipi_rate','pis_in_rate','cofins_in_rate','pis_out_rate','cofins_out_rate',
-      'cbs_rate','ibs_uf_rate','ibs_mun_rate'
+      'cbs_rate','ibs_uf_rate','ibs_mun_rate','seletivo_rate','seletivo_rate_specific'
     ];
     $integerFields = ['is_active','iss_withheld','fiscal_incentive'];
     if (in_array($field, $decimalFields, true)) return abs((float)$expected - (float)$actual) < 0.00005;
@@ -206,6 +211,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? 'save'
     'cfop_entry_interstate_desc' => trim((string)($_POST['cfop_entry_interstate_desc'] ?? '')),
     'notes' => trim((string)($_POST['notes'] ?? '')),
   ];
+  // Imposto Seletivo (a partir de 2027): só grava depois da migração.
+  if (function_exists('fiscal_is_columns_ready') && fiscal_is_columns_ready($pdo, 'fiscal_tax_profiles') && fiscal_normalize_item_type($data['profile_type']) === 'PRODUCT') {
+    $data += fiscal_is_fields_from_post($_POST, '');
+  }
 
   if (!in_array($data['ibs_cbs_rate_mode'], ['AUTO','MANUAL'], true)) {
     $data['ibs_cbs_rate_mode'] = (($data['cbs_rate'] > 0) || ($data['ibs_uf_rate'] > 0) || ($data['ibs_mun_rate'] > 0)) ? 'MANUAL' : 'AUTO';
@@ -336,6 +345,19 @@ fiscal_page_header($taxPageTitle, 'Consulte e configure padrões fiscais que ser
 ]);
 fiscal_tabs('fiscal_tributacoes');
 fiscal_flash();
+// Reforma Tributária: produtos com NCM sujeito ao Imposto Seletivo ainda sem cClassTrib do IS.
+if (function_exists('fiscal_is_products_pending')) {
+  $isPending = fiscal_is_products_pending($pdo, (int)$taxCompanyId, 15);
+  if ($isPending['total'] > 0) {
+    echo '<div class="msg" style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412"><strong>Imposto Seletivo (a partir de 01/01/2027):</strong> '
+      . (int)$isPending['total'] . ' produto(s) com NCM sujeito ao IS ainda sem o cClassTrib do IS. Sem ele, a NF-e/NFC-e desses produtos será recusada pelo Nexa a partir de 2027. '
+      . 'Crie uma tributação com o IS preenchido (revenda: 200007) e aplique em Utilitários &gt; Manutenção de tributações, ou ajuste no cadastro do produto.'
+      . '<div style="margin-top:6px;font-size:13px">';
+    foreach ($isPending['items'] as $pi) echo '<a href="produto_form.php?id=' . (int)$pi['id'] . '">' . fiscal_h($pi['nome']) . '</a> <span class="fiscal-muted">(NCM ' . fiscal_h($pi['ncm']) . ')</span> · ';
+    if ($isPending['total'] > count($isPending['items'])) echo '<span class="fiscal-muted">e mais ' . ((int)$isPending['total'] - count($isPending['items'])) . '.</span>';
+    echo '</div></div>';
+  }
+}
 if ($taxCrossContext): ?>
   <div class="msg ok"><strong>V8.2 · Cadastro Multiempresa:</strong> tributações e operações fiscais cadastrais estão operando em <strong><?= fiscal_h($taxCompanyName !== '' ? $taxCompanyName : ('Empresa #' . $taxCompanyId)) ?></strong>. Emissão, entradas/saídas, Estoque, Financeiro operacional e PDV continuam no fluxo legado.</div>
 <?php endif;
@@ -510,6 +532,12 @@ if ($err) echo '<div class="msg err">' . fiscal_h($err) . '</div>';
         <div class="row"><label>IBS UF %</label><input class="field fiscal-profile-manual-rate" name="ibs_uf_rate" value="<?= fiscal_h($current['ibs_uf_rate']) ?>" inputmode="decimal"></div>
         <div class="row"><label>IBS Município %</label><input class="field fiscal-profile-manual-rate" name="ibs_mun_rate" value="<?= fiscal_h($current['ibs_mun_rate']) ?>" inputmode="decimal"></div>
       </div>
+    </div>
+
+    <div class="fiscal-section" id="fiscalSeletivoSection">
+      <h3>Imposto Seletivo (IS)</h3>
+      <p class="fiscal-muted fiscal-section-note">Só para produtos. Vale a partir de 01/01/2027 e é copiado para o produto quando esta tributação for selecionada.</p>
+      <?= function_exists('fiscal_is_form_html') ? fiscal_is_form_html($pdo, $current, '', '') : '' ?>
     </div>
 
     <div class="fiscal-section">

@@ -70,7 +70,12 @@ function nexa_tax_allowed_fields(): array {
     'cfop_entry_state_desc',
     'cfop_entry_interstate',
     'cfop_entry_interstate_desc',
-    'notes'
+    'notes',
+    'seletivo_cst',
+    'seletivo_class_code',
+    'seletivo_rate',
+    'seletivo_rate_specific',
+    'seletivo_unit'
   ];
 }
 
@@ -111,6 +116,10 @@ function nexa_tax_import(PDO $pdo, int $companyId, array $file): array {
   $items = $doc['profiles'];
   if (count($items) > 1000) throw new RuntimeException('O arquivo excede o limite de 1.000 perfis.');
   $allowed = array_flip(nexa_tax_allowed_fields());
+  // Arquivo com Imposto Seletivo importado antes da migração: ignora esses campos.
+  if (!function_exists('fiscal_is_columns_ready') || !fiscal_is_columns_ready($pdo, 'fiscal_tax_profiles')) {
+    foreach (['seletivo_cst','seletivo_class_code','seletivo_rate','seletivo_rate_specific','seletivo_unit'] as $isKey) unset($allowed[$isKey]);
+  }
   $acceptedOps = ['cfop_in_state','cfop_in_interstate','cfop_out_state','cfop_out_interstate','enabled','notes'];
   $opMap = [];
   foreach (fiscal_operations($pdo, $companyId, '', false) as $op) {

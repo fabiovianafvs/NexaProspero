@@ -1554,6 +1554,11 @@ $imgUrl = $img !== '' ? ('/uploads/products/' . rawurlencode($img)) : '';
             </div>
 
             <div class="row span-3 product-fiscal-subsection" data-item-kind="PRODUCT">
+              <div class="product-fiscal-subhead"><div><strong>Imposto Seletivo (IS)</strong><span>Reforma Tributária, a partir de 2027: bebidas alcoólicas e açucaradas, tabaco, veículos, embarcações, aeronaves e bens minerais.</span></div></div>
+              <?= function_exists('fiscal_is_form_html') ? fiscal_is_form_html($pdo, $fiscalTax, 'fiscal_', '#fiscalNcmInput') : '' ?>
+            </div>
+
+            <div class="row span-3 product-fiscal-subsection" data-item-kind="PRODUCT">
               <div class="product-fiscal-subhead"><div><strong>Operações e CFOPs do produto</strong><span>Mapeamentos usados nas vendas, entradas, SPED e Sintegra.</span></div><?php if ($productCanManageFiscalOperations): ?><a class="btn btn-sm" href="<?= htmlspecialchars(function_exists('multi_company_context_url') ? multi_company_context_url('fiscal_operacoes.php?new=1') : 'fiscal_operacoes.php?new=1', ENT_QUOTES, 'UTF-8') ?>" target="_blank">+ Operação</a><?php else: ?><span class="help">Sem permissão para cadastrar operação</span><?php endif; ?></div>
               <?php if (!$fiscalProductOperationCfops): ?>
                 <div class="help">Nenhuma operação fiscal ativa cadastrada.</div>
@@ -2167,12 +2172,14 @@ if ($fiscalEnabled) {
       'municipal_benefit_type','municipal_differentiated_rate','municipal_reduction_base_percent','municipal_benefit_number',
       'ibs_cbs_cst','ibs_cbs_rate_mode','cbs_rate','ibs_uf_rate','ibs_mun_rate','ibs_cbs_classification_code','ibs_cbs_classification_name',
       'icms_rate','icms_st_rate','ipi_rate','ipi_cst','icms_cst','icms_csosn','pis_out_rate','pis_out_cst','cofins_out_rate','cofins_out_cst',
-      'cfop_sale_state','cfop_sale_interstate','cfop_return_state','cfop_return_interstate','cfop_entry_state','cfop_entry_interstate'
+      'cfop_sale_state','cfop_sale_interstate','cfop_return_state','cfop_return_interstate','cfop_entry_state','cfop_entry_interstate',
+      'seletivo_cst','seletivo_class_code','seletivo_rate','seletivo_rate_specific','seletivo_unit'
     ].forEach(function(key){
       if (Object.prototype.hasOwnProperty.call(p, key)) setField(key, p[key]);
     });
     if (profileType === 'SERVICE') setField('tax_mode', 'ISS');
     syncIbsCbsDescription(false);
+    document.querySelectorAll('.nexa-is-box').forEach(function(box){ if (typeof box.nexaIsSync === 'function') box.nexaIsSync(); });
     if (Array.isArray(p.operation_cfops) && profileType === 'PRODUCT') {
       // A tributação selecionada passa a ser a fonte do quadro inteiro de
       // Operações e CFOPs. Isso evita manter CFOPs/flags da regra anterior.

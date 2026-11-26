@@ -870,6 +870,16 @@ if (!function_exists('nexa_schema_updater_registry')) {
         'sha256' => 'c6df5694efc26fb49743a3fc2a97817ee3bfcd88c6d207b18c15b93535c3297b',
         'order' => 202611250400,
       ],
+      [
+        'id' => '20261126_reforma_imposto_seletivo_v1',
+        'module' => 'reforma_imposto_seletivo',
+        'version' => 202611260100,
+        'label' => 'Reforma Tributária - Imposto Seletivo v1',
+        'description' => 'Cria as tabelas oficiais do Imposto Seletivo (CST, cClassTrib, NCMs sujeitos e exceções, copiadas da Calculadora de Tributos da Receita) e acrescenta os campos do IS no cadastro fiscal do produto, nas tributações e o total do IS nos documentos fiscais. Não altera dados existentes.',
+        'file' => __DIR__ . '/../db/20261126_reforma_imposto_seletivo_v1.sql',
+        'sha256' => 'da92910d3f799f81253b0a07512fa41803f1e267c3ce9f92b4e84baec4d6f004',
+        'order' => 202611260100,
+      ],
     ];
   }
 }

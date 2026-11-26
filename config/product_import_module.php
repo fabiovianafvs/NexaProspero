@@ -570,6 +570,9 @@ if (!function_exists('product_import_apply_tax_profile')) {
       'fiscal_cfop_entry_state' => (string)($profile['cfop_entry_state'] ?? ''),
       'fiscal_cfop_entry_interstate' => (string)($profile['cfop_entry_interstate'] ?? ''),
     ];
+    foreach (['seletivo_cst','seletivo_class_code','seletivo_rate','seletivo_rate_specific','seletivo_unit'] as $isKey) {
+      $post['fiscal_' . $isKey] = (string)($profile[$isKey] ?? '');
+    }
     fiscal_save_product_tax_from_post($pdo, $companyId, $productId, $post);
     if (function_exists('fiscal_xml_sync_product_operation_cfops_from_profile')) {
       fiscal_xml_sync_product_operation_cfops_from_profile($pdo, $companyId, $productId, $profileId);

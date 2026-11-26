@@ -2818,6 +2818,8 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       'pis_cst','pis_base','pis_rate','pis_amount',
       'cofins_cst','cofins_base','cofins_rate','cofins_amount',
       'ibs_cbs_class','ibs_cbs_cst','ibs_cbs_base','ibs_uf_rate','ibs_mun_rate','cbs_rate',
+      // Imposto Seletivo (a partir de 2027). is_base_unit = base do IS por unidade da nota original (devolução).
+      'is_class','is_cst','is_rate','is_rate_specific','is_unit','is_base_unit',
     ];
     $taxInputs = [];
     foreach ($taxNames as $taxName) $taxInputs[$taxName] = $taxArray($taxName);
@@ -2881,11 +2883,12 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       if ($maxQty > 0 && $qty > ($maxQty + 0.0001)) throw new RuntimeException('A quantidade informada não pode ser maior que a quantidade disponível na venda original.');
       $taxPayload = [];
       foreach ($taxNames as $taxName) {
-        $taxPayload[$taxName] = str_ends_with($taxName, '_cst') || in_array($taxName, ['icms_origin','icms_csosn','ipi_cenq','ibs_cbs_class'], true)
+        $taxPayload[$taxName] = str_ends_with($taxName, '_cst') || in_array($taxName, ['icms_origin','icms_csosn','ipi_cenq','ibs_cbs_class','is_class','is_unit'], true)
           ? $rawAt($taxInputs[$taxName], $idx)
           : $numAt($taxInputs[$taxName], $idx);
       }
-      $items[] = ['product_id'=>$pid, 'quantity'=>$qty, 'unit_value'=>$unitValue, 'cfop'=>fiscal_digits($cfops[$idx] ?? ''), 'tax'=>$taxPayload, 'source_order_item_id'=>$isInternalOrderReturn ? $sourceItemId : 0];
+      $items[] = ['product_id'=>$pid, 'quantity'=>$qty, 'unit_value'=>$unitValue, 'cfop'=>fiscal_digits($cfops[$idx] ?? ''), 'tax'=>$taxPayload, 'source_order_item_id'=>$isInternalOrderReturn ? $sourceItemId : 0,
+        'source_fiscal_item_id'=>($sourceType === 'DEVOLUCAO_CLIENTE' && !$isInternalOrderReturn) ? $sourceItemId : 0];
     }
     if (!$items) throw new RuntimeException('Informe pelo menos um produto.');
 
@@ -2980,7 +2983,11 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       $insItem = $pdo->prepare('INSERT INTO fiscal_document_items (fiscal_document_id, company_id, item_number, product_id, product_code, description, ncm, cest, cfop, unidade, quantity, unit_value, total_value, unidade_trib, quantity_trib, unit_value_trib, ind_total, order_item_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())');
       $insTax = $pdo->prepare('INSERT INTO fiscal_document_item_taxes (fiscal_document_item_id, fiscal_document_id, company_id, tax_group, tax_tag, origin_code, cst, csosn, class_code, base_calc, base_calc_st, rate, reduction_rate, mva_rate, amount, extra_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())');
       $totalProducts = 0.0; $n = 0; $totIcms = 0.0; $totIcmsSt = 0.0; $totFcpSt = 0.0; $totIpi = 0.0; $totPis = 0.0; $totCofins = 0.0;
-      $totIbsUf = 0.0; $totIbsMun = 0.0; $totCbs = 0.0;
+      $totIbsUf = 0.0; $totIbsMun = 0.0; $totCbs = 0.0; $totIs = 0.0;
+      // Devolução: o IS volta com CST 300 (300001 = nota do adquirente; 300002 = nota do fornecedor).
+      $isReturnRole = '';
+      if ($sourceType === 'DEVOLUCAO_CLIENTE') $isReturnRole = 'FORNECEDOR';
+      elseif ($direction === 'SAIDA' && str_contains(strtoupper((string)($operation['operation_type'] ?? '') . ' ' . (string)($operation['name'] ?? '')), 'DEVOL')) $isReturnRole = 'ADQUIRENTE';
       foreach ($items as $it) {
         $n++; $pid = (int)$it['product_id']; $manual = (array)($it['tax'] ?? []);
         $ps = $pdo->prepare('SELECT * FROM produtos WHERE company_id=? AND id=? LIMIT 1'); $ps->execute([$companyId, $pid]); $prod = $ps->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -3026,6 +3033,25 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
         $insTax->execute([$docItemId,$docId,$companyId,'PIS',in_array($pisCst,['01','02'],true)?'PISAliq':(in_array($pisCst,['04','05','06','07','08','09'],true)?'PISNT':'PISOutr'),'',$pisCst,'','',$pisBase,0,$pisRate,0,0,$pisAmount,null]);
         $cofCst=str_pad($codeValue('cofins_cst',preg_replace('/\D+/', '', (string)($tax['cofins_cst']??'01'))?:'01'),2,'0',STR_PAD_LEFT); $cofRate=$num('cofins_rate',max(0.0,(float)($tax['cofins_rate']??0))); $cofBase=$num('cofins_base',$cofRate>0?$line:0); $cofAmount=$num('cofins_amount',round($cofBase*$cofRate/100,2)); $totCofins += $cofAmount;
         $insTax->execute([$docItemId,$docId,$companyId,'COFINS',in_array($cofCst,['01','02'],true)?'COFINSAliq':(in_array($cofCst,['04','05','06','07','08','09'],true)?'COFINSNT':'COFINSOutr'),'',$cofCst,'','',$cofBase,0,$cofRate,0,0,$cofAmount,null]);
+        // Imposto Seletivo (a partir de 01/01/2027): grupo <IS> do item; o vIS entra na base do IBS/CBS.
+        $isAmount = 0.0;
+        if (!$isInternalOrderReturn && function_exists('fiscal_is_resolve')) {
+          $isManual = fiscal_is_manual_from_item($manual);
+          $isBaseOverride = null;
+          if (!$isManual && (int)($it['source_fiscal_item_id'] ?? 0) > 0) {
+            $isOrig = fiscal_is_original_item_tax($pdo, $companyId, (int)$it['source_fiscal_item_id']);
+            if ($isOrig) { $isManual = $isOrig['manual']; $isBaseOverride = round((float)$isOrig['base_per_qty'] * $qty, 2); }
+          }
+          if (($manual['is_base_unit'] ?? null) !== null && (float)$manual['is_base_unit'] > 0) $isBaseOverride = round((float)$manual['is_base_unit'] * $qty, 2);
+          $isResolved = fiscal_is_resolve($pdo, $tax, (string)($tax['ncm'] ?? ''), $issue, ['manual' => $isManual, 'return_role' => $isReturnRole]);
+          if ($isResolved['error'] !== '') throw new RuntimeException('Imposto Seletivo do item ' . $n . ' (' . (trim((string)($prod['nome'] ?? '')) ?: ('Produto #' . $pid)) . '): ' . $isResolved['error']);
+          if (!empty($isResolved['enabled'])) {
+            $isCalc = fiscal_is_calculate($isResolved, $line, $qty, $icmsAmount, $isBaseOverride);
+            $isAmount = (float)$isCalc['amount'];
+            $totIs += $isAmount;
+            $insTax->execute([$docItemId,$docId,$companyId,'IS','IS','',(string)$isResolved['cst'],'',(string)$isResolved['class_code'],(float)$isCalc['base'],0,(float)$isCalc['rate'],0,0,$isAmount,fiscal_is_tax_extra($isResolved, $isCalc)]);
+          }
+        }
         // IBS/CBS (Reforma Tributária): a NF-e exige o grupo em todos os itens.
         // Usa o que foi informado em "Impostos do item"; o que ficar em branco vem
         // do cadastro fiscal do produto (mesma regra das notas de pedidos).
@@ -3057,7 +3083,7 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
           $manualIbsBase = $manual['ibs_cbs_base'] ?? null;
           $ibsCalc = $manualIbsBase !== null
             ? fiscal_ibs_cbs_calculate((float)$manualIbsBase, $ibsResolved, [])
-            : fiscal_ibs_cbs_calculate($line, $ibsResolved, ['icms'=>$icmsAmount, 'pis'=>$pisAmount, 'cofins'=>$cofAmount, 'ipi'=>0, 'iss'=>0]);
+            : fiscal_ibs_cbs_calculate($line + $isAmount, $ibsResolved, ['icms'=>$icmsAmount, 'pis'=>$pisAmount, 'cofins'=>$cofAmount, 'ipi'=>0, 'iss'=>0]);
           $ibsBase = (float)$ibsCalc['base'];
           $totIbsUf += (float)$ibsCalc['ibs_uf_amount'];
           $totIbsMun += (float)$ibsCalc['ibs_mun_amount'];
@@ -3070,7 +3096,8 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
             'rate_date' => (string)$ibsResolved['date'],
             'operation_uf' => (string)$ibsResolved['uf'],
             'operation_city_ibge' => (string)$ibsResolved['city_ibge'],
-            'base_calc_gross' => $manualIbsBase !== null ? (float)$manualIbsBase : $line,
+            'base_calc_gross' => $manualIbsBase !== null ? (float)$manualIbsBase : $line + $isAmount,
+            'is_amount_in_base' => $manualIbsBase !== null ? 0.0 : $isAmount,
             'excluded_legacy_taxes' => (float)$ibsCalc['excluded_total'],
             'base_calc' => $ibsBase,
             'ibs_reduction_rate' => (float)$ibsCalc['ibs_reduction_rate'],
@@ -3097,6 +3124,9 @@ if (!function_exists('fiscal_create_manual_movement_document')) {
       $pdo->prepare('UPDATE fiscal_documents SET total_products=?, total_document=?, total_icms=?, total_icms_st=?, total_ipi=?, total_pis=?, total_cofins=?, updated_at=NOW() WHERE company_id=? AND id=?')->execute([round($totalProducts,2),$totalDocument,round($totIcms,2),round($totIcmsSt,2),round($totIpi,2),round($totPis,2),round($totCofins,2),$companyId,$docId]);
       if (($totIbsUf + $totIbsMun + $totCbs) > 0 && fiscal_column_exists($pdo, 'fiscal_documents', 'total_cbs')) {
         $pdo->prepare('UPDATE fiscal_documents SET total_ibs_uf=?, total_ibs_mun=?, total_cbs=? WHERE company_id=? AND id=?')->execute([round($totIbsUf,2), round($totIbsMun,2), round($totCbs,2), $companyId, $docId]);
+      }
+      if ($totIs > 0 && function_exists('fiscal_is_columns_ready') && fiscal_is_columns_ready($pdo, 'fiscal_documents')) {
+        $pdo->prepare('UPDATE fiscal_documents SET total_is=? WHERE company_id=? AND id=?')->execute([round($totIs, 2), $companyId, $docId]);
       }
       if ($isInternalOrderReturn) {
         $pdo->prepare('INSERT INTO fiscal_document_events (fiscal_document_id, company_id, event_type, event_sequence, event_datetime, status_code, status_message, request_xml, notes, created_at) VALUES (?,?,?,?,NOW(),?,?,?,?,NOW())')->execute([$docId, $companyId, 'DEVOLUCAO_INTERNA_PEDIDO', 1, 'INTERNA', 'Devolução interna registrada a partir de pedido sem documento fiscal.', null, 'Controle interno: sem chave de referência e sem transmissão para a SEFAZ.']);
@@ -4504,6 +4534,11 @@ if (!function_exists('fiscal_nfce_add_ibs_cbs_xml')) {
     $ibscbs = $add($parent, 'IBSCBS', '');
     $add($ibscbs, 'CST', $cst);
     $add($ibscbs, 'cClassTrib', $classCode);
+    // Monofasia (combustíveis): formato pronto, ainda não ativado — só sai se a linha trouxer o bloco.
+    if (!empty($extra['gIBSCBSMono']) && is_array($extra['gIBSCBSMono']) && function_exists('fiscal_mono_add_xml')) {
+      fiscal_mono_add_xml($add, $ibscbs, $extra['gIBSCBSMono']);
+      return true;
+    }
     $g = $add($ibscbs, 'gIBSCBS', '');
     $add($g, 'vBC', $fmt($base));
 
@@ -5074,6 +5109,9 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
     $rtcIssueDate = (string)($doc['issue_datetime'] ?? $doc['created_at'] ?? date('Y-m-d'));
     $rtcIssueYear = preg_match('/^(\d{4})/', $rtcIssueDate, $rtcYearMatch) ? (int)$rtcYearMatch[1] : (int)date('Y');
     $rtcTotalItems = 0.0;
+    $rtcTotalIs = 0.0;
+    $rtcHasIs = false;
+    $rtcMonoTotals = [];
     // Quantidade real de itens em que o grupo <IBSCBS> foi serializado.
     // Não usar apenas a quantidade de registros da tabela fiscal, pois registros
     // antigos/incompletos podem não possuir CST ou cClassTrib e são omitidos do item.
@@ -5134,7 +5172,8 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
       $taxSt = $pdo->prepare('SELECT * FROM fiscal_document_item_taxes WHERE company_id=? AND fiscal_document_item_id=? ORDER BY id ASC');
       $taxSt->execute([$companyId, (int)$row['id']]);
       $taxRows = $taxSt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-      $taxOrder = ['ICMS'=>10, 'IPI'=>20, 'II'=>30, 'PIS'=>40, 'PISST'=>50, 'COFINS'=>60, 'COFINSST'=>70, 'IBSCBS'=>80];
+      // IS (Imposto Seletivo) vem depois de COFINSST/ICMSUFDest e antes de IBSCBS (leiaute PL_010).
+      $taxOrder = ['ICMS'=>10, 'IPI'=>20, 'II'=>30, 'PIS'=>40, 'PISST'=>50, 'COFINS'=>60, 'COFINSST'=>70, 'IS'=>75, 'IBSCBS'=>80];
       usort($taxRows, function(array $a, array $b) use ($taxOrder): int {
         $ga = strtoupper((string)($a['tax_group'] ?? ''));
         $gb = strtoupper((string)($b['tax_group'] ?? ''));
@@ -5183,6 +5222,13 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
         if ($group === 'IBSCBS') {
           $rtcItemHasIbsCbs = true;
           $rtcIbsExtra = fiscal_nfce_tax_extra_json($tax);
+          if (!empty($rtcIbsExtra['gIBSCBSMono']) && is_array($rtcIbsExtra['gIBSCBSMono']) && function_exists('fiscal_mono_item_totals')) {
+            $rtcMonoItem = fiscal_mono_item_totals($rtcIbsExtra['gIBSCBSMono']);
+            $rtcItemIbsCbs += $rtcMonoItem['ibs'] + $rtcMonoItem['cbs'];
+            foreach (['padrao' => ['vIBSMono','vCBSMono'], 'reten' => ['vIBSMonoReten','vCBSMonoReten'], 'ret' => ['vIBSMonoRet','vCBSMonoRet']] as $rtcMonoGroup => $rtcMonoKeys) {
+              foreach ($rtcMonoKeys as $rtcMonoKey) $rtcMonoTotals[$rtcMonoKey] = ($rtcMonoTotals[$rtcMonoKey] ?? 0.0) + fiscal_rtc_round((float)($rtcIbsExtra['gIBSCBSMono'][$rtcMonoGroup][$rtcMonoKey] ?? 0), 2);
+            }
+          }
           $rtcItemIbsCbs += max(0.0, (float)($rtcIbsExtra['ibs_amount'] ?? 0));
           $rtcItemIbsCbs += max(0.0, (float)($rtcIbsExtra['cbs_amount'] ?? 0));
           if (fiscal_nfce_add_ibs_cbs_xml($dom, $add, $imp, $tax, $fmt, $fmt4)) {
@@ -5191,9 +5237,17 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
           }
           continue;
         }
+        if ($group === 'IS') {
+          // Só a partir de 2027 (proteção para rascunhos antigos/datas anteriores).
+          if (!function_exists('fiscal_is_add_xml') || substr(date('Y-m-d', strtotime($rtcIssueDate) ?: time()), 0, 10) < FISCAL_IS_START_DATE) continue;
+          $rtcItemIsValue = fiscal_is_add_xml($add, $imp, $tax);
+          $rtcItemIs += $rtcItemIsValue;
+          $rtcTotalIs += $rtcItemIsValue;
+          $rtcHasIs = true;
+          continue;
+        }
         if ($group === 'IPI') $rtcItemIpi += max(0.0, (float)($tax['amount'] ?? 0));
         if ($group === 'II') $rtcItemIi += max(0.0, (float)($tax['amount'] ?? 0));
-        if ($group === 'IS') $rtcItemIs += max(0.0, (float)($tax['amount'] ?? 0));
         if ($group === 'IPI') {
           $ipiCst = str_pad(substr(preg_replace('/\D+/', '', (string)($tax['cst'] ?? '')) ?: '53', 0, 2), 2, '0', STR_PAD_LEFT);
           $ipiTag = fiscal_nfce_ipi_xml_tag($ipiCst);
@@ -5366,6 +5420,11 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
     if ($rtcIbsCbsXmlItemCount !== count($items)) {
       throw new RuntimeException('IBS/CBS obrigatório: nem todos os itens possuem o grupo IBSCBS válido.');
     }
+    // Total do Imposto Seletivo (antes do IBSCBSTot): soma dos vIS publicados nos itens.
+    if (!empty($rtcHasIs)) {
+      $isTot = $add($total, 'ISTot', '');
+      $add($isTot, 'vIS', $fmt(round((float)$rtcTotalIs, 2)));
+    }
     if ($rtcIbsCbsXmlItemCount > 0) {
       $ibscbsTot = $add($total, 'IBSCBSTot', '');
       $add($ibscbsTot, 'vBCIBSCBS', $fmt($ibsCbsBase));
@@ -5387,6 +5446,7 @@ if (!function_exists('fiscal_nfce_build_draft_xml')) {
       $add($gCbsTot, 'vCBS', $fmt($totalCbs));
       $add($gCbsTot, 'vCredPres', '0.00');
       $add($gCbsTot, 'vCredPresCondSus', '0.00');
+      if ($rtcMonoTotals && function_exists('fiscal_mono_add_tot_xml')) fiscal_mono_add_tot_xml($add, $ibscbsTot, $rtcMonoTotals);
     }
     // Total RTC deve fechar exatamente com a soma dos vItem.
     $add($total, 'vNFTot', $fmt(round($rtcTotalItems, 2)));
@@ -5692,7 +5752,7 @@ if (!function_exists('fiscal_nfce_create_or_update_from_order')) {
       $pdo->prepare('DELETE FROM fiscal_document_items WHERE company_id=? AND fiscal_document_id=?')->execute([$companyId, $docId]);
       $insItem = $pdo->prepare('INSERT INTO fiscal_document_items (fiscal_document_id, company_id, item_number, product_id, product_code, description, ncm, cest, cfop, unidade, quantity, unit_value, total_value, unidade_trib, quantity_trib, unit_value_trib, discount_value, freight_value, other_value, ind_total, order_item_id, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())');
       $insTax = $pdo->prepare('INSERT INTO fiscal_document_item_taxes (fiscal_document_item_id, fiscal_document_id, company_id, tax_group, tax_tag, origin_code, cst, csosn, base_calc, rate, amount, extra_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())');
-      $n = 0; $totStRecipient = 0.0; $totIcms = 0.0; $totIpi = 0.0; $totPis = 0.0; $totCofins = 0.0; $totIbsUf = 0.0; $totIbsMun = 0.0; $totCbs = 0.0;
+      $n = 0; $totStRecipient = 0.0; $totIcms = 0.0; $totIpi = 0.0; $totPis = 0.0; $totCofins = 0.0; $totIbsUf = 0.0; $totIbsMun = 0.0; $totCbs = 0.0; $totIs = 0.0;
       $freightAlloc = fiscal_nfce_allocate_amounts($totalFreight, $orderItems, 'total');
       $discountAlloc = fiscal_nfce_allocate_amounts($totalDiscount, $orderItems, 'total');
       $otherAlloc = fiscal_nfce_allocate_amounts($totalOther, $orderItems, 'total');
@@ -5817,6 +5877,23 @@ if (!function_exists('fiscal_nfce_create_or_update_from_order')) {
         else $cofTag = 'COFINSOutr';
         $insTax->execute([$docItemId, $docId, $companyId, 'COFINS', $cofTag, '', $cofCst, '', $cofBase, $cofRate, $cofAmount, null]);
 
+        // Imposto Seletivo (a partir de 01/01/2027): grupo <IS>; o vIS entra na base do IBS/CBS.
+        // NF-e emitida depois da NFC-e do mesmo pedido não repete o IS (já saiu na NFC-e).
+        $isAmount = 0.0;
+        if (!$isNfeAfterNfce && function_exists('fiscal_is_resolve')) {
+          $isResolved = fiscal_is_resolve($pdo, $tax, $ncm, (string)$issue, []);
+          if ($isResolved['error'] !== '') {
+            throw new RuntimeException('Imposto Seletivo do item ' . $n . ' (' . trim((string)($it['product_name'] ?? $desc ?? 'Produto')) . '): ' . $isResolved['error']);
+          }
+          if (!empty($isResolved['enabled'])) {
+            $isCalc = fiscal_is_calculate($isResolved, $taxBase, (float)$qty, $icmsAmount);
+            $isAmount = (float)$isCalc['amount'];
+            $totIs += $isAmount;
+            $isExtra = json_decode(fiscal_is_tax_extra($isResolved, $isCalc), true) ?: [];
+            $insTax->execute([$docItemId, $docId, $companyId, 'IS', 'IS', '', (string)$isResolved['cst'], '', (float)$isCalc['base'], (float)$isCalc['rate'], $isAmount, json_encode($isExtra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+          }
+        }
+
         $ibsResolved = function_exists('fiscal_ibs_cbs_resolve')
           ? fiscal_ibs_cbs_resolve(
               $pdo,
@@ -5838,7 +5915,7 @@ if (!function_exists('fiscal_nfce_create_or_update_from_order')) {
           );
         }
         if (!$isNfeAfterNfce && !empty($ibsResolved['enabled'])) {
-          $ibsCalc = fiscal_ibs_cbs_calculate($taxBase, $ibsResolved, [
+          $ibsCalc = fiscal_ibs_cbs_calculate($taxBase + $isAmount, $ibsResolved, [
             'icms' => $icmsAmount,
             'pis' => $pisAmount,
             'cofins' => $cofAmount,
@@ -5864,7 +5941,8 @@ if (!function_exists('fiscal_nfce_create_or_update_from_order')) {
             'rate_date' => (string)$ibsResolved['date'],
             'operation_uf' => (string)$ibsResolved['uf'],
             'operation_city_ibge' => (string)$ibsResolved['city_ibge'],
-            'base_calc_gross' => $taxBase,
+            'base_calc_gross' => $taxBase + $isAmount,
+            'is_amount_in_base' => $isAmount,
             'excluded_legacy_taxes' => (float)$ibsCalc['excluded_total'],
             'base_calc' => $ibsBase,
             'ibs_reduction_rate' => (float)$ibsCalc['ibs_reduction_rate'],
@@ -5914,6 +5992,9 @@ if (!function_exists('fiscal_nfce_create_or_update_from_order')) {
       $pdo->prepare('INSERT INTO fiscal_document_payments (fiscal_document_id, company_id, payment_method_id, payment_type, payment_description, payment_indicator, amount, card_brand, card_integration, card_cnpj, authorization_code, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())')
         ->execute([$docId, $companyId, $payInfo['payment_method_id'], $payInfo['payment_type'], $payInfo['payment_description'], $payInfo['payment_indicator'], $fiscalPaymentAmount, $payInfo['card_brand'], $payInfo['card_integration'], $payInfo['card_cnpj'], $payInfo['authorization_code']]);
       $pdo->prepare('UPDATE fiscal_documents SET total_document=?, total_icms=?, total_ipi=?, total_pis=?, total_cofins=?, total_ibs_uf=?, total_ibs_mun=?, total_cbs=?, updated_at=NOW() WHERE company_id=? AND id=?')->execute([$fiscalTotalDocument, round($totIcms,2), round($totIpi,2), round($totPis,2), round($totCofins,2), round($totIbsUf,2), round($totIbsMun,2), round($totCbs,2), $companyId, $docId]);
+      if (function_exists('fiscal_is_columns_ready') && fiscal_is_columns_ready($pdo, 'fiscal_documents')) {
+        $pdo->prepare('UPDATE fiscal_documents SET total_is=? WHERE company_id=? AND id=?')->execute([round($totIs, 2), $companyId, $docId]);
+      }
       if ($stRecipientEligible) {
         $pdo->prepare('UPDATE fiscal_documents SET total_icms_st=? WHERE company_id=? AND id=?')
           ->execute([round($totStRecipient, 2), $companyId, $docId]);

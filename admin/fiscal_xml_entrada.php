@@ -1949,6 +1949,15 @@ if ($iaRun && in_array((string)$iaRun['status'], ['PRONTA', 'REVISAR', 'ERRO'], 
               <label>Base COFINS<input type="number" step="0.01" name="edit_cofins_base[<?= $iid ?>]" value="<?= fiscal_h(number_format((float)($tj['cofins_base']??0),2,'.','')) ?>"></label>
               <label>Alíq. COFINS %<input type="number" step="0.0001" name="edit_cofins_rate[<?= $iid ?>]" value="<?= fiscal_h(number_format((float)($tj['cofins_rate']??0),4,'.','')) ?>"></label>
               <label>Valor COFINS<input type="number" step="0.01" name="edit_cofins_amount[<?= $iid ?>]" value="<?= fiscal_h(number_format((float)($tj['cofins_amount']??0),2,'.','')) ?>"></label>
+              <?php if (trim((string)($tj['is_class'] ?? '')) !== ''): ?>
+                <div class="entry-tax-title">Imposto Seletivo (lido do XML do fornecedor)</div>
+                <label>CST IS<input value="<?= fiscal_h($tj['is_cst'] ?? '') ?>" readonly class="entry-readonly"></label>
+                <label>cClassTrib IS<input value="<?= fiscal_h($tj['is_class'] ?? '') ?>" readonly class="entry-readonly"></label>
+                <label>Base IS<input value="<?= fiscal_h(number_format((float)($tj['is_base']??0),2,',','.')) ?>" readonly class="entry-readonly"></label>
+                <label>Alíq. IS %<input value="<?= fiscal_h(number_format((float)($tj['is_rate']??0),4,',','.')) ?>" readonly class="entry-readonly"></label>
+                <label>Alíq. IS R$/unid.<input value="<?= fiscal_h(number_format((float)($tj['is_rate_specific']??0),4,',','.')) ?><?= trim((string)($tj['is_unit'] ?? '')) !== '' ? ' / ' . fiscal_h($tj['is_unit']) : '' ?>" readonly class="entry-readonly"></label>
+                <label>Valor IS<input value="<?= fiscal_h(number_format((float)($tj['is_amount']??0),2,',','.')) ?>" readonly class="entry-readonly"></label>
+              <?php endif; ?>
             </div>
           </div>
         </details>

@@ -118,7 +118,7 @@ try {
 
     $itemIds = $_POST['item_id'] ?? [];
     $totalProducts = 0.0; $totalDiscount = 0.0; $totalFreight = 0.0; $totalOther = 0.0;
-    $totalIcms = 0.0; $totalIcmsSt = 0.0; $totalFcpSt = 0.0; $totalPis = 0.0; $totalCofins = 0.0; $totalIbsUf = 0.0; $totalIbsMun = 0.0; $totalCbs = 0.0;
+    $totalIcms = 0.0; $totalIcmsSt = 0.0; $totalFcpSt = 0.0; $totalPis = 0.0; $totalCofins = 0.0; $totalIbsUf = 0.0; $totalIbsMun = 0.0; $totalCbs = 0.0; $totalIs = 0.0;
 
     foreach ($itemIds as $rawItemId) {
       $itemId = (int)$rawItemId;
@@ -193,6 +193,27 @@ try {
       $cofinsAmount = nfce_edit_decimal($_POST['cofins_amount'][$itemId] ?? 0);
       nfce_edit_upsert_tax($pdo, $cid, $docId, $itemId, 'COFINS', nfce_edit_cofins_tag($cofinsCst), '', $cofinsCst, '', $cofinsBase, $cofinsRate, $cofinsAmount);
 
+      // Imposto Seletivo (a partir de 2027): grupo <IS> do item, digitado nesta tela.
+      $isClassEdit = nfce_edit_digits($_POST['is_class'][$itemId] ?? '', 6);
+      if ($isClassEdit !== '' && function_exists('fiscal_is_calculate')) {
+        $isClassRow = function_exists('fiscal_is_classification') ? fiscal_is_classification($pdo, $isClassEdit) : null;
+        $isCstEdit = nfce_edit_digits($_POST['is_cst'][$itemId] ?? '', 3);
+        if ($isCstEdit === '') $isCstEdit = (string)($isClassRow['cst_code'] ?? substr($isClassEdit, 0, 3));
+        $isUnitEdit = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', (string)($_POST['is_unit'][$itemId] ?? '')) ?: '', 0, 6));
+        $isWithCalc = !$isClassRow || (int)($isClassRow['with_calculation'] ?? 1) === 1;
+        $isResolvedEdit = ['enabled' => true, 'with_calculation' => $isWithCalc, 'cst' => str_pad($isCstEdit, 3, '0', STR_PAD_LEFT), 'class_code' => $isClassEdit,
+          'rate' => max(0.0, nfce_edit_decimal($_POST['is_rate'][$itemId] ?? 0)), 'rate_specific' => max(0.0, nfce_edit_decimal($_POST['is_rate_specific'][$itemId] ?? 0)),
+          'unit' => $isUnitEdit, 'source' => 'EDICAO'];
+        $isQtyEdit = max(0.0, nfce_edit_decimal($_POST['is_qty'][$itemId] ?? $qty));
+        $isCalcEdit = fiscal_is_calculate($isResolvedEdit, 0.0, $isQtyEdit, 0.0, max(0.0, nfce_edit_decimal($_POST['is_base'][$itemId] ?? $taxBaseDefault)));
+        $isTyped = trim((string)($_POST['is_amount'][$itemId] ?? ''));
+        if ($isTyped !== '' && $isWithCalc) $isCalcEdit['amount'] = fiscal_rtc_round(max(0.0, nfce_edit_decimal($isTyped)), 2);
+        nfce_edit_upsert_tax($pdo, $cid, $docId, $itemId, 'IS', 'IS', '', $isResolvedEdit['cst'], '', (float)$isCalcEdit['base'], (float)$isCalcEdit['rate'], (float)$isCalcEdit['amount'], fiscal_is_tax_extra($isResolvedEdit, $isCalcEdit));
+        $totalIs += (float)$isCalcEdit['amount'];
+      } else {
+        nfce_edit_delete_tax($pdo, $cid, $docId, $itemId, 'IS');
+      }
+
       $ibsCbsCstRaw = nfce_edit_digits($_POST['ibscbs_cst'][$itemId] ?? '', 3);
       $ibsCbsCst = $ibsCbsCstRaw !== '' ? str_pad($ibsCbsCstRaw, 3, '0', STR_PAD_LEFT) : '000';
       $ibsCbsClass = nfce_edit_digits($_POST['ibscbs_class'][$itemId] ?? '', 6);
@@ -262,6 +283,9 @@ try {
     $pdo->prepare("UPDATE fiscal_documents SET operation_nature=?, issue_datetime=?, exit_entry_datetime=?, total_products=?, total_discount=?, total_freight=?, total_other=?, total_icms=?, total_icms_st=?, total_fcp=?, total_pis=?, total_cofins=?, total_ibs_uf=?, total_ibs_mun=?, total_cbs=?, total_document=?, status=?, sefaz_status_code=NULL, sefaz_status_message=NULL, protocol_number=NULL, updated_at=NOW() WHERE company_id=? AND id=?")
       ->execute([$operation, $issue, $issue, round($totalProducts,2), round($totalDiscount,2), round($totalFreight,2), round($totalOther,2), round($totalIcms,2), round($totalIcmsSt,2), round($totalFcpSt,2), round($totalPis,2), round($totalCofins,2), round($totalIbsUf,2), round($totalIbsMun,2), round($totalCbs,2), $totalDocument, $statusAfterEdit, $cid, $docId]);
 
+    if (function_exists('fiscal_is_columns_ready') && fiscal_is_columns_ready($pdo, 'fiscal_documents')) {
+      $pdo->prepare('UPDATE fiscal_documents SET total_is=? WHERE company_id=? AND id=?')->execute([round($totalIs, 2), $cid, $docId]);
+    }
     $xml = fiscal_nfce_build_draft_xml($pdo, $cid, $docId);
     $pdo->prepare('UPDATE fiscal_documents SET xml_raw=?, xml_hash=?, updated_at=NOW() WHERE company_id=? AND id=?')
       ->execute([$xml, hash('sha256', $xml), $cid, $docId]);
@@ -518,6 +542,22 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
                 <label>Base COFINS<input name="cofins_base[<?= $iid ?>]" value="<?= nfce_edit_fmt($cof['base_calc'] ?? $taxBaseDefault, 2) ?>" <?= $locked ? 'disabled' : '' ?>></label>
                 <label>% COFINS<input name="cofins_rate[<?= $iid ?>]" value="<?= nfce_edit_fmt($cof['rate'] ?? 0, 4) ?>" <?= $locked ? 'disabled' : '' ?>></label>
                 <label>Valor COFINS<input name="cofins_amount[<?= $iid ?>]" value="<?= nfce_edit_fmt($cof['amount'] ?? 0, 2) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+              </div>
+            </div>
+
+            <?php $isRow = nfce_edit_tax_for($taxes, $iid, 'IS'); $isExtra = nfce_edit_tax_extra($isRow); ?>
+            <div class="nfce-detail-section">
+              <h4>Imposto Seletivo (a partir de 2027)</h4>
+              <div class="nfce-tax-hint">Só para produtos sujeitos ao IS (bebidas alcoólicas e açucaradas, tabaco, veículos, bens minerais). Deixe o cClassTrib em branco para não gerar o grupo. O valor em branco é calculado: base × alíquota % + quantidade × R$/unidade.</div>
+              <div class="nfce-modal-grid">
+                <label>cClassTrib IS<input name="is_class[<?= $iid ?>]" value="<?= fiscal_h($isExtra['cClassTribIS'] ?? ($isRow['class_code'] ?? '')) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>CST IS<input name="is_cst[<?= $iid ?>]" value="<?= fiscal_h($isExtra['CSTIS'] ?? ($isRow['cst'] ?? '')) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>Base IS<input name="is_base[<?= $iid ?>]" value="<?= nfce_edit_fmt($isRow['base_calc'] ?? $isExtra['vBCIS'] ?? $taxBaseDefault, 2) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>% IS<input name="is_rate[<?= $iid ?>]" value="<?= nfce_edit_fmt($isExtra['pIS'] ?? ($isRow['rate'] ?? 0), 4) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>R$ por unidade (ad rem)<input name="is_rate_specific[<?= $iid ?>]" value="<?= nfce_edit_fmt($isExtra['pISEspec'] ?? 0, 4) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>Unidade IS<input name="is_unit[<?= $iid ?>]" value="<?= fiscal_h($isExtra['uTrib'] ?? '') ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>Quantidade IS<input name="is_qty[<?= $iid ?>]" value="<?= nfce_edit_fmt($isExtra['qTrib'] ?? ($it['quantity'] ?? 0), 4) ?>" <?= $locked ? 'disabled' : '' ?>></label>
+                <label>Valor IS<input name="is_amount[<?= $iid ?>]" value="<?= $isRow ? nfce_edit_fmt($isRow['amount'] ?? 0, 2) : '' ?>" <?= $locked ? 'disabled' : '' ?>></label>
               </div>
             </div>
 

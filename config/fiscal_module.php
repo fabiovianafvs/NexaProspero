@@ -6,6 +6,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
+// Imposto Seletivo e arredondamento oficial da Reforma Tributária (HALF_EVEN).
+require_once __DIR__ . '/fiscal_imposto_seletivo.php';
 
 if (!function_exists('fiscal_h')) {
   function fiscal_h($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
@@ -375,7 +377,8 @@ if (!function_exists('fiscal_profile_payload')) {
       'municipal_benefit_type','municipal_differentiated_rate','municipal_reduction_base_percent','municipal_benefit_number',
       'ibs_cbs_cst','ibs_cbs_classification_code','ibs_cbs_classification_name','ipi_rate','ipi_cst','icms_rate','icms_cst','icms_csosn','icms_st_rate',
       'pis_out_rate','pis_out_cst','cofins_out_rate','cofins_out_cst','cbs_rate','ibs_uf_rate','ibs_mun_rate','ibs_cbs_rate_mode',
-      'cfop_sale_state','cfop_sale_interstate','cfop_return_state','cfop_return_interstate','cfop_entry_state','cfop_entry_interstate'
+      'cfop_sale_state','cfop_sale_interstate','cfop_return_state','cfop_return_interstate','cfop_entry_state','cfop_entry_interstate',
+      'seletivo_cst','seletivo_class_code','seletivo_rate','seletivo_rate_specific','seletivo_unit'
     ];
     $out = [];
     foreach ($keys as $k) $out[$k] = $r[$k] ?? '';
@@ -396,7 +399,8 @@ if (!function_exists('fiscal_blank_product_tax')) {
       'icms_rate' => '0', 'icms_st_rate' => '0', 'icms_cst' => '00', 'icms_csosn' => '102', 'ipi_rate' => '0', 'ipi_cst' => '', 'freight_rate' => '0',
       'pis_rate' => '0', 'pis_cst' => '01', 'cofins_rate' => '0', 'cofins_cst' => '01', 'cbs_rate' => '0', 'ibs_uf_rate' => '0', 'ibs_mun_rate' => '0', 'ibs_cbs_rate_mode' => 'AUTO',
       'ibs_cbs_classification_code' => '', 'ibs_cbs_classification_name' => '', 'cfop_sale_state' => '5102', 'cfop_sale_interstate' => '6102', 'cfop_return_state' => '1202', 'cfop_return_interstate' => '2202', 'cfop_entry_state' => '1102', 'cfop_entry_interstate' => '2102',
-      'is_monofasico' => '0', 'fiscal_notes' => ''
+      'is_monofasico' => '0', 'fiscal_notes' => '',
+      'seletivo_cst' => '', 'seletivo_class_code' => '', 'seletivo_rate' => '0', 'seletivo_rate_specific' => '0', 'seletivo_unit' => ''
     ];
   }
 }
@@ -510,6 +514,10 @@ if (!function_exists('fiscal_save_product_tax_from_post')) {
       'is_monofasico' => isset($post['fiscal_is_monofasico']) ? 1 : 0,
       'fiscal_notes' => trim((string)($post['fiscal_notes'] ?? '')),
     ];
+    // Imposto Seletivo (Reforma Tributária, a partir de 2027): só grava depois da migração.
+    if (function_exists('fiscal_is_columns_ready') && fiscal_is_columns_ready($pdo, 'fiscal_product_tax')) {
+      $fields += fiscal_is_fields_from_post($post, 'fiscal_');
+    }
     $cols = array_keys($fields);
     $insertCols = array_merge(['company_id','product_id'], $cols);
     $placeholders = implode(',', array_fill(0, count($insertCols), '?'));
@@ -1702,23 +1710,30 @@ if (!function_exists('fiscal_ibs_cbs_resolve')) {
 
 if (!function_exists('fiscal_ibs_cbs_calculate')) {
   function fiscal_ibs_cbs_calculate(float $grossBase, array $resolved, array $excludedTaxes = []): array {
+    // Regra oficial (Calculadora RTC da Receita, ADR003): cada número publicado é
+    // arredondado uma única vez, HALF_EVEN — base 2 casas, alíquotas 4 casas, valor =
+    // arred2(base × alíquota publicada ÷ 100), conta exata; vIBS = vIBSUF + vIBSMun.
     $excluded = 0.0;
     foreach ($excludedTaxes as $value) $excluded += max(0.0, (float)$value);
-    $base = max(0.0, round($grossBase - $excluded, 2));
+    $base = max(0.0, fiscal_rtc_round($grossBase - $excluded, 2));
     $ibsRed = fiscal_ibs_cbs_clamp_percent($resolved['ibs_reduction_rate'] ?? 0);
     $cbsRed = fiscal_ibs_cbs_clamp_percent($resolved['cbs_reduction_rate'] ?? 0);
-    $ibsUfStandard=max(0.0,(float)($resolved['ibs_uf_rate'] ?? 0));
-    $ibsMunStandard=max(0.0,(float)($resolved['ibs_mun_rate'] ?? 0));
-    $cbsStandard=max(0.0,(float)($resolved['cbs_rate'] ?? 0));
-    $ibsUfEffective=round($ibsUfStandard*(1-$ibsRed/100),4);
-    $ibsMunEffective=round($ibsMunStandard*(1-$ibsRed/100),4);
-    $cbsEffective=round($cbsStandard*(1-$cbsRed/100),4);
-    $ibsUfTribOp=round($base*$ibsUfStandard/100,2);
-    $ibsMunTribOp=round($base*$ibsMunStandard/100,2);
-    $cbsTribOp=round($base*$cbsStandard/100,2);
-    $ibsUfAmount=round($base*$ibsUfEffective/100,2);
-    $ibsMunAmount=round($base*$ibsMunEffective/100,2);
-    $cbsAmount=round($base*$cbsEffective/100,2);
+    $ibsUfStandard=fiscal_rtc_round(max(0.0,(float)($resolved['ibs_uf_rate'] ?? 0)),4);
+    $ibsMunStandard=fiscal_rtc_round(max(0.0,(float)($resolved['ibs_mun_rate'] ?? 0)),4);
+    $cbsStandard=fiscal_rtc_round(max(0.0,(float)($resolved['cbs_rate'] ?? 0)),4);
+    $effective = static function (float $standard, float $reduction): float {
+      if ($reduction <= 0) return $standard;
+      return fiscal_rtc_div_half_even(fiscal_rtc_to_int($standard, 4) * fiscal_rtc_to_int(100 - $reduction, 4), 1000000) / 10000;
+    };
+    $ibsUfEffective=$effective($ibsUfStandard,$ibsRed);
+    $ibsMunEffective=$effective($ibsMunStandard,$ibsRed);
+    $cbsEffective=$effective($cbsStandard,$cbsRed);
+    $ibsUfTribOp=fiscal_rtc_percent_of($base,$ibsUfStandard);
+    $ibsMunTribOp=fiscal_rtc_percent_of($base,$ibsMunStandard);
+    $cbsTribOp=fiscal_rtc_percent_of($base,$cbsStandard);
+    $ibsUfAmount=fiscal_rtc_percent_of($base,$ibsUfEffective);
+    $ibsMunAmount=fiscal_rtc_percent_of($base,$ibsMunEffective);
+    $cbsAmount=fiscal_rtc_percent_of($base,$cbsEffective);
     return [
       'base'=>$base,'excluded_total'=>round($excluded,2),
       'ibs_uf_rate'=>$ibsUfStandard,'ibs_uf_effective_rate'=>$ibsUfEffective,'ibs_uf_trib_op'=>$ibsUfTribOp,'ibs_uf_amount'=>$ibsUfAmount,
@@ -2511,7 +2526,7 @@ if (!function_exists('fiscal_xml_parse_file')) {
           'cofins_base' => fiscal_xml_money($text($cofins, 'vBC')),
           'cofins_rate' => fiscal_xml_money($text($cofins, 'pCOFINS')),
           'cofins_amount' => fiscal_xml_money($text($cofins, 'vCOFINS')),
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ] + (function_exists('fiscal_is_from_xml_block') ? fiscal_is_from_xml_block($imposto) : []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
       ];
     }
 
@@ -4210,10 +4225,12 @@ if (!function_exists('fiscal_report_entry_xml_totals')) {
   function fiscal_report_entry_xml_totals(array $entry): array {
     $raw = (string)($entry['xml_content'] ?? '');
     if ($raw === '') {
-      return ['product'=>0.0,'invoice'=>0.0,'ipi'=>0.0,'icms_st_base'=>0.0,'icms_st_value'=>0.0,'fcp_st_value'=>0.0,'freight'=>0.0,'insurance'=>0.0,'other'=>0.0,'discount'=>0.0,'ibs_uf_value'=>0.0,'ibs_mun_value'=>0.0,'cbs_value'=>0.0];
+      return ['product'=>0.0,'invoice'=>0.0,'ipi'=>0.0,'icms_st_base'=>0.0,'icms_st_value'=>0.0,'fcp_st_value'=>0.0,'freight'=>0.0,'insurance'=>0.0,'other'=>0.0,'discount'=>0.0,'ibs_uf_value'=>0.0,'ibs_mun_value'=>0.0,'cbs_value'=>0.0,'is_value'=>0.0];
     }
     $total = '';
     $ibsCbsTotal = '';
+    $isTotal = '';
+    if (preg_match('/<(?:[A-Za-z0-9_]+:)?ISTot\b[^>]*>(.*?)<\/(?:[A-Za-z0-9_]+:)?ISTot>/is', $raw, $m)) $isTotal = (string)($m[1] ?? '');
     if (preg_match('/<(?:[A-Za-z0-9_]+:)?ICMSTot\b[^>]*>(.*?)<\/(?:[A-Za-z0-9_]+:)?ICMSTot>/is', $raw, $m)) $total = (string)($m[1] ?? '');
     if (preg_match('/<(?:[A-Za-z0-9_]+:)?IBSCBSTot\b[^>]*>(.*?)<\/(?:[A-Za-z0-9_]+:)?IBSCBSTot>/is', $raw, $m)) $ibsCbsTotal = (string)($m[1] ?? '');
     return [
@@ -4230,6 +4247,7 @@ if (!function_exists('fiscal_report_entry_xml_totals')) {
       'ibs_uf_value' => fiscal_report_xml_money_tag($ibsCbsTotal, 'vIBSUF'),
       'ibs_mun_value' => fiscal_report_xml_money_tag($ibsCbsTotal, 'vIBSMun'),
       'cbs_value' => fiscal_report_xml_money_tag($ibsCbsTotal, 'vCBS'),
+      'is_value' => fiscal_report_xml_money_tag($isTotal, 'vIS'),
     ];
   }
 }

@@ -272,6 +272,9 @@ if (!function_exists('nexa_bulk_tax_current_to_post')) {
       'cfop_sale_state'=>'fiscal_cfop_sale_state','cfop_sale_interstate'=>'fiscal_cfop_sale_interstate','cfop_return_state'=>'fiscal_cfop_return_state',
       'cfop_return_interstate'=>'fiscal_cfop_return_interstate','cfop_entry_state'=>'fiscal_cfop_entry_state','cfop_entry_interstate'=>'fiscal_cfop_entry_interstate',
       'fiscal_notes'=>'fiscal_notes',
+      // Imposto Seletivo: preservado ao trocar NCM/CEST em massa.
+      'seletivo_cst'=>'fiscal_seletivo_cst','seletivo_class_code'=>'fiscal_seletivo_class_code','seletivo_rate'=>'fiscal_seletivo_rate',
+      'seletivo_rate_specific'=>'fiscal_seletivo_rate_specific','seletivo_unit'=>'fiscal_seletivo_unit',
     ];
     $post = ['fiscal_item_type' => $isService ? 'SERVICE' : 'PRODUCT'];
     foreach ($map as $src => $dst) $post[$dst] = $tax[$src] ?? '';
@@ -302,6 +305,8 @@ if (!function_exists('nexa_bulk_tax_apply_profile')) {
       'cbs_rate'=>'fiscal_cbs_rate','ibs_uf_rate'=>'fiscal_ibs_uf_rate','ibs_mun_rate'=>'fiscal_ibs_mun_rate','ibs_cbs_rate_mode'=>'fiscal_ibs_cbs_rate_mode',
       'cfop_sale_state'=>'fiscal_cfop_sale_state','cfop_sale_interstate'=>'fiscal_cfop_sale_interstate','cfop_return_state'=>'fiscal_cfop_return_state',
       'cfop_return_interstate'=>'fiscal_cfop_return_interstate','cfop_entry_state'=>'fiscal_cfop_entry_state','cfop_entry_interstate'=>'fiscal_cfop_entry_interstate',
+      'seletivo_cst'=>'fiscal_seletivo_cst','seletivo_class_code'=>'fiscal_seletivo_class_code','seletivo_rate'=>'fiscal_seletivo_rate',
+      'seletivo_rate_specific'=>'fiscal_seletivo_rate_specific','seletivo_unit'=>'fiscal_seletivo_unit',
     ];
     foreach ($map as $src => $dst) $post[$dst] = $profile[$src] ?? '';
     $post['fiscal_tax_profile_id'] = (int)($profile['id'] ?? 0);
