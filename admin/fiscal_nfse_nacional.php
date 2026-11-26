@@ -262,6 +262,17 @@ if ($err !== '') echo '<div class="msg err">' . fiscal_h($err) . '</div>';
 
       <?php if (!empty($existingDocument['api_error_message'])): ?>
         <div class="msg err"><b><?= fiscal_h((string)($existingDocument['api_error_code'] ?? 'Retorno')) ?>:</b> <?= fiscal_h((string)$existingDocument['api_error_message']) ?></div>
+        <?php
+          // E0160: situação no Simples Nacional da DPS (vinda do CRT) diferente do cadastro da Receita.
+          $nfseErrText = (string)($existingDocument['api_error_code'] ?? '') . ' ' . (string)($existingDocument['api_error_message'] ?? '');
+          if (stripos($nfseErrText, 'E0160') !== false):
+            $e0160Crt = '';
+            try { $e0160Cfg = fiscal_company_config($pdo, (int)$cid); $e0160Crt = preg_replace('/\D+/', '', (string)($e0160Cfg['crt'] ?? '')) ?? ''; } catch (Throwable $e) { $e0160Crt = ''; }
+            $e0160Map = ['1' => ['1 - Simples Nacional', 'ME/EPP optante do Simples'], '2' => ['2 - Simples Nacional (excesso de sublimite)', 'ME/EPP optante do Simples'], '3' => ['3 - Regime Normal', 'Não optante do Simples'], '4' => ['4 - MEI', 'MEI (SIMEI)']];
+            [$e0160CrtLabel, $e0160Sent] = $e0160Map[$e0160Crt] ?? ['não informado', 'Não optante do Simples'];
+        ?>
+          <div class="msg info"><b>Como resolver o E0160:</b> o Nexa informa a situação no Simples Nacional pelo <b>Código de Regime Tributário (CRT)</b> das Configurações fiscais. Hoje o CRT é <b><?= fiscal_h($e0160CrtLabel) ?></b>, então a DPS foi enviada como <b><?= fiscal_h($e0160Sent) ?></b>, e a Receita tem outra situação para este CNPJ no mês de competência da nota. Consulte o CNPJ em <a href="https://www8.receita.fazenda.gov.br/SimplesNacional/aplicacoes.aspx?id=21" target="_blank" rel="noopener">Consulta Optantes do Simples Nacional</a> e ajuste o CRT: <b>MEI</b> (SIMEI = Sim) → CRT 4; <b>Simples</b> (ME/EPP, SIMEI = Não) → CRT 1; <b>não optante</b> ou excluído → CRT 3. Depois clique em <b>Regerar com cadastro atual e retransmitir a mesma DPS</b>.</div>
+        <?php endif; ?>
       <?php endif; ?>
 
       <?php if ($ambiguous): ?>
