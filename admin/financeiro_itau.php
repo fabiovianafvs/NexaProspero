@@ -40,7 +40,7 @@ try{
     if($itauCrossContext){
       $csrf=trim((string)($_POST['mc_csrf']??''));
       if(!function_exists('multi_company_context_csrf_valid') || !multi_company_context_csrf_valid($csrf)) throw new RuntimeException('Sessão Multiempresa expirada ou inválida. Atualize a página e tente novamente.');
-      $crossAllowed=['save_environment','save','enroll_certificate','test_token','prepare_webhook','register_webhook','consult_webhook','save_bank_fee_chart','consult_francesa','consult_movements','consult_movements_summary'];
+      $crossAllowed=['save_environment','save','enroll_certificate','test_token','prepare_webhook','register_webhook','consult_webhook','save_bank_fee_chart','save_floating','consult_francesa','consult_movements','consult_movements_summary'];
       if($itauCrossSettlement){$crossAllowed[]='reprocess_webhook_logs';$crossAllowed[]='sync_liquidations';}
       if(!in_array($action,$crossAllowed,true)) throw new RuntimeException('V11.20: esta operação Itaú ainda não está homologada para execução pelo F11.');
       if(in_array($action,['reprocess_webhook_logs','sync_liquidations'],true)){
@@ -165,6 +165,10 @@ try{
       }
       $pdo->prepare('UPDATE finance_bank_billing_configs SET itau_bank_fee_chart_account_id=?,updated_at=NOW() WHERE company_id=? AND bank_account_id=?')->execute([$chartId?:null,$cid,$bankId]);
       $msg='Plano de contas para tarifas bancárias salvo.';
+    }elseif($action==='save_floating'){
+      $floatingDays=(int)($_POST['itau_floating_dias']??-1);
+      itau_credito_floating_salvar($pdo,$cid,$bankId,$floatingDays);
+      $msg='Prazo de crédito (floating) salvo: '.$floatingDays.' dia(s) útil(eis). Para acertar as baixas já feitas, sincronize de novo o período em Contas a Receber > Sincronizar liquidações.';
     }elseif($action==='sync_liquidations'){
       $cfg=billing_bank_config($pdo,$cid,$bankId);if($itauCrossContext)$cfg['_nexa_skip_schema_ensure']=1;$date=trim((string)($_POST['data_movimentacao']??''));
       $r=itau_webhook_sync_liquidations($pdo,$cfg,$date,[
@@ -325,6 +329,11 @@ if($err!==''):?><div class="msg err"><?=finance_h($err)?></div><?php endif;
  <form method="post" class="finance-form" style="margin-bottom:14px"><?php if($itauCrossContext):?><input type="hidden" name="mc_csrf" value="<?= finance_h($mcCsrf) ?>"><?php endif;?><input type="hidden" name="bank" value="<?=$bankId?>"><input type="hidden" name="action" value="save_bank_fee_chart">
   <div class="finance-form-grid three"><div class="span-2"><label>Plano de contas para tarifas bancárias</label><select name="itau_bank_fee_chart_account_id"><option value="">Selecione quando o Itaú descontar tarifa da liquidação</option><?php foreach($debitCharts as $x):?><option value="<?=(int)$x['id']?>" <?= (int)($cfg['itau_bank_fee_chart_account_id']??0)===(int)$x['id']?'selected':'' ?>><?=finance_h((string)$x['code'].' - '.(string)$x['name'])?></option><?php endforeach;?></select><div class="hint">Quando o retorno trouxer tarifa bancária, o Nexa baixa o valor integral do cliente, gera o crédito do recebimento e registra a tarifa em débito separado para que o saldo líquido do banco permaneça correto.</div></div></div>
   <div class="finance-form-actions"><button class="btn">Salvar plano de tarifa</button></div>
+ </form>
+ <?php $floatingAtual=itau_credito_floating($pdo,$cid,$bankId);$floatingSalvo=itau_credito_floating_configurado($pdo,$cid,$bankId);$floatingExemplo=date('Y-m-d');while(!itau_credito_dia_util($floatingExemplo))$floatingExemplo=date('Y-m-d',strtotime($floatingExemplo.' +1 day')); ?>
+ <form method="post" class="finance-form" style="margin-bottom:14px"><?php if($itauCrossContext):?><input type="hidden" name="mc_csrf" value="<?= finance_h($mcCsrf) ?>"><?php endif;?><input type="hidden" name="bank" value="<?=$bankId?>"><input type="hidden" name="action" value="save_floating">
+  <div class="finance-form-grid three"><div><label>Prazo de crédito dos boletos (floating)</label><select name="itau_floating_dias"><?php for($fd=0;$fd<=5;$fd++):?><option value="<?=$fd?>" <?=$fd===$floatingAtual?'selected':''?>><?=$fd===0?'D+0 (no mesmo dia)':'D+'.$fd.' ('.$fd.' dia'.($fd===1?'':'s').' út'.($fd===1?'il':'eis').')'?></option><?php endfor;?></select></div><div class="span-2"><div class="hint" style="margin-top:22px">A Francesinha do Itaú mostra a data em que o cliente <strong>pagou</strong> o boleto (código de barras); o valor entra no extrato depois do floating do seu contrato (padrão do Itaú: 2 dias úteis, sem sábados, domingos e feriados bancários). A baixa e o movimento financeiro usam a data de entrada no extrato. Ex.: pago em <?=finance_h(date('d/m/Y',strtotime($floatingExemplo)))?> → crédito em <?=finance_h(date('d/m/Y',strtotime(itau_credito_data($floatingExemplo,$floatingAtual))))?>.<?= $floatingSalvo?'':' <strong>Ainda não salvo: usando o padrão de 2 dias úteis.</strong>' ?> Pix pelo QR Code do BoleCode entra na hora (D+0).</div></div></div>
+  <div class="finance-form-actions"><button class="btn">Salvar prazo de crédito</button></div>
  </form>
  <form method="post" class="finance-form" style="margin-bottom:14px"><?php if($itauCrossContext):?><input type="hidden" name="mc_csrf" value="<?= finance_h($mcCsrf) ?>"><?php endif;?><input type="hidden" name="bank" value="<?=$bankId?>"><input type="hidden" name="action" value="consult_francesa">
   <div class="finance-form-grid three"><div><label>Mês de referência (MMYYYY)</label><input name="mes_referencia" inputmode="numeric" maxlength="6" value="<?=finance_h($concMonth)?>" placeholder="092026"></div></div>

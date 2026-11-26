@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/billing_module.php';
 require_once __DIR__ . '/finance_module.php';
+require_once __DIR__ . '/itau_credito.php';
 
 if (!function_exists('itau_webhook_base64url_encode')) {
     function itau_webhook_base64url_encode(string $value): string {
@@ -361,6 +362,17 @@ if (!function_exists('itau_webhook_align_settlement_dates')) {
     }
 }
 
+if (!function_exists('itau_webhook_credit_source_label')) {
+    function itau_webhook_credit_source_label(array $item): string {
+        $src=(string)($item['_nexa_credit_source']??'');$n=(int)($item['_nexa_floating_days']??0);
+        $fl=$n.' dia'.($n===1?'':'s').' út'.($n===1?'il':'eis').' de floating';
+        if($src==='FRANCESINHA')return ' (pagamento na Francesinha Itaú + '.$fl.')';
+        if($src==='FLOATING')return ' (data do pagamento + '.$fl.')';
+        if($src==='PIX')return ' (Pix pelo QR Code: crédito na hora)';
+        return '';
+    }
+}
+
 if (!function_exists('itau_webhook_auto_settle_charge')) {
     function itau_webhook_auto_settle_charge(PDO $pdo,array $cfg,int $chargeId,array $item): array {
         if (empty($cfg['_nexa_skip_schema_ensure'])) {
@@ -371,7 +383,20 @@ if (!function_exists('itau_webhook_auto_settle_charge')) {
             }
         }
         $companyId=(int)$cfg['company_id'];$bankId=(int)$cfg['bank_account_id'];
-        $payment=itau_webhook_payment_data($item);$paid=round((float)$payment['paid_amount'],2);$bankFee=round(max(0.0,(float)($payment['bank_fee_amount']??0)),2);$bankFeeDescription=trim((string)($payment['bank_fee_description']??''));
+        $payment=itau_webhook_payment_data($item);
+        // Webhook de boleto pago por código de barras chega no dia do pagamento, sem data de
+        // crédito: o valor só entra no extrato após o floating do contrato (dias úteis).
+        // Pix (BoleCode pago pelo QR Code) cai na hora e já vem com a data de crédito.
+        $sourceTag=(string)($item['_nexa_source']??'');
+        $liqType=(string)($payment['liquidation_type']??'');
+        $isPixLiquidation=$sourceTag==='API_PIX_RECEBIMENTOS'||stripos($liqType,'PIX')!==false||stripos($liqType,'QR')!==false;
+        if($sourceTag!=='API_BOLETOS_V3_MOVIMENTACOES'&&!$isPixLiquidation&&empty($payment['credit_date'])&&!empty($payment['payment_date'])){
+            $floatingDays=itau_credito_floating($pdo,$companyId,$bankId);
+            $computedCredit=itau_credito_data((string)$payment['payment_date'],$floatingDays);
+            $payment['credit_date']=$computedCredit;$payment['settlement_date']=$computedCredit;$payment['movement_date']=$computedCredit;
+            $item['_nexa_credit_source']='FLOATING';$item['_nexa_floating_days']=$floatingDays;
+        }
+        $paid=round((float)$payment['paid_amount'],2);$bankFee=round(max(0.0,(float)($payment['bank_fee_amount']??0)),2);$bankFeeDescription=trim((string)($payment['bank_fee_description']??''));
         if($paid<=0.0)return ['processed'=>false,'status'=>'SEM_VALOR_PAGO','message'=>'Notificação recebida sem valor pago maior que zero.'];
 
         $pdo->beginTransaction();
@@ -460,7 +485,7 @@ if (!function_exists('itau_webhook_auto_settle_charge')) {
                 .($credited>0?' · Crédito líquido R$ '.number_format($credited,2,',','.'):'')
                 .($bankFee>0?' · Tarifa bancária R$ '.number_format($bankFee,2,',','.'):'')
                 .' · Pagamento '.$paymentDate
-                .' · Crédito '.($creditDate ? $creditDate.((string)($item['_nexa_credit_source']??'')==='FRANCESINHA'?' (lançamento na Francesinha Itaú)':'') : 'não informado pelo banco (conferir extrato)').'.';
+                .' · Crédito '.($creditDate ? $creditDate.itau_webhook_credit_source_label($item) : 'não informado pelo banco (conferir extrato)').'.';
 
             $st=$pdo->prepare('INSERT INTO finance_settlements (company_id, origin_type, origin_id, settlement_date, payment_method, bank_account_id, amount, fine_amount, interest_amount, discount_amount, waived_fine_amount, waived_interest_amount, waiver_user_id, notes, movement_id) VALUES (?,\'RECEBER\',?,?,?,?,?,?,?,?,0,0,NULL,?,NULL)');
             $st->execute([$companyId,$receivableId,$settlementDate,$methodLabel,$bankId,$principal,$fine,$interest,$discount,$notes]);
@@ -578,7 +603,7 @@ if (!function_exists('itau_webhook_movement_diagnostic')) {
      * financeiros. O objetivo é permitir conciliar o agrupamento do extrato bancário
      * com cada liquidação individual devolvida pela API Itaú.
      */
-    function itau_webhook_movement_diagnostic(PDO $pdo, array $cfg, array $movement, string $queryDate = ''): array {
+    function itau_webhook_movement_diagnostic(PDO $pdo, array $cfg, array $movement, string $queryDate = '', ?int $floatingDays = null): array {
         $companyId=(int)($cfg['company_id']??0);$bankId=(int)($cfg['bank_account_id']??0);
         $nosso=trim((string)itau_webhook_pick($movement,['nosso_numero','numeroNossoNumero','numero_nosso_numero','nossoNumero']));
         $seu=trim((string)itau_webhook_pick($movement,['seu_numero','numeroSeuNumero','numero_seu_numero','seuNumero']));
@@ -586,7 +611,9 @@ if (!function_exists('itau_webhook_movement_diagnostic')) {
         $movementDate=itau_webhook_date(itau_webhook_pick($movement,['data_movimentacao','dataMovimentacao'])) ?: ($queryDate?:'');
         $bankPaymentDate=itau_webhook_date(itau_webhook_pick($movement,['dataPagamento','data_pagamento','dataInclusaoPagamento','data_liquidacao'])) ?: $movementDate;
         $explicitCreditDate=itau_webhook_date(itau_webhook_pick($movement,['dataCredito','data_credito','data_efetiva_credito','dataEfetivaCredito']));
-        $bankCreditDate=$explicitCreditDate?:($movementDate!==''?$movementDate:null);
+        if($floatingDays===null)$floatingDays=itau_credito_floating($pdo,$companyId,$bankId);
+        // A Francesinha traz a data do PAGAMENTO; o crédito no extrato vem após o floating.
+        $bankCreditDate=$explicitCreditDate?:($movementDate!==''?itau_credito_data($movementDate,$floatingDays):null);
         $title=abs(itau_webhook_money(itau_webhook_pick($movement,['valor_titulo','valorTitulo'])));
         $net=abs(itau_webhook_money(itau_webhook_pick($movement,['valor_liquido_lancado','valorLiquidoLancado','valor_creditado','valorCreditado'])));
         $fee=itau_webhook_movement_fee_data($movement);$feeAmount=round(max(0.0,(float)($fee['amount']??0)),2);
@@ -627,7 +654,7 @@ if (!function_exists('itau_webhook_movement_diagnostic')) {
 }
 
 if (!function_exists('itau_webhook_event_from_movement')) {
-    function itau_webhook_event_from_movement(array $movement, string $queryDate = ''): array {
+    function itau_webhook_event_from_movement(array $movement, string $queryDate = '', int $floatingDays = 0): array {
         $net=itau_webhook_money($movement['valor_liquido_lancado']??0);
         $fee=itau_webhook_movement_fee_data($movement);
         $gross=round($net+(float)$fee['amount'],2);
@@ -636,13 +663,14 @@ if (!function_exists('itau_webhook_event_from_movement')) {
         $movementDate=itau_webhook_date(itau_webhook_pick($movement,['data_movimentacao','dataMovimentacao']))?:(itau_webhook_date($queryDate)?:date('Y-m-d'));
         $paymentDate=itau_webhook_date(itau_webhook_pick($movement,['dataPagamento','data_pagamento','dataInclusaoPagamento','data_liquidacao']))?:$movementDate;
         $explicitCredit=itau_webhook_date(itau_webhook_pick($movement,['dataCredito','data_credito','data_efetiva_credito','dataEfetivaCredito']));
-        // A Francesinha do dia D lista as liquidações cujo valor líquido foi LANÇADO
-        // na conta no dia D (valor_liquido_lancado). É a data que aparece no extrato,
-        // e não a data em que o pagador pagou (que costuma ser 1 dia útil antes).
-        $creditDate=$explicitCredit?:$movementDate;
+        // A Francesinha do dia D lista os boletos PAGOS no dia D (Itaú: "a francesinha
+        // mostra a data do pagamento; a data do crédito na conta é essa data mais o prazo
+        // do floating"). Crédito = D + floating do contrato, em dias úteis bancários.
+        $creditDate=$explicitCredit?:itau_credito_data($movementDate,$floatingDays);
         $event=['numeroNossoNumero'=>(string)($movement['nosso_numero']??''),'dacTitulo'=>(string)($movement['dac_titulo']??''),'tipoCobranca'=>(string)($movement['tipo_cobranca']??''),'nomePagador'=>(string)($movement['pagador']??''),'valorTitulo'=>$title,'valorPagoTotalCobranca'=>$gross,'valorCreditado'=>$net,'dataInclusaoPagamento'=>$paymentDate,'dataNotificacao'=>$movementDate,'bankFeeAmount'=>(float)$fee['amount'],'bankFeeDescription'=>(string)$fee['description'],'tipoLiquidacao'=>'CONSULTA_MOVIMENTACOES','_nexa_source'=>'API_BOLETOS_V3_MOVIMENTACOES','_itau_movement'=>$movement];
         $event['dataCredito']=$creditDate;
         $event['_nexa_credit_source']=$explicitCredit!==null?'ITAU':'FRANCESINHA';
+        $event['_nexa_floating_days']=$floatingDays;
         return $event;
     }
 }
@@ -765,10 +793,11 @@ if (!function_exists('itau_webhook_sync_liquidations')) {
             if($lastError instanceof Throwable)throw $lastError;
         }
 
+        $floatingDays=isset($cfg['_nexa_floating_days'])?(int)$cfg['_nexa_floating_days']:itau_credito_floating($pdo,(int)$cfg['company_id'],(int)$cfg['bank_account_id']);
         $rows=$allRows;$found=count($rows);$matched=0;$processed=0;$already=0;$pending=0;$errors=0;$feesFound=0;$feeAmount=0.0;$grossAmount=0.0;$netAmount=0.0;$details=[];$diagnosticRows=[];$companyId=(int)$cfg['company_id'];$bankId=(int)$cfg['bank_account_id'];
         foreach($rows as $movement){
             if(!is_array($movement))continue;
-            $diag=itau_webhook_movement_diagnostic($pdo,$cfg,$movement,$date);$diagnosticRows[]=$diag;
+            $diag=itau_webhook_movement_diagnostic($pdo,$cfg,$movement,$date,$floatingDays);$diagnosticRows[]=$diag;
             $grossAmount=round($grossAmount+(float)($diag['gross_amount']??0),2);$netAmount=round($netAmount+(float)($diag['net_amount']??0),2);
             $movementFee=round(max(0.0,(float)($diag['bank_fee_amount']??0)),2);if($movementFee>0.009){$feesFound++;$feeAmount=round($feeAmount+$movementFee,2);}
             $nosso=trim((string)($diag['nosso_numero']??''));
@@ -781,7 +810,7 @@ if (!function_exists('itau_webhook_sync_liquidations')) {
                 $details[]=['nosso_numero'=>$nosso,'status'=>(string)($diag['local_status']??'LOCALIZADO'),'message'=>'Consulta diagnóstica: nenhuma baixa ou movimento foi gerado.','bank_fee_amount'=>$movementFee];
                 continue;
             }
-            $event=itau_webhook_event_from_movement($movement,$date);
+            $event=itau_webhook_event_from_movement($movement,$date,$floatingDays);
             $raw=json_encode(['boletos'=>[$event]],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?:'{}';
             try{
                 $stored=itau_webhook_store_event($pdo,$cfg,$event,$raw);
@@ -808,7 +837,8 @@ if (!function_exists('itau_webhook_sync_liquidations_period')) {
         if($days>31)throw new RuntimeException('O período máximo por sincronização é de 31 dias. Divida a consulta em períodos menores.');
         if($end>new DateTimeImmutable('today'))throw new RuntimeException('A data final da liquidação não pode estar no futuro.');
         $queryOnly=!empty($filters['_nexa_query_only']);
-        $totals=['days'=>$days,'no_movement_days'=>0,'found'=>0,'matched'=>0,'processed'=>0,'already'=>0,'pending'=>0,'errors'=>0,'fees_found'=>0,'fee_amount'=>0.0,'gross_amount'=>0.0,'net_amount'=>0.0,'details'=>[],'diagnostic_rows'=>[],'day_summaries'=>[],'query_only'=>$queryOnly?1:0];
+        $cfg['_nexa_floating_days']=itau_credito_floating($pdo,(int)($cfg['company_id']??0),(int)($cfg['bank_account_id']??0));
+        $totals=['floating_days'=>(int)$cfg['_nexa_floating_days'],'pix_candidates'=>0,'pix_found'=>0,'pix_amount'=>0.0,'pix_method'=>'','days'=>$days,'no_movement_days'=>0,'found'=>0,'matched'=>0,'processed'=>0,'already'=>0,'pending'=>0,'errors'=>0,'fees_found'=>0,'fee_amount'=>0.0,'gross_amount'=>0.0,'net_amount'=>0.0,'details'=>[],'diagnostic_rows'=>[],'day_summaries'=>[],'query_only'=>$queryOnly?1:0];
         for($cursor=$start;$cursor<=$end;$cursor=$cursor->modify('+1 day')){
             $date=$cursor->format('Y-m-d');
             try{$day=itau_webhook_sync_liquidations($pdo,$cfg,$date,$filters);}catch(Throwable $e){throw new RuntimeException('Falha ao consultar liquidações de '.$cursor->format('d/m/Y').': '.$e->getMessage(),0,$e);}
@@ -819,6 +849,14 @@ if (!function_exists('itau_webhook_sync_liquidations_period')) {
             foreach((array)($day['diagnostic_rows']??[]) as $diag){if(!is_array($diag))continue;if(empty($diag['date']))$diag['date']=$date;$totals['diagnostic_rows'][]=$diag;}
             $totals['day_summaries'][]=['date'=>$date,'found'=>(int)($day['found']??0),'matched'=>(int)($day['matched']??0),'pending'=>(int)($day['pending']??0),'gross_amount'=>(float)($day['gross_amount']??0),'net_amount'=>(float)($day['net_amount']??0),'fees_found'=>(int)($day['fees_found']??0),'fee_amount'=>(float)($day['fee_amount']??0),'no_movement'=>!empty($day['no_movement'])?1:0];
         }
+        // BoleCode pago pelo QR Code (Pix): não aparece nas liquidações da Francesinha.
+        try{$pix=itau_pix_sync_bolecode($pdo,$cfg,$start->format('Y-m-d'),$end->format('Y-m-d'),$queryOnly);}
+        catch(Throwable $e){$pix=['candidates'=>0,'found'=>0,'processed'=>0,'already'=>0,'pending'=>0,'errors'=>1,'amount'=>0.0,'method'=>'','diagnostic_rows'=>[],'details'=>[['nosso_numero'=>'','status'=>'ERRO','message'=>'Falha ao consultar os Pix dos BoleCodes: '.$e->getMessage()]]];}
+        $totals['pix_candidates']=(int)($pix['candidates']??0);$totals['pix_found']=(int)($pix['found']??0);$totals['pix_amount']=(float)($pix['amount']??0);$totals['pix_method']=(string)($pix['method']??'');
+        foreach(['processed','already','pending','errors'] as $key)$totals[$key]+=(int)($pix[$key]??0);
+        $totals['found']+=(int)($pix['found']??0);$totals['matched']+=(int)($pix['found']??0);
+        foreach((array)($pix['details']??[]) as $detail){if(is_array($detail)){$detail['date']=$detail['date']??'Pix';$totals['details'][]=$detail;}}
+        foreach((array)($pix['diagnostic_rows']??[]) as $diag){if(is_array($diag))$totals['diagnostic_rows'][]=$diag;}
         return $totals;
     }
 }
