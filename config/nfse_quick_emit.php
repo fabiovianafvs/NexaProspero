@@ -24,7 +24,35 @@ if (!function_exists('nfse_quick_authorize_order')) {
     // automaticamente ao clicar em emissão direta. Usar recuperação explícita.
     if ($existing) {
       $currentStatus = strtoupper(trim((string)(($existing['nfse_status'] ?? '') ?: ($existing['status'] ?? ''))));
+      $docStatus = strtoupper(trim((string)($existing['status'] ?? '')));
       $hasSigned = trim((string)($existing['signed_dps_xml'] ?? '')) !== '';
+
+      // DPS REJEITADA (a prefeitura/Sistema Nacional respondeu e recusou — não é
+      // resultado incerto): "Reemitir NFS-e" faz o mesmo que o botão "Regerar com
+      // cadastro atual e retransmitir a mesma DPS": relê o cadastro fiscal atual,
+      // reconstrói e reassina a MESMA DPS (mesmo número) e transmite.
+      if ($currentStatus === 'REJEITADA' && in_array($docStatus, ['REJEITADA', ''], true)) {
+        $cfgRetry = fiscal_company_config($pdo, $companyId);
+        $envRetry = strtoupper(trim((string)($cfgRetry['environment'] ?? 'HOMOLOGACAO')));
+        $docEnv = strtoupper(trim((string)($existing['environment'] ?? '')));
+        if ($docEnv !== '' && $docEnv !== $envRetry) {
+          throw new RuntimeException('A DPS rejeitada (documento #' . (int)$existing['id'] . ') foi criada em ' . $docEnv . ', mas a empresa está agora em ' . $envRetry . '. Não é possível reemitir automaticamente: abra o documento.');
+        }
+        $providerRetry = nfse_provider_document_code($pdo, $companyId, (int)$existing['id']);
+        if ($providerRetry === 'PRONIM' && $envRetry === 'PRODUCAO' && !defined('NEXA_NFSE_PRONIM_PRODUCTION_CONFIRMED')) {
+          define('NEXA_NFSE_PRONIM_PRODUCTION_CONFIRMED', true);
+        }
+        if (function_exists('nexa_progress')) nexa_progress('Regerando a DPS com o cadastro atual e transmitindo novamente...');
+        $result = nfse_provider_authorize_document($pdo, $companyId, (int)$existing['id']);
+        if (!is_array($result)) throw new RuntimeException('O provedor da NFS-e não retornou uma resposta válida.');
+        if (empty($result['ok'])) {
+          $message = trim((string)($result['message'] ?? 'A NFS-e não foi autorizada.'));
+          if (!empty($result['ambiguous'])) $message .= ' Não gere outra DPS: utilize a recuperação/consulta da NFS-e.';
+          throw new RuntimeException($message);
+        }
+        return $result;
+      }
+
       if ($hasSigned || !in_array($currentStatus, ['PREPARADA', ''], true)) {
         throw new RuntimeException('Já existe DPS vinculada a este pedido (documento #' . (int)$existing['id'] . ', situação ' . $currentStatus . '). Não retransmita: abra o documento e utilize Recuperar/Consultar para verificar a prefeitura.');
       }

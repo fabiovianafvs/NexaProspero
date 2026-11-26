@@ -51,6 +51,7 @@ Sistema SaaS de gestão para varejo (PDV, pedidos, comandas, estoque, financeiro
 - Regras já tratadas no emissor Nacional (`config/nfse_emitter.php`): IM do prestador opcional (E0120); sem `pAliq` para ME/EPP com ISS pelo Simples e sem retenção (E0625); `pTotTribSN` no lugar de `indTotTrib` para ME/EPP (E0712), com o % guardado em `app_config` chave `nfse_nacional`.
 - DANFSe do Nexa (`config/nfse_danfse.php`, `config/nfse_document_pdf.php`): BC ISSQN, alíquota e ISSQN apurado vêm só do XML autorizado (`vBC`/`pAliqAplic`/`vISSQN`); sem eles (ME/EPP com ISS no Simples, sem retenção) mostram "-", como o DANFSe oficial. `total_iss` interno só é usado se não houver XML.
 - DPS rejeitada no Pronim e nunca autorizada é reenviada pelo Nacional com a mesma série/número (`nfse_provider_adopt_company_provider`).
+- "Emitir/Reemitir NFS-e" (`emit_quick` → `nfse_quick_authorize_order`, também usado no PDV/comandas): DPS REJEITADA é regerada com o cadastro atual e retransmitida com o mesmo número (`nfse_provider_authorize_document`, igual ao botão "Regerar com cadastro atual"); ambiente diferente bloqueia; DPS assinada/transmitindo/erro de comunicação continua bloqueada (usar Recuperar/Consultar). E0160 = situação no Simples (opSimpNac, vinda do CRT) diferente do cadastro da Receita: a tela orienta ajustar o CRT.
 
 ## O que NÃO está no repositório (ver `.gitignore`)
 
