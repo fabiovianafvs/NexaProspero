@@ -647,7 +647,7 @@ if ($err): ?><div class="msg err"><?= fiscal_h($err) ?></div><?php endif; ?>
       </div></div>
       <div class="fiscal-section"><h3>Ambiente e regime</h3><div class="fiscal-form-grid">
         <div><label>Ambiente</label><select name="environment"><option value="HOMOLOGACAO" <?= (($config['environment'] ?? '')==='HOMOLOGACAO')?'selected':'' ?>>Homologação</option><option value="PRODUCAO" <?= (($config['environment'] ?? '')==='PRODUCAO')?'selected':'' ?>>Produção</option></select></div>
-        <div><label>CRT</label><select id="fiscalCrt" name="crt"><option value="">Selecione</option><?php foreach(['1'=>'1 - Simples Nacional','2'=>'2 - Simples Nacional — excesso de sublimite','3'=>'3 - Regime Normal','4'=>'4 - Simples Nacional — MEI'] as $k=>$v): ?><option value="<?= $k ?>" <?= ((string)($config['crt'] ?? '')===$k)?'selected':'' ?>><?= fiscal_h($v) ?></option><?php endforeach; ?></select></div>
+        <div><label>CRT</label><select id="fiscalCrt" name="crt"><option value="">Selecione</option><?php foreach(['1'=>'1 - Simples Nacional','2'=>'2 - Simples Nacional — excesso de sublimite','3'=>'3 - Regime Normal','4'=>'4 - Simples Nacional — MEI'] as $k=>$v): ?><option value="<?= $k ?>" <?= ((string)($config['crt'] ?? '')===(string)$k)?'selected':'' ?>><?= fiscal_h($v) ?></option><?php endforeach; ?></select></div>
         <div><label>Nome do regime</label><input id="fiscalRegimeName" name="regime_name" value="<?= fiscal_h($config['regime_name'] ?? '') ?>" placeholder="Ex.: Simples Nacional"></div>
         <div class="span-3 fiscal-muted" style="font-weight:700;line-height:1.5">Esses dados alimentam os Registros 10 e 11 do Sintegra e passam a ser a fonte principal do CNPJ/IE/UF usados nas rotinas fiscais da empresa.</div>
       </div></div>
