@@ -800,7 +800,7 @@ if ($showTransfer):
   const fields = [
     ['nexaMovementPerson', {title:'Buscar pessoa', placeholder:'Selecione a pessoa', registerUrl:'financeiro_pessoas.php?new=1', registerLabel:'+ Cadastrar'}],
     ['nexaMovementBank', {title:'Buscar conta/caixa', placeholder:'Selecione a conta ou caixa', registerUrl:'financeiro_caixas_bancos.php?new=1', registerLabel:'+ Cadastrar'}],
-    ['nexaMovementChart', {title:'Buscar plano de contas', placeholder:'Selecione o plano de contas', registerUrl:'financeiro_plano_contas.php?new=1', registerLabel:'+ Cadastrar'}],
+    ['nexaMovementChart', {title:'Buscar plano de contas', placeholder:'Selecione o plano de contas', registerUrl:'financeiro_plano_contas.php?new=1', registerLabel:'+ Cadastrar', listAllOnOpen:true}],
     ['nexaMovementCost', {title:'Buscar centro de custo', placeholder:'Selecione o centro de custo', registerUrl:'financeiro_centros_custo.php?new=1', registerLabel:'+ Cadastrar'}]
   ];
   fields.forEach(([id,opts])=>{

@@ -58,9 +58,9 @@ if (!function_exists('nexa_buscar_f8_assets')) {
       }));}
       function setActive(index){const buttons=results.querySelectorAll('[data-nexa-f8-index]');if(!buttons.length){active=-1;return;}active=Math.max(0,Math.min(index,buttons.length-1));buttons.forEach((b,i)=>b.classList.toggle('is-active',i===active));buttons[active].scrollIntoView({block:'nearest'});}
       function render(){
-        if(!current)return;const q=norm(query.value);lastQuery=q;const all=optionsFor(current);filtered=q?all.filter(item=>item.hay.includes(q)):[];active=filtered.length?0:-1;
-        counter.textContent=q?(filtered.length+' registro(s) encontrado(s)'):' ';results.innerHTML='';
-        if(!q){results.innerHTML='<div class="nexa-f8-empty">Digite um termo e pressione Enter para pesquisar.</div>';return;}
+        if(!current)return;const q=norm(query.value);lastQuery=q;const all=optionsFor(current);const listAll=!q&&current.options.listAllOnOpen===true;filtered=q?all.filter(item=>item.hay.includes(q)):(listAll?all:[]);active=filtered.length?0:-1;
+        counter.textContent=(q||listAll)?(filtered.length+' registro(s) encontrado(s)'):' ';results.innerHTML='';
+        if(!q&&!listAll){results.innerHTML='<div class="nexa-f8-empty">Digite um termo e pressione Enter para pesquisar.</div>';return;}
         if(!filtered.length){results.innerHTML='<div class="nexa-f8-empty">Nenhum registro encontrado.</div>';return;}
         filtered.forEach((item,index)=>{const b=document.createElement('button');b.type='button';b.className='nexa-f8-result'+(index===0?' is-active':'');b.dataset.nexaF8Index=String(index);const left=document.createElement('span'),strong=document.createElement('strong'),small=document.createElement('small'),code=document.createElement('span');strong.textContent=item.label;left.appendChild(strong);const details=[item.meta,item.barcode?('Código de barras: '+item.barcode):''].filter(Boolean).join(' · ');if(details){small.textContent=details;left.appendChild(small);}code.className='nexa-f8-result-code';code.textContent=item.code?('#'+item.code):'';b.appendChild(left);b.appendChild(code);b.addEventListener('mouseenter',()=>setActive(index));b.addEventListener('click',()=>choose(index));results.appendChild(b);});
       }
@@ -68,6 +68,7 @@ if (!function_exists('nexa_buscar_f8_assets')) {
       function open(instance){
         if(!instance||!visible(instance.wrap))return;current=instance;title.textContent=instance.options.title||'Pesquisar';query.value='';lastQuery='';filtered=[];active=-1;results.innerHTML='<div class="nexa-f8-empty">Digite um termo e pressione Enter para pesquisar.</div>';counter.textContent=' ';
         const url=instance.options.registerUrl||'';if(url){register.hidden=false;register.href=contextualUrl(url);register.textContent=instance.options.registerLabel||'+ Cadastrar';}else{register.hidden=true;register.removeAttribute('href');}
+        if(instance.options.listAllOnOpen===true)render();
         backdrop.hidden=false;backdrop.setAttribute('aria-hidden','false');requestAnimationFrame(()=>{query.focus();query.select();});
       }
       function close(){backdrop.hidden=true;backdrop.setAttribute('aria-hidden','true');if(current&&current.display)current.display.focus();current=null;filtered=[];active=-1;}
