@@ -373,6 +373,9 @@ try {
       $taxaEntrega = max(0, $taxaEntrega);
       if ($nome === '') throw new RuntimeException('Informe o nome do cliente.');
       if (!in_array($status, ['aberto','confirmado','em_producao','saiu_entrega','finalizado','cancelado'], true)) $status = 'aberto';
+      if ($oldStatus === 'cancelado' && $status !== 'cancelado') {
+        throw new RuntimeException('Pedido cancelado não pode voltar para outra situação: o estoque e o financeiro já foram estornados. Lance um novo pedido.');
+      }
 
       $itemIds = $_POST['item_id'] ?? [];
       $produtoIds = $_POST['produto_id'] ?? [];

@@ -305,6 +305,12 @@ try {
       ? 'Pedido cancelado com sucesso. A NFS-e Pronim/GOVBR vinculada foi cancelada fiscalmente antes do estorno do pedido.'
       : 'Pedido cancelado com sucesso.';
   } else {
+    // Pedido cancelado não volta para outra situação: o estoque e o financeiro já foram
+    // estornados e a troca de status não os refaz (o pedido ficaria "Finalizado" sem
+    // baixa de estoque nem recebimento).
+    if (strtolower(trim($statusAnterior)) === 'cancelado') {
+      throw new RuntimeException('Pedido cancelado não pode voltar para outra situação: o estoque e o financeiro já foram estornados. Lance um novo pedido.');
+    }
     $pdo->beginTransaction();
     $st = $pdo->prepare('UPDATE pedidos SET status = ? WHERE id = ? AND company_id = ?');
     $st->execute([$status, $id, COMPANY_ID]);

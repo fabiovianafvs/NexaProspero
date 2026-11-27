@@ -404,7 +404,11 @@ if (!function_exists('nexa_cancel_order')) {
       $stEffect = $pdo->prepare('SELECT * FROM order_cancellation_effects WHERE company_id=? AND order_id=? FOR UPDATE');
       $stEffect->execute([$companyId, $orderId]);
       $effect = $stEffect->fetch(PDO::FETCH_ASSOC) ?: null;
-      if ($effect && strtoupper((string)($effect['status'] ?? '')) === 'COMPLETED') {
+      // Já processado e o pedido continua cancelado: nada a fazer. Se o pedido voltou para
+      // outra situação depois do cancelamento (troca de status), refaz o processo: os
+      // estornos são idempotentes (só estornam o que ainda não foi estornado) e o pedido
+      // volta a ficar Cancelado.
+      if ($effect && strtoupper((string)($effect['status'] ?? '')) === 'COMPLETED' && strtolower(trim($beforeStatus)) === 'cancelado') {
         if (nexa_cancel_table_exists($pdo,'os_orders') && nexa_cancel_table_exists($pdo,'os_batch_invoices') && nexa_cancel_table_exists($pdo,'os_fiscal_queue')) {
           require_once __DIR__.'/os_nfse_cancel_bridge.php';
           os_nfse_release_after_order_cancel($pdo,$companyId,$orderId);
@@ -470,7 +474,7 @@ if (!function_exists('nexa_cancel_order')) {
       $warnings = array_values(array_filter([(string)($stock['warning'] ?? ''), (string)($financial['warning'] ?? '')]));
       $status = $warnings ? 'PARTIAL' : 'COMPLETED';
       $message = $warnings ? implode(' ', $warnings) : 'Pedido, estoque e financeiro processados.';
-      $pdo->prepare("UPDATE order_cancellation_effects SET fiscal_document_id=COALESCE(fiscal_document_id,?), source=?, status=?, reason=?, stock_reversed_qty=?, finance_reversed_amount=?, cash_reversed_amount=?, processed_at=NOW(), error_message=?, updated_at=NOW() WHERE company_id=? AND order_id=?")
+      $pdo->prepare("UPDATE order_cancellation_effects SET fiscal_document_id=COALESCE(fiscal_document_id,?), source=?, status=?, reason=?, stock_reversed_qty=stock_reversed_qty+?, finance_reversed_amount=finance_reversed_amount+?, cash_reversed_amount=cash_reversed_amount+?, processed_at=NOW(), error_message=?, updated_at=NOW() WHERE company_id=? AND order_id=?")
         ->execute([$fiscalDocumentId,$source,$status,$reason,(float)$stock['quantity'],(float)$financial['finance'],(float)$financial['cash'],$warnings ? $message : null,$companyId,$orderId]);
 
       if ($fiscalDocumentId && nexa_cancel_table_exists($pdo,'fiscal_documents')) {
