@@ -55,7 +55,7 @@ function nexa_signup_create_general_profile(PDO $pdo, int $companyId): int {
   $permissions = [];
   foreach (access_permissions_catalog() as $key => $permission) {
     // São restrições, e não autorizações; não devem ser concedidas ao administrador.
-    if (in_array($key, ['nao_finalizar_venda', 'desativa_preco_custo', 'desativa_margem_orcamento'], true)) continue;
+    if (!empty($permission['restriction']) || in_array($key, ['nao_finalizar_venda', 'desativa_preco_custo', 'desativa_margem_orcamento'], true)) continue;
     if (access_module_enabled($pdo, $companyId, $permission['module'] ?? '*')) $permissions[] = $key;
   }
   if (!$permissions) throw new RuntimeException('Nenhuma permissão disponível para os módulos da nova empresa.');

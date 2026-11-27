@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/fiscal_order_composition.php';
 require_once __DIR__ . '/../config/os_pedidos_bridge.php';
 require_once __DIR__ . '/../config/nfse_emitter.php';
 require_once __DIR__ . '/../config/screen_performance.php';
+require_once __DIR__ . '/../config/order_fiscal_numbers.php';
 
 $ordersCrossContext = function_exists('multi_company_scope_is_cross_company')
   && multi_company_scope_is_cross_company($pdo, 'sales_orders_read');
@@ -37,7 +38,7 @@ if (empty($_SESSION['orders_grid_csrf']) || !is_string($_SESSION['orders_grid_cs
   $_SESSION['orders_grid_csrf'] = bin2hex(random_bytes(24));
 }
 $ordersGridCsrf = (string)$_SESSION['orders_grid_csrf'];
-$ordersGridAllowedCols = ['numero','cliente','total','entrega','pagamento','status','data','prevista','fiscal','acoes'];
+$ordersGridAllowedCols = ['numero','cliente','fantasia','total','entrega','pagamento','status','data','prevista','docfiscal','fiscal','acoes'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'save_orders_grid_preferences') {
   header('Content-Type: application/json; charset=utf-8');
   try {
@@ -298,6 +299,15 @@ try {
   }
 } catch (Throwable $e) {}
 $hasNumeroPedido = company_sequence_has_column($pdo, 'pedidos');
+// Cliente do cadastro de Pessoas: finance_person_id (atual) ou customer_id (antigo).
+$ordersFantasyPersonCol = '';
+if (ofn_table_exists($pdo, 'finance_people') && ofn_column_exists($pdo, 'finance_people', 'fantasy_name')) {
+  $hasFpCol = ofn_column_exists($pdo, 'pedidos', 'finance_person_id');
+  $hasCustCol = ofn_column_exists($pdo, 'pedidos', 'customer_id');
+  if ($hasFpCol && $hasCustCol) $ordersFantasyPersonCol = 'COALESCE(NULLIF(finance_person_id,0), customer_id)';
+  elseif ($hasFpCol) $ordersFantasyPersonCol = 'finance_person_id';
+  elseif ($hasCustCol) $ordersFantasyPersonCol = 'customer_id';
+}
 
 $allowedStatus = ['aberto','confirmado','em_producao','saiu_entrega','finalizado','cancelado'];
 if ($fStatus !== '' && !in_array($fStatus, $allowedStatus, true)) $fStatus = '';
@@ -323,6 +333,18 @@ if ($fQ !== '') {
       $searchParts[] = 'numero_pedido = ?';
       $searchParams[] = (int)$qDigits;
     }
+    // Número do documento fiscal (NFC-e, NF-e, NFS-e, CT-e) ou chave de acesso.
+    $qFiscalOrderIds = order_fiscal_numbers_search_orders($pdo, (int)$ordersCompanyId, $qDigits);
+    if ($qFiscalOrderIds) {
+      $searchParts[] = 'id IN (' . implode(',', array_fill(0, count($qFiscalOrderIds), '?')) . ')';
+      $searchParams = array_merge($searchParams, $qFiscalOrderIds);
+    }
+  }
+  // Nome fantasia do cliente (cadastro de Pessoas).
+  if ($ordersFantasyPersonCol !== '' && mb_strlen($fQ, 'UTF-8') >= 2) {
+    $searchParts[] = $ordersFantasyPersonCol . " IN (SELECT fp.id FROM finance_people fp WHERE fp.company_id = ? AND fp.fantasy_name LIKE ?)";
+    $searchParams[] = $ordersCompanyId;
+    $searchParams[] = $qLike;
   }
   $where[] = '(' . implode(' OR ', $searchParts) . ')';
   $params = array_merge($params, $searchParams);
@@ -432,6 +454,24 @@ $ordersGridPageUrl = static function (int $page, int $pageSize) use ($fQ, $fStat
   $url = 'pedidos.php?' . $qs;
   return $ordersCrossContext && function_exists('multi_company_context_url') ? multi_company_context_url($url) : $url;
 };
+// Nº dos documentos fiscais e nome fantasia do cliente (colunas da lista).
+$orderFiscalNumbersMap = $rows ? order_fiscal_numbers_map($pdo, (int)$ordersCompanyId, array_column($rows, 'id')) : [];
+$orderFantasyMap = [];
+if ($rows && $ordersFantasyPersonCol !== '') {
+  try {
+    $fpIds = [];
+    foreach ($rows as $fpRow) {
+      $fpId = (int)($fpRow['finance_person_id'] ?? 0) ?: (int)($fpRow['customer_id'] ?? 0);
+      if ($fpId > 0) $fpIds[$fpId] = $fpId;
+    }
+    if ($fpIds) {
+      $fpPh = implode(',', array_fill(0, count($fpIds), '?'));
+      $fpSt = $pdo->prepare("SELECT id, fantasy_name FROM finance_people WHERE company_id = ? AND id IN ($fpPh)");
+      $fpSt->execute(array_merge([$ordersCompanyId], array_values($fpIds)));
+      foreach (($fpSt->fetchAll(PDO::FETCH_ASSOC) ?: []) as $fpPerson) $orderFantasyMap[(int)$fpPerson['id']] = trim((string)($fpPerson['fantasy_name'] ?? ''));
+    }
+  } catch (Throwable $e) { $orderFantasyMap = []; }
+}
 $contractOrderMap = [];
 try {
   $idsC=array_values(array_filter(array_map('intval',array_column($rows,'id'))));
@@ -499,7 +539,7 @@ try {
   $osFiscalCsrfPedidos = '';
 }
 
-$colspan = $hasScheduledDate ? 8 : 7;
+$colspan = $hasScheduledDate ? 10 : 9;
 $returnTo = 'pedidos.php';
 $queryString = (string)($_SERVER['QUERY_STRING'] ?? '');
 if ($queryString !== '') $returnTo .= '?' . $queryString;
@@ -525,6 +565,7 @@ $reportsUrl = 'pedido_relatorio_produtos.php?' . http_build_query($reportParams)
 if ($ordersCrossContext && function_exists('multi_company_context_url')) $reportsUrl = multi_company_context_url($reportsUrl);
 ?>
 <?php admin_topbar('Central - Pedidos','pedidos'); ?>
+<?= order_fiscal_numbers_css() ?>
 <?php if ($ordersNewGrid): ?>
 <style id="ordersGridFirstPaint">
 /* Abre direto no novo grid: esconde os botões do layout antigo e a tabela até as
@@ -849,7 +890,7 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
   <?php if ($ordersCrossContext && $ordersMcCtx !== ''): ?><input type="hidden" name="mc_ctx" value="<?= pedidos_h($ordersMcCtx) ?>"><?php endif; ?>
   <?php if ($ordersNewGrid): ?><input type="hidden" name="por_pagina" value="<?= (int)$ordersGridPerPage ?>"><?php endif; ?>
   <label class="pedidos-search-field">Histórico / Cliente / número
-    <input type="search" name="q" value="<?= pedidos_h($fQ) ?>" placeholder="Cliente, WhatsApp, pagamento ou nº" autocomplete="off">
+    <input type="search" name="q" value="<?= pedidos_h($fQ) ?>" placeholder="Cliente, fantasia, WhatsApp, nº do pedido ou da nota" autocomplete="off">
   </label>
   <label>Status
     <select name="status">
@@ -923,12 +964,14 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
         <tr>
           <th data-col="numero">Nº</th>
           <th data-col="cliente">Cliente</th>
+          <th data-col="fantasia">Nome Fantasia</th>
           <th data-col="total">Total</th>
           <th data-col="entrega">Entrega</th>
           <th data-col="pagamento">Pagamento</th>
           <th data-col="status">Status</th>
           <th data-col="data">Data</th>
           <?php if ($hasScheduledDate): ?><th data-col="prevista">Data/Hora Prevista</th><?php endif; ?>
+          <th data-col="docfiscal">Nº Doc Fiscal</th>
           <?php if ($ordersNewGrid && $showFiscalNfceButton): ?><th data-col="fiscal">Fiscal</th><?php endif; ?>
           <?php if ($ordersNewGrid): ?><th data-col="acoes" class="orders-grid-actions-col">Ações</th><?php endif; ?>
         </tr>
@@ -942,6 +985,8 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
           $id = (int)$r['id'];
           $contractOrigin=$contractOrderMap[$id]??null;$isContractOrder=(bool)$contractOrigin;
           $numeroPedido = company_sequence_display($r, 'pedidos');
+          $rowFiscalNumbers = $orderFiscalNumbersMap[$id] ?? [];
+          $rowFantasy = (string)($orderFantasyMap[(int)($r['finance_person_id'] ?? 0) ?: (int)($r['customer_id'] ?? 0)] ?? '');
           $statusAtual = (string)($r['status'] ?? 'aberto');
           $whatsapp = preg_replace('/\D+/', '', (string)($r['whatsapp'] ?? ''));
           $wlink = $whatsapp ? ('pedido_whatsapp.php?id=' . $id) : '';
@@ -1004,12 +1049,14 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
             <strong><?= pedidos_h($r['nome_cliente'] ?? '') ?></strong>
             <span class="muted"><?= pedidos_h($r['whatsapp'] ?? '') ?></span>
           </td>
+          <td data-col="fantasia" data-label="Nome Fantasia" title="<?= pedidos_h($rowFantasy) ?>"><?= $rowFantasy !== '' ? pedidos_h($rowFantasy) : '<span class="ofn-none">—</span>' ?></td>
           <td data-col="total" data-label="Total"><?= pedidos_money_br($r['total'] ?? 0) ?></td>
           <td data-col="entrega" data-label="Entrega" title="<?= pedidos_h($r['tipo_entrega'] ?? '') ?>"><?= pedidos_h($r['tipo_entrega'] ?? '') ?></td>
           <td data-col="pagamento" data-label="Pagamento" title="<?= pedidos_h($r['forma_pagamento'] ?? '') ?>"><?= pedidos_h($r['forma_pagamento'] ?? '') ?></td>
           <td data-col="status" data-label="Status" class="pedidos-status-cell"><span class="<?= pedidos_h(pedidos_status_badge_class($statusAtual)) ?>"><?= pedidos_h(fmt_status($statusAtual)) ?></span></td>
           <td data-col="data" data-label="Data"><?= pedidos_h(fmt_dt_br((string)($r['created_at'] ?? ''))) ?></td>
           <?php if ($hasScheduledDate): ?><td data-col="prevista" data-label="Data/Hora Prevista"><?= pedidos_h($prevista) ?></td><?php endif; ?>
+          <td data-col="docfiscal" data-label="Nº Doc Fiscal" title="<?= pedidos_h(order_fiscal_numbers_text($rowFiscalNumbers)) ?>"><?= order_fiscal_numbers_html($rowFiscalNumbers) ?></td>
           <?php if ($ordersNewGrid && $showFiscalNfceButton): ?><td data-col="fiscal" class="orders-grid-fiscal-cell" data-label="Fiscal"></td><?php endif; ?>
           <?php if ($ordersNewGrid): ?><td data-col="acoes" class="orders-grid-actions-col" data-label="Ações"><div class="orders-grid-icons" data-actions-for="<?= $id ?>"></div></td><?php endif; ?>
         </tr>
@@ -1237,6 +1284,8 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
         $id = (int)$r['id'];
         $contractOrigin=$contractOrderMap[$id]??null;$isContractOrder=(bool)$contractOrigin;
         $numeroPedido = company_sequence_display($r, 'pedidos');
+        $rowFiscalNumbers = $orderFiscalNumbersMap[$id] ?? [];
+        $rowFantasy = (string)($orderFantasyMap[(int)($r['finance_person_id'] ?? 0) ?: (int)($r['customer_id'] ?? 0)] ?? '');
         $statusAtual = (string)($r['status'] ?? 'aberto');
         $whatsapp = preg_replace('/\D+/', '', (string)($r['whatsapp'] ?? ''));
         $wlink = $whatsapp ? ('pedido_whatsapp.php?id=' . $id) : '';
@@ -1301,6 +1350,7 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
         <div class="pedidos-mobile-client">
           <span class="pedidos-mobile-label">Cliente</span>
           <strong><?= pedidos_h($r['nome_cliente'] ?? '') ?></strong>
+          <?php if ($rowFantasy !== ''): ?><span class="muted"><?= pedidos_h($rowFantasy) ?></span><?php endif; ?>
           <span class="muted"><?= pedidos_h($r['whatsapp'] ?? '') ?></span>
         </div>
         <div class="pedidos-mobile-grid">
@@ -1308,6 +1358,7 @@ setTimeout(function(){ if(!document.documentElement.classList.contains('orders-g
           <div class="item"><span>Entrega</span><strong><?= pedidos_h($r['tipo_entrega'] ?? '') ?></strong></div>
           <div class="item"><span>Pagamento</span><strong><?= pedidos_h($r['forma_pagamento'] ?? '') ?></strong></div>
           <div class="item"><span>Data</span><strong><?= pedidos_h(fmt_dt_br((string)($r['created_at'] ?? ''))) ?></strong></div>
+          <?php if ($rowFiscalNumbers): ?><div class="item wide"><span>Nº Doc Fiscal</span><strong><?= order_fiscal_numbers_html($rowFiscalNumbers) ?></strong></div><?php endif; ?>
           <?php if ($showFiscalNfceButton): ?>
             <div class="item wide pedidos-mobile-fiscal">
               <span>Fiscal</span>
@@ -1506,7 +1557,7 @@ window.nexaOrdersGridConfig = <?= json_encode([
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/pedidos_actions_modal_v1.js?v=20261022_1805" defer></script>
-<script src="assets/pedidos_grid_v2.js?v=20261118_acoes6" defer></script>
+<script src="assets/pedidos_grid_v2.js?v=20261127_docfiscal" defer></script>
 <script src="assets/pedidos_mobile_cards_v2.js?v=20261118_acoes6" defer></script>
 <?php endif; ?>
 <script>

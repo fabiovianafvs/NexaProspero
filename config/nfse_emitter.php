@@ -759,12 +759,9 @@ if (!function_exists('nfse_emitter_build_dps_xml')) {
     nfse_emitter_xml_add($dom,$cServ,'xDescServ',$context['description']);
     $nbs = substr(nfse_emitter_digits($tax['nbs_code'] ?? ''),0,9);
     if (strlen($nbs) === 9) nfse_emitter_xml_add($dom,$cServ,'cNBS',$nbs);
-    $orderReference = (int)nfse_emitter_value($context['order'] ?? [], ['numero_pedido'], 0);
-    if ($orderReference <= 0) $orderReference = (int)($doc['source_id'] ?? $doc['pedido_id'] ?? 0);
-    nfse_emitter_xml_add($dom,$cServ,'cIntContrib','PED' . $orderReference);
-    $info = nfse_emitter_xml_element($dom,'infoCompl'); $serv->appendChild($info);
-    nfse_emitter_xml_add($dom,$info,'xPed',(string)$orderReference);
-    nfse_emitter_xml_add($dom,$info,'xInfComp','Serviço referente ao pedido #' . $orderReference . ' do Nexa Próspero.');
+    // O número do pedido do Nexa não vai para a NFS-e (pedido da empresa em 27/11/2026):
+    // sem cIntContrib "PED…", sem xPed e sem o texto "Serviço referente ao pedido #…"
+    // (infoCompl e cIntContrib são opcionais no leiaute da DPS nacional).
 
     $valores = nfse_emitter_xml_element($dom,'valores'); $inf->appendChild($valores);
     $vServPrest = nfse_emitter_xml_element($dom,'vServPrest'); $valores->appendChild($vServPrest);

@@ -11,7 +11,7 @@ if (!function_exists('nexa_grid_registry')) {
   /** Grids que aceitam preferências e suas colunas válidas (whitelist). */
   function nexa_grid_registry(): array {
     return [
-      'fin_receber' => ['id','codcli','cliente','fantasia','doc','historico','atraso','emissao','vencimento','baixa','situacao','original','baixado','aberto','plano'],
+      'fin_receber' => ['id','codcli','cliente','fantasia','doc','pedido','docfiscal','historico','atraso','emissao','vencimento','baixa','situacao','original','baixado','aberto','plano'],
       'fin_pagar' => ['id','fornecedor','doc','historico','emissao','vencimento','baixa','situacao','original','baixado','aberto','plano'],
       'fin_movimentos' => ['data','tipo','pessoa','plano','historico','doc','centro','conta','origem','valor'],
     ];

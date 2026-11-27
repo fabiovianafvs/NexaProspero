@@ -389,6 +389,29 @@ if (!function_exists('finance_effective_permission_allowed')) {
     return !function_exists('access_has_permission') || access_has_permission($pdo, finance_operational_company_id($pdo), $permission);
   }
 }
+if (!function_exists('finance_restriction_active')) {
+  /**
+   * Restrição do perfil (ex.: cre_desabilita_editar). Nunca vale para o administrador
+   * da empresa nem para o administrador da plataforma; no F11 usa o perfil da empresa
+   * selecionada (administrador nela = sem restrição).
+   */
+  function finance_restriction_active(PDO $pdo, string $flag): bool {
+    try {
+      if (finance_multi_company_cross_context($pdo)) {
+        if (function_exists('access_is_company_master') && access_is_company_master()) return false;
+        if (!function_exists('multi_company_context_profile_cached') || !defined('MULTI_COMPANY_CONTEXT_ID')) return false;
+        $userId = function_exists('auth_user_id') ? (int)(auth_user_id() ?? 0) : 0;
+        $profile = $userId > 0 ? multi_company_context_profile_cached($pdo, $userId, (int)COMPANY_ID, (int)MULTI_COMPANY_CONTEXT_ID) : null;
+        if (!$profile || (string)($profile['profile_scope'] ?? '') === 'company_admin') return false;
+        $perms = json_decode((string)($profile['permissions_json'] ?? ''), true);
+        return is_array($perms) && in_array($flag, array_map('strval', $perms), true);
+      }
+      return function_exists('access_profile_flag_enabled') && access_profile_flag_enabled($pdo, (int)COMPANY_ID, $flag);
+    } catch (Throwable $e) {
+      return false;
+    }
+  }
+}
 if (!function_exists('finance_multi_company_assert_settlement_safe')) {
   function finance_multi_company_assert_settlement_safe(PDO $pdo, int $companyId, string $originType, array $originIds): void {
     if (!finance_multi_company_cross_context($pdo)) return;

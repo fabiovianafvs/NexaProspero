@@ -10,6 +10,7 @@ require_once __DIR__ . '/../config/itau_webhook.php';
 require_once __DIR__ . '/../config/screen_performance.php';
 require_once __DIR__ . '/../config/cash_receivables_integration.php';
 require_once __DIR__ . '/../config/company_sequences.php';
+require_once __DIR__ . '/../config/order_fiscal_numbers.php';
 
 $cid = function_exists('finance_operational_company_id') ? finance_operational_company_id($pdo) : (int)COMPANY_ID;
 $financeCrossContext = function_exists('finance_multi_company_cross_context') && finance_multi_company_cross_context($pdo);
@@ -20,6 +21,9 @@ $financeCrossBillingCancel = function_exists('finance_multi_company_billing_canc
 $financeCrossBillingSend = function_exists('finance_multi_company_billing_send_enabled') && finance_multi_company_billing_send_enabled($pdo);
 $financeCrossReversalWrite = function_exists('finance_multi_company_reversal_write_enabled') && finance_multi_company_reversal_write_enabled($pdo);
 $financeCrossReadOnly = function_exists('finance_multi_company_readonly') && finance_multi_company_readonly($pdo);
+// Restrições do perfil de acesso (grupo "Contas a receber"): sem Editar / sem Cancelar.
+$creEditBlocked = function_exists('finance_restriction_active') && finance_restriction_active($pdo, 'cre_desabilita_editar');
+$creCancelBlocked = function_exists('finance_restriction_active') && finance_restriction_active($pdo, 'cre_desabilita_cancelar');
 $cashCrActiveForCompany = nexa_cash_cr_enabled($pdo, $cid);
 $cashCrOpenForUser = $cashCrActiveForCompany ? nexa_cash_cr_open_session($pdo, $cid, (int)(auth_user_id() ?? 0)) : null;
 if (!$financeCrossContext) {
@@ -393,6 +397,8 @@ try {
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postAction = (string)($_POST['action'] ?? 'save');
     $action = $postAction;
+    if ($action === 'cancel' && $creCancelBlocked) throw new RuntimeException('Seu perfil de acesso não permite cancelar títulos do Contas a Receber.');
+    if ($action === 'save' && (int)($_POST['id'] ?? 0) > 0 && $creEditBlocked) throw new RuntimeException('Seu perfil de acesso não permite editar títulos do Contas a Receber.');
     if ($financeCrossContext) {
       $writeAllowed = $action === 'save' && $financeCrossTitleWrite;
       $settleAllowed = in_array($action, ['settle','bulk_settle'], true) && $financeCrossSettlementWrite;
@@ -729,6 +735,20 @@ foreach (['status','q','person_id','issue_ini','issue_fim','due_ini','due_fim','
 $receivableReturnUrl = 'financeiro_contas_receber.php?' . http_build_query($receivableReturnParams);
 $rows = $receivableListRequested ? finance_query_all($pdo, 'SELECT r.*, p.name AS person_name, p.fantasy_name AS person_fantasy, ' . $recPersonCodeCol . ' AS person_code, ca.code, ca.name AS account_name FROM finance_receivables r LEFT JOIN finance_people p ON p.company_id=r.company_id AND p.id=r.person_id LEFT JOIN finance_chart_accounts ca ON ca.company_id=r.company_id AND ca.id=r.chart_account_id WHERE ' . implode(' AND ', $where) . ' ORDER BY r.due_date ASC, r.id DESC LIMIT 500', $params) : [];
 
+// Pedido de origem e números dos documentos fiscais do pedido (colunas Pedido e Doc Fiscal).
+$receivableOrderMap = [];
+$receivableOrderNumbers = [];
+$receivableFiscalNumbers = [];
+if ($rows) {
+  try {
+    $receivableOrderMap = receivable_orders_map($pdo, (int)$cid, $rows);
+    if ($receivableOrderMap) {
+      $receivableOrderNumbers = order_numbers_display_map($pdo, (int)$cid, array_values($receivableOrderMap));
+      $receivableFiscalNumbers = order_fiscal_numbers_map($pdo, (int)$cid, array_values($receivableOrderMap));
+    }
+  } catch (Throwable $ignored) {}
+}
+
 // Carrega os boletos vinculados em lote para exibir as ações sem gerar N+1 consultas.
 $receivableChargeMap = [];
 if ($rows && finance_table_exists($pdo, 'finance_boleto_charges')) {
@@ -799,6 +819,7 @@ $editDueLocked = $editCharge
 
 $canSettleTitles = function_exists('finance_effective_permission_allowed') ? finance_effective_permission_allowed($pdo, 'financeiro_baixar_receber') : (!function_exists('access_has_permission') || access_has_permission($pdo, $cid, 'financeiro_baixar_receber'));
 $canCancelTitles = function_exists('finance_effective_permission_allowed') ? finance_effective_permission_allowed($pdo, 'financeiro_cancelar_titulos') : (!function_exists('access_has_permission') || access_has_permission($pdo, $cid, 'financeiro_cancelar_titulos'));
+if ($creCancelBlocked) $canCancelTitles = false;
 if ($financeCrossContext) {
   $canSettleTitles = $financeCrossSettlementWrite && $canSettleTitles;
   $canCancelTitles = $financeCrossReversalWrite && $canCancelTitles;
@@ -839,6 +860,9 @@ $crossProtectedView = $financeCrossContext && $edit && !empty($edit['id']) && (
   || !empty($settlements)
   || ($editCharge && strtoupper(trim((string)($editCharge['status'] ?? ''))) !== 'CANCELADO')
 );
+// Perfil sem "editar": o título existente abre só para consulta.
+$creEditReadOnlyView = $creEditBlocked && $edit && !empty($edit['id']) && !$crossProtectedView;
+if ($creEditReadOnlyView) $crossProtectedView = true;
 if (!$canSettleTitles) $showSettle = false;
 
 if (!function_exists('receivable_payment_editor')) {
@@ -969,7 +993,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
   <div class="ntg-wrap">
     <table class="ntg-table" data-ntg="fin_receber" data-scope="<?= (int)COMPANY_ID ?>" data-save-url="grid_preferencias.php" data-csrf="<?= finance_h(nexa_grid_csrf()) ?>"
       data-prefs="<?= finance_h(json_encode($recGridPrefs ?: new stdClass(), JSON_UNESCAPED_UNICODE)) ?>"
-      data-defaults='{"id":70,"codcli":90,"cliente":230,"fantasia":180,"doc":130,"historico":200,"atraso":78,"emissao":92,"vencimento":108,"baixa":122,"situacao":100,"original":110,"baixado":128,"aberto":115,"plano":200}'>
+      data-defaults='{"id":70,"codcli":90,"cliente":230,"fantasia":180,"doc":130,"pedido":90,"docfiscal":150,"historico":200,"atraso":78,"emissao":92,"vencimento":108,"baixa":122,"situacao":100,"original":110,"baixado":128,"aberto":115,"plano":200}'>
       <thead><tr>
         <th class="ntg-sel"></th>
         <th data-col="id" data-type="num">ID</th>
@@ -977,6 +1001,8 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         <th data-col="cliente">Cliente</th>
         <th data-col="fantasia">Nome fantasia</th>
         <th data-col="doc">Documento</th>
+        <th data-col="pedido" data-type="num">Pedido</th>
+        <th data-col="docfiscal">Doc Fiscal</th>
         <th data-col="historico">Histórico</th>
         <th data-col="atraso" data-type="num">Atraso</th>
         <th data-col="emissao">Emissão</th>
@@ -1052,6 +1078,13 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
         <td data-col="cliente" title="<?= finance_h($r['person_name'] ?? '') ?>"><strong><?= finance_h($r['person_name'] ?? '') ?></strong></td>
         <td data-col="fantasia" title="<?= finance_h($rowFantasy) ?>"><?= $rowFantasy !== '' ? finance_h($rowFantasy) : '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="doc" title="<?= finance_h($rowDocText) ?>"><?= $rowDocText !== '' ? finance_h($rowDocText) : '<span class="ntg-muted">—</span>' ?></td>
+        <?php
+          $rowOrderId = (int)($receivableOrderMap[(int)$r['id']] ?? 0);
+          $rowOrderNumber = $rowOrderId > 0 ? (string)($receivableOrderNumbers[$rowOrderId] ?? '') : '';
+          $rowFiscalDocs = $rowOrderId > 0 ? ($receivableFiscalNumbers[$rowOrderId] ?? []) : [];
+        ?>
+        <td data-col="pedido" data-sort="<?= $rowOrderNumber !== '' ? (int)$rowOrderNumber : 0 ?>"><?php if ($rowOrderNumber !== ''): ?><?php if (!$financeCrossContext): ?><a href="pedido_editar.php?id=<?= $rowOrderId ?>" title="Abrir o pedido">#<?= finance_h($rowOrderNumber) ?></a><?php else: ?>#<?= finance_h($rowOrderNumber) ?><?php endif; ?><?php else: ?><span class="ntg-muted">—</span><?php endif; ?></td>
+        <td data-col="docfiscal" title="<?= finance_h(order_fiscal_numbers_text($rowFiscalDocs)) ?>"><?= $rowFiscalDocs ? order_fiscal_numbers_html($rowFiscalDocs) : '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="historico" title="<?= finance_h($r['description'] ?? '') ?>"><?= finance_h($r['description'] ?? '') ?: '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="atraso" data-sort="<?= $rowIsOverdue ? (int)$rowLateDays : 0 ?>"><?= $rowIsOverdue ? ($rowLateDays . ' dia' . ($rowLateDays === 1 ? '' : 's')) : '<span class="ntg-muted">—</span>' ?></td>
         <td data-col="emissao" data-sort="<?= finance_h(substr((string)($r['issue_date'] ?? ''), 0, 10)) ?>"><?= finance_date_br($r['issue_date'] ?? '') ?></td>
@@ -1082,7 +1115,9 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
             <?php endif; ?>
             <?php
               $canEditCrossTitle = !$financeCrossContext || ($financeCrossTitleWrite && strtoupper((string)($r['status'] ?? '')) === 'ABERTO' && (float)($r['paid_amount'] ?? 0) <= 0.009 && empty($receivableSettlementHistoryMap[(int)($r['id'] ?? 0)]) && !$rowChargeActive);
-              if ($canEditCrossTitle):
+              if ($creEditBlocked):
+            ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Consultar título" aria-label="Consultar título"><?= nexa_grid_icon('view') ?></a><?php
+              elseif ($canEditCrossTitle):
             ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Editar título" aria-label="Editar título"><?= nexa_grid_icon('edit') ?></a><?php elseif($financeCrossContext): ?><a class="ntg-icon" href="?edit=<?= (int)$r['id'] ?>" title="Detalhes do título" aria-label="Detalhes do título"><?= nexa_grid_icon('view') ?></a><?php endif; ?>
             <?php if(in_array((string)$r['status'], ['ABERTO','PARCIAL'], true)): ?>
               <?php
@@ -1099,6 +1134,7 @@ finance_flash(); if ($err): ?><div class="msg err"><?= finance_h($err) ?></div><
   <?php endif; ?>
 </div>
 <script src="assets/nexa_titles_grid.js?v=20261108_4" defer></script>
+<?= order_fiscal_numbers_css() ?>
 
 <style>
 .receivable-boleto-whatsapp{background:#25D366!important;border-color:#1ebe57!important;color:#fff!important}.receivable-boleto-whatsapp:hover{background:#1fbd5a!important;border-color:#18a94c!important;color:#fff!important}.finance-filter-card{padding-top:10px!important;padding-bottom:10px!important}.receivable-filter-form label,.receivable-person-picker>label{display:block;font-size:12px;font-weight:850;color:#475569;margin-bottom:3px}.receivable-filter-grid{display:grid;grid-template-columns:repeat(6,minmax(118px,.78fr)) minmax(145px,.9fr);gap:8px 10px;align-items:end}.receivable-filter-grid input,.receivable-filter-grid select{min-height:39px}.receivable-filter-second{display:grid;grid-template-columns:minmax(300px,420px) minmax(260px,1fr) auto;align-items:end;gap:10px;margin-top:4px}.receivable-person-picker,.receivable-history-second{min-width:0}.receivable-person-picker .finance-field-inline{display:grid;grid-template-columns:minmax(145px,1fr) auto auto;gap:8px}.receivable-person-picker .finance-field-inline .btn{white-space:nowrap}.receivable-filter-actions{display:flex;gap:8px;margin-left:0;white-space:nowrap}.receivable-filter-actions .btn{min-height:39px}.receivable-list-head{align-items:center}.receivable-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.receivable-selected-summary{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid #86efac;border-radius:12px;background:#f0fdf4;color:#166534;font-size:12px;white-space:nowrap}.receivable-selected-summary[hidden]{display:none}.receivable-selected-summary span{font-weight:800}.receivable-selected-summary strong{font-weight:950}.receivable-check-all{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #dbe4f0;border-radius:12px;background:#f8fbff;font-size:12px;font-weight:850;color:#475569}.receivable-help{margin:-5px 0 13px}.receivable-list{display:grid;gap:12px}.receivable-title-card{border:1px solid #dbe4f0;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 22px rgba(15,23,42,.035)}.receivable-title-card.is-overdue{border-color:#fca5a5;border-left:5px solid #dc2626;background:#fff7f7;box-shadow:0 8px 22px rgba(185,28,28,.07)}.receivable-title-card.is-overdue .receivable-title-main{background:#fff7f7}.receivable-title-card.is-overdue .receivable-title-actions{background:#fff1f2;border-top-color:#fecaca}.receivable-title-main{display:grid;grid-template-columns:34px 58px minmax(170px,1.18fr) minmax(125px,.82fr) 72px 86px 94px 96px 98px 112px minmax(135px,.86fr);gap:9px;align-items:center;padding:13px 14px}.receivable-title-main>div{min-width:0}.receivable-title-main span{display:block;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.025em;color:#64748b;margin-bottom:4px}.receivable-title-main strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:13px}.receivable-title-client small{display:block;margin-top:4px;color:#64748b;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.receivable-title-history strong{font-size:12px}.receivable-title-delay{text-align:center}.receivable-title-delay strong{color:#64748b;font-size:12px}.receivable-title-card.is-overdue .receivable-title-delay strong,.receivable-title-card.is-overdue .receivable-open-updated{color:#b91c1c;font-weight:950}.receivable-title-open .receivable-open-updated{color:#047857}.receivable-title-card.is-overdue .receivable-title-open .receivable-open-updated{color:#b91c1c}.receivable-select-cell{text-align:center}.receivable-select-cell input{width:18px;height:18px}.receivable-title-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#f8fbff;border-top:1px solid #e5eaf2}.receivable-title-actions>div{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.receivable-title-actions-left>span{font-size:11px;text-transform:uppercase;font-weight:900;color:#64748b;margin-right:3px}.receivable-title-actions-left .receivable-view-products{font-weight:850;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.receivable-title-actions-left .receivable-view-products:hover{background:#dbeafe;border-color:#93c5fd;color:#1e40af}.receivable-title-actions form{margin:0}.receivable-title-actions .btn{min-height:34px;height:34px;padding:0 11px;border-radius:10px;font-size:12px}.finance-bulk-modal .finance-modal-dialog{width:min(1220px,100%)}.finance-bulk-common{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}.finance-bulk-common .wide{grid-column:span 4}.bulk-mode-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px;border:1px solid #dbe4f0;border-radius:15px;background:#f8fbff}.bulk-mode-box label{display:flex;align-items:center;gap:6px;font-weight:850}.bulk-partial-controls{display:flex;align-items:end;gap:8px;flex:1 1 350px}.bulk-partial-controls>div{flex:1}.bulk-partial-controls input{min-height:42px}.finance-bulk-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.finance-bulk-total{border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;padding:9px 12px;font-weight:950;color:#0b1f5b}.bulk-settle-list{display:grid;gap:10px}.bulk-settle-row{border:1px solid #dbe4f0;border-radius:16px;padding:12px;background:#fff}.bulk-settle-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}.bulk-settle-head strong{display:block;color:#0b1f5b}.bulk-settle-head small{display:block;color:#64748b;margin-top:3px}.bulk-settle-fields{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:9px;align-items:end}.bulk-settle-fields label{font-size:10px;text-transform:uppercase;font-weight:850;color:#64748b}.bulk-settle-fields input{min-height:39px;padding:7px 8px}.bulk-readonly{min-height:39px;border:1px solid #dbe4f0;border-radius:12px;padding:9px;background:#f8fbff;font-weight:850;white-space:nowrap}.bulk-balance.partial{color:#b45309}.bulk-balance.paid{color:#047857}.person-lookup-list{display:grid;gap:8px;max-height:55vh;overflow:auto}.person-lookup-item{width:100%;text-align:left;border:1px solid #dbe4f0;background:#fff;border-radius:14px;padding:11px;cursor:pointer}.person-lookup-item:hover{border-color:#60a5fa;background:#eff6ff}.person-lookup-item strong{display:block;color:#0b1f5b}.person-lookup-item small{display:block;color:#64748b;margin-top:3px}
@@ -1496,7 +1532,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 </script>
 
 <?php if ($showForm): ?>
-<div class="finance-modal" role="dialog" aria-modal="true"><div class="finance-modal-dialog finance-modal-wide"><div class="finance-modal-head"><div><h2><?= $crossProtectedView ? 'Detalhes do título #' . (int)$editId : ($editId ? 'Editar título #' . (int)$editId : 'Novo contas a receber') ?></h2><p class="finance-muted"><?= $crossProtectedView ? 'Título protegido no F11. Os dados cadastrais ficam somente para consulta; baixas e estornos permanecem disponíveis conforme as permissões.' : 'Preencha os dados do título. A baixa gera movimento financeiro automaticamente.' ?></p></div><a class="finance-modal-close" href="financeiro_contas_receber.php">×</a></div>
+<div class="finance-modal" role="dialog" aria-modal="true"><div class="finance-modal-dialog finance-modal-wide"><div class="finance-modal-head"><div><h2><?= $crossProtectedView ? 'Detalhes do título #' . (int)$editId : ($editId ? 'Editar título #' . (int)$editId : 'Novo contas a receber') ?></h2><p class="finance-muted"><?= $creEditReadOnlyView ? 'Seu perfil de acesso não permite editar títulos. Os dados ficam somente para consulta; baixas e estornos seguem as suas permissões.' : ($crossProtectedView ? 'Título protegido no F11. Os dados cadastrais ficam somente para consulta; baixas e estornos permanecem disponíveis conforme as permissões.' : 'Preencha os dados do título. A baixa gera movimento financeiro automaticamente.') ?></p></div><a class="finance-modal-close" href="financeiro_contas_receber.php">×</a></div>
 <?php if ($postAction === 'reverse_settlement' && $err !== ''): ?><div class="msg err" style="margin:14px 18px 0"><strong>Estorno não concluído:</strong> <?= finance_h($err) ?></div><?php endif; ?>
 <?php if($edit && !empty($edit['id']) && (!$financeCrossContext || $canViewBilling)): ?>
 <div class="receivable-edit-tabs" role="tablist" aria-label="Detalhes da conta a receber">

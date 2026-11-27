@@ -17,7 +17,7 @@
   const columns = headers.map(x => x.dataset.col);
   const movable = columns.filter(x => x !== 'acoes');
   const labels = Object.fromEntries(headers.map(x => [x.dataset.col, x.textContent.trim()]));
-  const defaults = {numero:95,cliente:255,total:120,entrega:138,pagamento:150,status:135,data:150,prevista:175,fiscal:210};
+  const defaults = {numero:95,cliente:255,fantasia:180,total:120,entrega:138,pagamento:150,status:135,data:150,prevista:175,docfiscal:170,fiscal:210};
   const old = cfg.preferences && typeof cfg.preferences === 'object' ? cfg.preferences : {};
   const storageKey = 'nexa.pedidos.grid.v1.' + String(cfg.company || 0);
   let fallback = {};
@@ -26,7 +26,16 @@
   let visible = Array.isArray(from.visible) ? from.visible.filter(x => movable.includes(x)) : [...movable];
   if (!visible.length) visible = [...movable];
   let order = Array.isArray(from.order) ? from.order.filter(x => movable.includes(x)) : [...movable];
-  order = [...new Set(order)].concat(movable.filter(x => !order.includes(x)));
+  order = [...new Set(order)];
+  // Colunas novas (ainda não salvas nas preferências): aparecem visíveis, no lugar natural.
+  const savedOrder = Array.isArray(from.order) ? from.order : null;
+  movable.forEach((col, idx) => {
+    if (order.includes(col)) return;
+    if (savedOrder && !savedOrder.includes(col) && !visible.includes(col)) visible.push(col);
+    let pos = order.length;
+    for (let j = idx - 1; j >= 0; j--) { const k = order.indexOf(movable[j]); if (k >= 0) { pos = k + 1; break; } }
+    order.splice(pos, 0, col);
+  });
   let widths = from.widths && typeof from.widths === 'object' ? {...from.widths} : {};
   let saveTimer;
   let activeSort = null;
