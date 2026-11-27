@@ -255,7 +255,7 @@ $statusResultMessage = '';
 $nexaPerfOperationStart = microtime(true);
 try {
   if ($status === 'cancelado') {
-    $pedidoNumeroCancelado = $pedidoAntes ? company_sequence_display($pedidoAntes, 'pedidos') : (string)$id;
+    $pedidoNumeroCancelado = $pedidoAntes ? (string)company_sequence_display($pedidoAntes, 'pedidos') : (string)$id;
     if ($cancelReason === '') $cancelReason = 'Pedido #' . $pedidoNumeroCancelado . ' cancelado pela troca de status.';
 
     // Antes de chamar uma API fiscal externa, valida bloqueios locais que sabemos antecipadamente.
